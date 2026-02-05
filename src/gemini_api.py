@@ -52,24 +52,40 @@ def calculate_vms_science(row):
     except Exception:
         return 5.0
 
-# --- 2. DATABASE SEARCH (FIXED PATHS) ---
+# --- 2. DATABASE SEARCH (READ-ONLY - SCIENTIFIC DATA) ---
 def search_vantage_db(product_name: str):
-    # Use an absolute path or a relative path consistent with the root
+    """
+    Searches the read-only scientific database for product information.
+    This database contains the core product nutrition data.
+    """
     db_path = os.path.join(os.getcwd(), 'data', 'vantage_core.db')
     
-    # Open in read_only=True to prevent locking issues on Streamlit Cloud
-    con = duckdb.connect(db_path, read_only=True)
+    # Check if database exists
+    if not os.path.exists(db_path):
+        st.error(f"Database not found at: {db_path}")
+        return None
+    
     try:
+        # Open in read_only mode - this is ONLY for reading scientific data
+        con = duckdb.connect(db_path, read_only=True)
+        
+        # Escape single quotes to prevent SQL injection
+        safe_product_name = product_name.replace("'", "''")
+        
         query = f"""
             SELECT * FROM products 
-            WHERE product_name ILIKE '%{product_name}%'
+            WHERE product_name ILIKE '%{safe_product_name}%'
             ORDER BY 
-                CASE WHEN product_name = '{product_name.lower()}' THEN 0 ELSE 1 END,
+                CASE WHEN product_name = '{safe_product_name.lower()}' THEN 0 ELSE 1 END,
                 sugar DESC
             LIMIT 1
         """
         results = con.execute(query).fetchall()
-        if not results: return None
+        con.close()
+        
+        if not results: 
+            return None
+            
         r = results[0]
         score = calculate_vms_science(r)
         
@@ -81,20 +97,37 @@ def search_vantage_db(product_name: str):
             "vms_score": score,
             "rating": rating
         }]
-    finally:
-        con.close()
+    except Exception as e:
+        st.error(f"Error searching database: {str(e)}")
+        return None
 
-# --- 3. UI SUPPORT FUNCTIONS ---
+# --- 3. USER DATA DATABASE (READ-WRITE - SEPARATE FILE) ---
 @st.cache_resource
 def get_db_connection():
-    db_path = os.path.join(os.getcwd(), 'data', 'vantage_core.db')
+    """
+    Gets connection to the user data database (separate from scientific data).
+    This database stores user accounts, calendar items, etc.
+    """
+    # Use a SEPARATE database file for user data to avoid locking issues
+    db_path = os.path.join(os.getcwd(), 'data', 'user_data.db')
+    
+    # Create the data directory if it doesn't exist
+    os.makedirs(os.path.dirname(db_path), exist_ok=True)
+    
+    # Open in read-write mode for user data
     con = duckdb.connect(db_path, read_only=False)
+    
+    # Create tables if they don't exist
     con.execute("CREATE TABLE IF NOT EXISTS users (username VARCHAR PRIMARY KEY, password_hash VARCHAR)")
-    con.execute("CREATE SEQUENCE IF NOT EXISTS seq_cal_id")
+    con.execute("CREATE SEQUENCE IF NOT EXISTS seq_cal_id START 1")
     con.execute("""
         CREATE TABLE IF NOT EXISTS calendar (
             id INTEGER DEFAULT nextval('seq_cal_id'),
-            username VARCHAR, date DATE, item_name VARCHAR, score FLOAT, category VARCHAR
+            username VARCHAR, 
+            date DATE, 
+            item_name VARCHAR, 
+            score FLOAT, 
+            category VARCHAR
         )
     """)
     return con
@@ -102,7 +135,8 @@ def get_db_connection():
 def create_user(username, password):
     con = get_db_connection()
     exists = con.execute("SELECT * FROM users WHERE username = ?", [username]).fetchone()
-    if exists: return False
+    if exists: 
+        return False
     pwd_hash = hashlib.sha256(password.encode()).hexdigest()
     con.execute("INSERT INTO users VALUES (?, ?)", [username, pwd_hash])
     return True
@@ -139,15 +173,36 @@ def get_trend_data_db(username, days=7):
             WHERE username = ? AND date >= current_date - INTERVAL ? DAY
             GROUP BY date, category ORDER BY date ASC
         """, [username, days]).fetchall()
-    except Exception: return []
+    except Exception: 
+        return []
 
 # --- 4. GEMINI AI ---
-api_key = st.secrets.get("GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY")
-client = genai.Client(api_key=api_key)
+def get_gemini_api_key():
+    """Get API key from Streamlit secrets or environment variables"""
+    try:
+        return st.secrets.get("GEMINI_API_KEY")
+    except:
+        return os.getenv("GEMINI_API_KEY")
 
 def analyze_label_with_gemini(image):
-    prompt = "Identify food ingredients. Return 3 concerns for insulin in Markdown."
+    """
+    Analyzes food label image using Gemini API.
+    This is a core requirement for the Gemini 3 Hackathon.
+    """
+    api_key = get_gemini_api_key()
+    if not api_key:
+        return "Error: GEMINI_API_KEY not found. Please add it to .env or Streamlit secrets."
+    
     try:
-        response = client.models.generate_content(model="gemini-3-flash", contents=[prompt, image])
+        client = genai.Client(api_key=api_key)
+        prompt = """Analyze this food label image and identify the ingredients. 
+        Return exactly 3 specific concerns related to insulin sensitivity and blood sugar impact.
+        Format your response in clear Markdown with bullet points."""
+        
+        response = client.models.generate_content(
+            model="gemini-2.0-flash-exp",  # Using Gemini 2.0 as required by hackathon
+            contents=[prompt, image]
+        )
         return response.text
-    except Exception as e: return f"Error: {str(e)}"
+    except Exception as e: 
+        return f"Error analyzing image: {str(e)}"
