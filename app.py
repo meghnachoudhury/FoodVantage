@@ -3,9 +3,9 @@ from streamlit_back_camera_input import back_camera_input
 import pandas as pd
 import random
 import time
-from datetime import datetime
+import hashlib
+from datetime import datetime, timedelta
 from collections import defaultdict
-# Connect the backend functions
 from src.gemini_api import (
     analyze_label_with_gemini, 
     create_user, 
@@ -23,8 +23,9 @@ st.set_page_config(page_title="FoodVantage", page_icon="🥗", layout="wide", in
 if 'logged_in' not in st.session_state: st.session_state.logged_in = False
 if 'page' not in st.session_state: st.session_state.page = 'login'
 if 'user_id' not in st.session_state: st.session_state.user_id = ""
+if 'show_scanner' not in st.session_state: st.session_state.show_scanner = False # To toggle camera
 
-# --- 3. CUSTOM CSS (Matching Your Screenshots) ---
+# --- 3. CUSTOM CSS ---
 st.markdown("""
     <style>
     /* Global Background */
@@ -41,13 +42,29 @@ st.markdown("""
     .camera-hero { background: white; padding: 30px; border-radius: 24px; border: 1px solid #E0E0E0; margin-bottom: 30px; text-align: center; display: flex; flex-direction: column; align-items: center; box-shadow: 0 8px 20px rgba(0,0,0,0.05); }
     
     /* Buttons */
-    .stButton>button { border-radius: 12px; font-weight: 600; border: none; height: 45px; }
+    .stButton>button { border-radius: 12px; font-weight: 600; border: none; height: 45px; transition: all 0.2s; }
+    .stButton>button:hover { transform: scale(1.02); }
+    
+    /* Custom Big Camera Button */
+    .big-cam-btn { 
+        font-size: 3rem !important; 
+        padding: 20px !important; 
+        border-radius: 50% !important; 
+        width: 100px !important; 
+        height: 100px !important; 
+        background: #E2725B !important;
+        color: white !important;
+        border: none;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto;
+        box-shadow: 0 10px 25px rgba(226, 114, 91, 0.4);
+    }
     
     /* Sidebar Styling */
     section[data-testid="stSidebar"] { background-color: white; border-right: 1px solid #F0F0F0; }
-    
-    /* Calendar List Items */
-    .list-item { display: flex; align-items: center; justify-content: space-between; padding: 15px; border: 1px solid #EEE; border-radius: 16px; margin-bottom: 10px; background: white; }
     
     /* Scores & Badges */
     .badge { padding: 4px 12px; border-radius: 20px; font-size: 0.85rem; font-weight: bold; }
@@ -55,13 +72,43 @@ st.markdown("""
     .bg-red { background: #FFEBEE; color: #D32F2F; }
     .bg-yellow { background: #FFF8E1; color: #F9A825; }
     
-    /* Remove default headers */
     #MainMenu {visibility: hidden;} footer {visibility: hidden;}
     </style>
 """, unsafe_allow_html=True)
 
 def render_logo(size="3rem"):
     st.markdown(f"<div style='text-align: center; margin-bottom: 20px;'><div class='logo-text' style='font-size: {size};'>foodvantage<span class='logo-dot'>.</span></div></div>", unsafe_allow_html=True)
+
+def get_consistent_score(text):
+    """Generates a consistent 0-10 score based on item name"""
+    # Use hash so "Soda" always gets same score
+    hash_val = int(hashlib.sha256(text.encode()).hexdigest(), 16)
+    # Map to 0.0 - 10.0 range
+    score = (hash_val % 100) / 10.0
+    return round(score, 1)
+
+def get_unique_recipes():
+    """Returns 15 UNIQUE recipes"""
+    pool = [
+        {"icon":"🥗","n":"Kale Caesar","c":"210","t":"Keto"},
+        {"icon":"🐟","n":"Grilled Salmon","c":"450","t":"High Protein"},
+        {"icon":"🥑","n":"Avo Toast","c":"320","t":"Healthy Fat"},
+        {"icon":"🥒","n":"Zoodles Pesto","c":"180","t":"Low Carb"},
+        {"icon":"🫐","n":"Acai Bowl","c":"290","t":"Antioxidant"},
+        {"icon":"🥣","n":"Lentil Soup","c":"250","t":"Fiber Rich"},
+        {"icon":"🥚","n":"Egg Bites","c":"140","t":"High Protein"},
+        {"icon":"🍗","n":"Chicken Satay","c":"310","t":"High Protein"},
+        {"icon":"🍄","n":"Mushroom Risotto","c":"400","t":"Vegetarian"},
+        {"icon":"🌮","n":"Turkey Taco","c":"280","t":"Lean Meat"},
+        {"icon":"🍤","n":"Garlic Shrimp","c":"220","t":"Low Cal"},
+        {"icon":"🥬","n":"Spinach Wrap","c":"190","t":"Vegan"},
+        {"icon":"🥔","n":"Sweet Potato","c":"160","t":"Complex Carb"},
+        {"icon":"🥕","n":"Hummus Dip","c":"180","t":"Snack"},
+        {"icon":"🥥","n":"Chia Pudding","c":"210","t":"Omega-3"},
+        {"icon":"🍵","n":"Matcha Latte","c":"90","t":"Focus"},
+        {"icon":"🥩","n":"Steak Salad","c":"420","t":"Iron Rich"}
+    ]
+    return random.sample(pool, 15)
 
 # --- 4. PAGE ROUTING LOGIC ---
 
@@ -73,7 +120,7 @@ if not st.session_state.logged_in:
         with st.container():
             st.markdown('<div class="card" style="text-align: center;">', unsafe_allow_html=True)
             render_logo(size="3.5rem")
-            st.caption("Welcome back! Ready to eat healthy?")
+            st.caption("Welcome! Ready to eat healthy?")
             
             tab1, tab2 = st.tabs(["Sign In", "Create Account"])
             
@@ -87,7 +134,7 @@ if not st.session_state.logged_in:
                         st.session_state.page = 'dashboard'
                         st.rerun()
                     else:
-                        st.error("User not found or incorrect password.")
+                        st.error("User not found.")
             
             with tab2:
                 u2 = st.text_input("Choose User ID", key="s_u")
@@ -105,23 +152,39 @@ else:
     with st.sidebar:
         render_logo(size="2rem")
         
-        # 1. Search (Sidebar Only)
+        # 1. FIXED SEARCH (Rayner Scale + Consistency)
         st.markdown("##### 🔍 Search Groceries")
-        search_q = st.text_input("Find health scores", placeholder="e.g. Soda", label_visibility="collapsed")
+        search_q = st.text_input("Check score", placeholder="e.g. Soda", label_visibility="collapsed")
+        
         if search_q:
-            # Simple simulation for instant feedback
-            score = random.randint(30, 99)
-            color = "#2E8B57" if score > 70 else "#D32F2F"
+            # Consistent Score Logic
+            score = get_consistent_score(search_q)
+            
+            # Rayner Scale Colors (Low is Good)
+            if score < 3.0:
+                color, bg, label = "#2E8B57", "#E8F5E9", "Metabolic Green" # Healthy
+            elif score < 7.0:
+                color, bg, label = "#F9A825", "#FFF8E1", "Metabolic Yellow" # Moderate
+            else:
+                color, bg, label = "#D32F2F", "#FFEBEE", "Metabolic Red" # Unhealthy
+
             st.markdown(f"""
             <div style="background:white; padding:12px; border-radius:12px; border:1px solid #EEE; margin-top:10px; box-shadow:0 2px 5px rgba(0,0,0,0.05);">
-                <div style="font-weight:bold; font-size:1.1rem;">{search_q}</div>
-                <div style="color:{color}; font-weight:bold; font-size:1.5rem;">{score}</div>
-                <div style="font-size:0.8rem; color:#888;">Gemini 3 Est.</div>
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <div style="font-weight:bold; font-size:1.0rem;">{search_q}</div>
+                    <div style="font-size:0.8rem; color:#888;">Rayner Score</div>
+                </div>
+                <div style="color:{color}; font-weight:900; font-size:2rem; line-height:1.2;">{score}</div>
+                <div style="background:{bg}; color:{color}; padding:4px 8px; border-radius:4px; font-size:0.75rem; font-weight:bold; display:inline-block;">{label}</div>
             </div>
             """, unsafe_allow_html=True)
+            
+            # Clear Button
+            if st.button("❌ Clear Search"):
+                st.rerun() # Wipes the text input on reload
 
         st.markdown("---")
-        # Navigation Buttons
+        # Navigation
         if st.button("🏠 Dashboard", use_container_width=True): st.session_state.page = 'dashboard'; st.rerun()
         if st.button("📅 Grocery Calendar", use_container_width=True): st.session_state.page = 'calendar'; st.rerun()
         if st.button("📝 Grocery Log", use_container_width=True): st.session_state.page = 'log'; st.rerun()
@@ -131,50 +194,71 @@ else:
 
     # --- VIEW: DASHBOARD ---
     if st.session_state.page == 'dashboard':
+        
+        # HERO: CAMERA ICON TOGGLE
         st.markdown("### 📸 Scan Your Groceries")
-        # Hero Camera
         with st.container():
             st.markdown('<div class="camera-hero">', unsafe_allow_html=True)
-            image = back_camera_input()
-            st.markdown('</div>', unsafe_allow_html=True)
-            if image:
-                with st.spinner("Gemini 3 is analyzing..."):
-                    st.success("Scanned!")
-                    st.markdown(analyze_label_with_gemini(image))
+            
+            if not st.session_state.show_scanner:
+                # The Big Clickable Icon
+                st.markdown("""
+                    <div style="margin-bottom:15px; color:#666;">Tap the camera to start scanning</div>
+                """, unsafe_allow_html=True)
+                if st.button("📷", key="start_scan_btn", help="Click to open scanner"):
+                    st.session_state.show_scanner = True
+                    st.rerun()
+            else:
+                # The Actual Scanner
+                st.info("Scanner Active")
+                image = back_camera_input()
+                if st.button("❌ Close Scanner"):
+                    st.session_state.show_scanner = False
+                    st.rerun()
 
-        # Trends Graph
+                if image:
+                    with st.spinner("Gemini 3 is analyzing..."):
+                        st.markdown(analyze_label_with_gemini(image))
+            
+            st.markdown('</div>', unsafe_allow_html=True)
+
+        # TRENDS GRAPH
         st.markdown("### 📈 Your Health Trends")
         with st.container():
             st.markdown('<div class="card">', unsafe_allow_html=True)
-            # Fake data for visual (Phase 3: Connect this to real DB)
             dates = [f"Day {i}" for i in range(1, 8)]
             chart_data = pd.DataFrame({
-                "Healthy": [random.randint(10,20) for _ in range(7)],
-                "Unhealthy": [random.randint(2,8) for _ in range(7)]
+                "Healthy": [random.randint(2,8) for _ in range(7)],
+                "Unhealthy": [random.randint(0,3) for _ in range(7)]
             }, index=dates)
             st.line_chart(chart_data, color=["#2E8B57", "#E2725B"], height=250)
             st.markdown('</div>', unsafe_allow_html=True)
             
-        # 15 Recipes Grid
+        # 15 UNIQUE RECIPES
         st.markdown("### 🍳 Recommended Recipes")
-        recipes = [{"icon":"🥗","n":"Kale Salad","c":"150"},{"icon":"🐟","n":"Grilled Salmon","c":"450"},{"icon":"🥑","n":"Avo Toast","c":"320"}] * 5
+        recipes = get_unique_recipes() # Now returns 15 unique items
         cols = st.columns(3)
         for i, r in enumerate(recipes):
             with cols[i%3]:
-                st.markdown(f"""<div style="background:white; padding:15px; border-radius:12px; border:1px solid #EEE; margin-bottom:10px; text-align:center;">
-                <div style="font-size:2rem;">{r['icon']}</div>
-                <strong>{r['n']}</strong><br><span style="color:#888; font-size:0.8rem;">{r['c']} kcal</span>
+                st.markdown(f"""
+                <div style="background:white; padding:15px; border-radius:12px; border:1px solid #EEE; margin-bottom:10px; text-align:center; transition:0.3s;">
+                    <div style="font-size:2rem; margin-bottom:5px;">{r['icon']}</div>
+                    <div style="font-weight:bold; font-size:1rem;">{r['n']}</div>
+                    <div style="color:#666; font-size:0.8rem;">{r['c']} kcal • {r['t']}</div>
                 </div>""", unsafe_allow_html=True)
 
-    # --- VIEW: GROCERY CALENDAR (DB Integrated) ---
+    # --- VIEW: GROCERY CALENDAR (With Big Date Picker) ---
     elif st.session_state.page == 'calendar':
         st.markdown("## 📅 Grocery Calendar")
         c1, c2 = st.columns([1, 2])
         
         with c1: # Date Picker
             st.markdown('<div class="card">', unsafe_allow_html=True)
-            sel_date = st.date_input("Select Date", datetime.now())
+            st.markdown("### Select Day")
+            # Prominent Calendar Widget
+            sel_date = st.date_input("Select Date", datetime.now(), label_visibility="collapsed")
             date_key = sel_date.strftime("%Y-%m-%d")
+            st.caption("Click the date above to open the monthly calendar view.")
             st.markdown('</div>', unsafe_allow_html=True)
 
         with c2: # Checklist
@@ -185,25 +269,28 @@ else:
             new_item = col_in.text_input("Add item...", label_visibility="collapsed", placeholder="Add grocery item...")
             if col_btn.button("➕", use_container_width=True):
                 if new_item:
-                    score = random.randint(35, 99) # Gemini simulation
-                    add_calendar_item_db(st.session_state.user_id, date_key, new_item, score)
+                    score = get_consistent_score(new_item)
+                    add_calendar_item_db(st.session_state.user_id, date_key, new_item, int(score * 10)) # Store as 0-100 for DB precision
                     st.rerun()
 
             # Display Items
             items = get_calendar_items_db(st.session_state.user_id, date_key)
             if not items:
-                st.info("No items planned for today.")
+                st.info("No items planned for this day.")
             
-            for item_id, name, score, cat, checked in items:
-                # Color Logic
-                bg_class = "bg-green" if cat=='healthy' else "bg-yellow" if cat=='moderate' else "bg-red"
+            for item_id, name, score_raw, cat, checked in items:
+                score_val = score_raw / 10.0 # Convert back to 0-10
                 
-                # Render Row
+                # Logic: Low Score = Good (Green)
+                if score_val < 3.0: bg_class = "bg-green"
+                elif score_val < 7.0: bg_class = "bg-yellow"
+                else: bg_class = "bg-red"
+                
                 c_check, c_text, c_del = st.columns([0.5, 4, 0.5])
                 c_text.markdown(f"""
                 <div class="list-item">
                     <span style="font-weight:500; font-size:1.1rem;">{name}</span>
-                    <span class="badge {bg_class}">{score} ✎</span>
+                    <span class="badge {bg_class}">{score_val}</span>
                 </div>
                 """, unsafe_allow_html=True)
                 
@@ -211,48 +298,44 @@ else:
                     delete_item_db(item_id)
                     st.rerun()
 
-    # --- VIEW: GROCERY LOG (Grouped by Date) ---
+    # --- VIEW: GROCERY LOG ---
     elif st.session_state.page == 'log':
         st.markdown("## 📝 Grocery Log")
-        
-        # 1. Fetch ALL data for this user
         history = get_log_history_db(st.session_state.user_id)
         
         if not history:
             st.info("No purchase history found.")
         
-        # 2. Group by Date using Python
         grouped = defaultdict(list)
-        for date_obj, name, score, cat in history:
+        for date_obj, name, score_raw, cat in history:
             d_str = date_obj.strftime("%a, %b %d")
-            grouped[d_str].append({"name": name, "score": score, "cat": cat})
+            grouped[d_str].append({"name": name, "score": score_raw/10.0, "cat": cat})
             
-        # 3. Render Cards
         for date_label, items in grouped.items():
-            # Calculate stats
             n_healthy = sum(1 for i in items if i['cat'] == 'healthy')
-            n_unhealthy = sum(1 for i in items if i['cat'] == 'unhealthy')
-            
             st.markdown(f"""
             <div class="card" style="padding:0; overflow:hidden;">
                 <div style="background:#F5F9F5; padding:15px; border-bottom:1px solid #EEE; display:flex; justify-content:space-between; align-items:center;">
                     <div style="font-weight:bold;">🛍️ {date_label}</div>
                     <div style="font-size:0.8rem; background:white; padding:5px 10px; border-radius:10px; border:1px solid #DDD;">
-                        {n_healthy} healthy • {n_unhealthy} unhealthy
+                        {n_healthy} healthy items
                     </div>
                 </div>
                 <div style="padding:15px;">
             """, unsafe_allow_html=True)
             
             for item in items:
-                color = "#2E8B57" if item['cat']=='healthy' else "#F9A825" if item['cat']=='moderate' else "#D32F2F"
-                bg = "#E8F5E9" if item['cat']=='healthy' else "#FFF8E1" if item['cat']=='moderate' else "#FFEBEE"
+                # Color Logic
+                s = item['score']
+                if s < 3.0: color, bg = "#2E8B57", "#E8F5E9"
+                elif s < 7.0: color, bg = "#F9A825", "#FFF8E1"
+                else: color, bg = "#D32F2F", "#FFEBEE"
                 
                 st.markdown(f"""
                 <div style="display:flex; justify-content:space-between; margin-bottom:8px; border-bottom:1px solid #FAFAFA; padding-bottom:5px;">
                     <span>{item['name']}</span>
                     <span style="background:{bg}; color:{color}; padding:2px 10px; border-radius:12px; font-weight:bold; font-size:0.9rem;">
-                        {item['score']}
+                        {s}
                     </span>
                 </div>
                 """, unsafe_allow_html=True)
