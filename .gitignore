@@ -33,3 +33,17 @@ data/.cache/
 
 # Keep the source data
 !data/food_data.parquet
+# Database files
+*.db
+*.db-wal
+*.db-shm
+*.wal
+
+# Backup files
+*.backup
+
+# Test files
+src/test_paths.py
+
+# Large data files (optional - it's 4GB!)
+data/food_data.parquet
