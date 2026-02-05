@@ -229,6 +229,7 @@ def get_gemini_api_key():
     try:
         if hasattr(st, 'secrets') and "GEMINI_API_KEY" in st.secrets:
             return st.secrets["GEMINI_API_KEY"]
+            
     except:
         pass
     return os.getenv("GEMINI_API_KEY")
