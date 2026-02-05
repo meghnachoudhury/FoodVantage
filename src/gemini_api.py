@@ -1,11 +1,5 @@
 """
-FoodVantage - Gemini API Integration Module
-============================================
-
-Fixed for Streamlit Cloud deployment with writable temp directory
-
-Author: Meghna Choudhury
-Hackathon: Gemini 3 Hackathon (Devpost)
+FoodVantage - Gemini API (ULTRA-SIMPLE VERSION WITH VISIBLE DEBUGGING)
 """
 
 import duckdb
@@ -18,12 +12,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# === PATH CONFIGURATION ===
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
 # === VMS ALGORITHM (UNCHANGED) ===
 def calculate_vms_science(row):
-    """Vantage Metabolic Score - 100% your original algorithm"""
+    """Your original VMS algorithm - 100% unchanged"""
     try:
         name, _, cal, sug, fib, prot, fat, sod, _, nova = row
         cal = float(cal) if cal is not None else 0.0
@@ -68,73 +59,104 @@ def calculate_vms_science(row):
         return max(-2.0, min(10.0, score))
         
     except Exception as e:
-        print(f"[ERROR] VMS calculation failed: {e}")
         return 5.0
 
-# === DATABASE EXTRACTION - FIXED FOR STREAMLIT CLOUD ===
+# === DATABASE WITH VISIBLE DEBUGGING ===
 @st.cache_resource
-def ensure_database_extracted():
+def get_scientific_db():
     """
-    Extract database to WRITABLE location (/tmp/)
-    
-    Streamlit Cloud's /mount/src/ is READ-ONLY!
-    We must extract to /tmp/ which is writable.
+    Get scientific database with extraction to /tmp/ and VISIBLE debugging
     """
-    # Source: Read-only GitHub files
-    zip_path = os.path.join(PROJECT_ROOT, 'data', 'vantage_core.zip')
+    # Try multiple paths for the zip file
+    possible_zip_paths = [
+        'data/vantage_core.zip',
+        './data/vantage_core.zip',
+        '/mount/src/foodvantage/data/vantage_core.zip',
+    ]
     
-    # Destination: Writable temp directory
-    temp_db_path = '/tmp/vantage_core.db'
+    zip_path = None
+    for path in possible_zip_paths:
+        if os.path.exists(path):
+            zip_path = path
+            break
     
-    # If already extracted in this session, return it
-    if os.path.exists(temp_db_path):
-        print(f"[DEBUG] Database already extracted: {temp_db_path}")
-        return temp_db_path
+    # Destination in writable location
+    db_path = '/tmp/vantage_core.db'
     
-    # Check if source zip exists
-    if not os.path.exists(zip_path):
-        print(f"[ERROR] Zip file not found: {zip_path}")
+    # If already extracted, use it
+    if os.path.exists(db_path):
+        try:
+            conn = duckdb.connect(db_path, read_only=True)
+            # Test the connection
+            conn.execute("SELECT COUNT(*) FROM products").fetchone()
+            return conn
+        except:
+            pass  # If test fails, re-extract
+    
+    # Show debugging info IN THE APP
+    if not zip_path:
+        st.error(f"""
+**❌ ZIP FILE NOT FOUND**
+
+Tried these locations:
+{chr(10).join(f'- {p} → {"✅ EXISTS" if os.path.exists(p) else "❌ NOT FOUND"}' for p in possible_zip_paths)}
+
+**Current directory:** `{os.getcwd()}`
+
+**Files in current directory:**
+```
+{chr(10).join(os.listdir('.')[:20])}
+```
+
+**Files in data/ (if exists):**
+```
+{chr(10).join(os.listdir('data')) if os.path.exists('data') else "data/ directory not found"}
+```
+""")
         return None
     
-    # Extract to /tmp/ (writable location)
-    print(f"📦 Extracting database from {zip_path} to /tmp/...")
+    # Extract the zip
     try:
+        st.info(f"📦 Extracting database from {zip_path}...")
         with zipfile.ZipFile(zip_path, 'r') as zip_ref:
             zip_ref.extractall('/tmp/')
         
-        if os.path.exists(temp_db_path):
-            print(f"✅ Database extracted successfully to {temp_db_path}")
-            return temp_db_path
-        else:
-            print(f"[ERROR] Extraction completed but file not found at {temp_db_path}")
+        if not os.path.exists(db_path):
+            st.error(f"❌ Extraction completed but {db_path} not found. Zip contents: {zip_ref.namelist()}")
             return None
-            
+        
+        # Open and test
+        conn = duckdb.connect(db_path, read_only=True)
+        count = conn.execute("SELECT COUNT(*) FROM products").fetchone()[0]
+        st.success(f"✅ Database ready! {count:,} products loaded")
+        return conn
+        
     except Exception as e:
-        print(f"[ERROR] Failed to extract database: {e}")
+        st.error(f"""
+**❌ EXTRACTION FAILED**
+
+Error: `{str(e)}`
+
+**Debug info:**
+- Zip path: `{zip_path}`
+- Zip exists: `{os.path.exists(zip_path)}`
+- Zip size: `{os.path.getsize(zip_path):,} bytes` if exists
+- Target: `{db_path}`
+- /tmp/ writable: `{os.access('/tmp/', os.W_OK)}`
+""")
         import traceback
-        traceback.print_exc()
+        st.code(traceback.format_exc())
         return None
 
-# === SCIENTIFIC DATABASE SEARCH ===
 def search_vantage_db(product_name: str):
-    """Search read-only scientific nutrition database"""
-    db_path = ensure_database_extracted()
+    """Search with visible error handling"""
+    con = get_scientific_db()
     
-    if not db_path:
-        st.error("❌ Scientific database not available")
+    if not con:
         return None
     
-    if not os.path.exists(db_path):
-        st.error(f"❌ Database file not found: {db_path}")
-        return None
-    
-    con = None
     try:
-        # Open read-only connection
-        con = duckdb.connect(db_path, read_only=True)
-        
         safe_name = product_name.replace("'", "''")
-        
         query = f"""
             SELECT * FROM products 
             WHERE product_name ILIKE '%{safe_name}%'
@@ -161,24 +183,14 @@ def search_vantage_db(product_name: str):
         }]
         
     except Exception as e:
-        print(f"[ERROR] Search failed: {e}")
-        st.error(f"❌ Search error: {e}")
+        st.error(f"Search error: {e}")
         return None
-        
-    finally:
-        if con:
-            try:
-                con.close()
-            except:
-                pass
 
-# === USER DATA DATABASE ===
+# === USER DATABASE (writable /tmp/) ===
 @st.cache_resource
 def get_db_connection():
-    """Get connection to user data database (writable /tmp/ location)"""
-    # User data also goes to /tmp/ (writable)
+    """User data database"""
     db_path = '/tmp/user_data.db'
-    
     con = duckdb.connect(db_path, read_only=False)
     
     con.execute("CREATE TABLE IF NOT EXISTS users (username VARCHAR PRIMARY KEY, password_hash VARCHAR)")
@@ -202,46 +214,38 @@ def get_db_connection():
     return con
 
 def create_user(username, password):
-    """Create new user account"""
     con = get_db_connection()
     exists = con.execute("SELECT * FROM users WHERE username = ?", [username]).fetchone()
-    if exists: 
-        return False
+    if exists: return False
     pwd_hash = hashlib.sha256(password.encode()).hexdigest()
     con.execute("INSERT INTO users VALUES (?, ?)", [username, pwd_hash])
     return True
 
 def authenticate_user(username, password):
-    """Verify user credentials"""
     con = get_db_connection()
     pwd_hash = hashlib.sha256(password.encode()).hexdigest()
     result = con.execute("SELECT * FROM users WHERE username = ? AND password_hash = ?", [username, pwd_hash]).fetchone()
     return result is not None
 
 def add_calendar_item_db(username, date_str, item_name, score):
-    """Add item to user's grocery calendar"""
     con = get_db_connection()
     category = 'healthy' if score < 3.0 else 'moderate' if score < 7.0 else 'unhealthy'
     con.execute("INSERT INTO calendar (username, date, item_name, score, category) VALUES (?, ?, ?, ?, ?)", 
                 [username, date_str, item_name, score, category])
 
 def get_calendar_items_db(username, date_str):
-    """Get all items for a specific date"""
     con = get_db_connection()
     return con.execute("SELECT id, item_name, score, category FROM calendar WHERE username = ? AND date = ?", [username, date_str]).fetchall()
 
 def delete_item_db(item_id):
-    """Delete item from calendar"""
     con = get_db_connection()
     con.execute("DELETE FROM calendar WHERE id = ?", [item_id])
 
 def get_log_history_db(username):
-    """Get complete grocery log history"""
     con = get_db_connection()
     return con.execute("SELECT date, item_name, score, category FROM calendar WHERE username = ? ORDER BY date DESC", [username]).fetchall()
 
 def get_trend_data_db(username, days=7):
-    """Get trend data for health charts"""
     con = get_db_connection()
     try:
         return con.execute("""
@@ -249,13 +253,11 @@ def get_trend_data_db(username, days=7):
             WHERE username = ? AND date >= current_date - INTERVAL ? DAY
             GROUP BY date, category ORDER BY date ASC
         """, [username, days]).fetchall()
-    except Exception as e:
-        print(f"[ERROR] Trend query failed: {str(e)}")
+    except:
         return []
 
-# === GEMINI 3 INTEGRATION ===
+# === GEMINI 3 ===
 def get_gemini_api_key():
-    """Retrieve Gemini API key"""
     try:
         if hasattr(st, 'secrets') and "GEMINI_API_KEY" in st.secrets:
             return st.secrets["GEMINI_API_KEY"]
@@ -264,34 +266,23 @@ def get_gemini_api_key():
     return os.getenv("GEMINI_API_KEY")
 
 def analyze_label_with_gemini(image):
-    """Analyze food label using Gemini 3 Flash"""
     api_key = get_gemini_api_key()
-    
     if not api_key:
-        return """❌ **Error: GEMINI_API_KEY not found**
-        
-**Setup:** Add GEMINI_API_KEY to Streamlit Cloud Secrets
-**Get key:** https://aistudio.google.com/app/apikey"""
+        return "❌ GEMINI_API_KEY not configured"
     
     try:
         client = genai.Client(api_key=api_key)
-        
-        prompt = """Analyze this food label image and identify the ingredients.
-
-Return EXACTLY 3 specific concerns related to insulin sensitivity and blood sugar impact.
+        prompt = """Analyze this food label and identify 3 concerns for insulin sensitivity/blood sugar.
 
 Format:
-• Concern 1: [Ingredient] - [Why concerning for insulin/blood sugar]
-• Concern 2: [Ingredient] - [Why concerning for insulin/blood sugar]  
-• Concern 3: [Ingredient] - [Why concerning for insulin/blood sugar]"""
+• Concern 1: [Ingredient] - [Impact]
+• Concern 2: [Ingredient] - [Impact]
+• Concern 3: [Ingredient] - [Impact]"""
         
         response = client.models.generate_content(
             model="gemini-3-flash-preview",
             contents=[prompt, image]
         )
-        
         return response.text
-        
     except Exception as e:
-        print(f"[ERROR] Gemini analysis failed: {e}")
-        return f"❌ **Error analyzing image:** {e}"
+        return f"❌ Gemini error: {e}"
