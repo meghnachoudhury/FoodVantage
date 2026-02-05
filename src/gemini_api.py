@@ -7,6 +7,15 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# === CRITICAL PATH FIX ===
+# On Streamlit Cloud, the app structure is:
+# /mount/src/foodvantage/app.py
+# /mount/src/foodvantage/src/gemini_api.py  <- we are HERE
+# /mount/src/foodvantage/data/vantage_core.db
+#
+# We need to go UP one level from this file to get to the project root
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 # --- 1. THE SCIENTIFIC ENGINE ---
 def calculate_vms_science(row):
     try:
@@ -56,13 +65,29 @@ def calculate_vms_science(row):
 def search_vantage_db(product_name: str):
     """
     Searches the read-only scientific database for product information.
-    This database contains the core product nutrition data.
+    Uses PROJECT_ROOT to find the database correctly on both local and Streamlit Cloud.
     """
-    db_path = os.path.join(os.getcwd(), 'data', 'vantage_core.db')
+    # CORRECT PATH: Use __file__ to find project root, then append 'data/vantage_core.db'
+    db_path = os.path.join(PROJECT_ROOT, 'data', 'vantage_core.db')
+    
+    # Debug info (will show in Streamlit Cloud logs)
+    print(f"[DEBUG] PROJECT_ROOT: {PROJECT_ROOT}")
+    print(f"[DEBUG] Looking for database at: {db_path}")
+    print(f"[DEBUG] Database exists? {os.path.exists(db_path)}")
     
     # Check if database exists
     if not os.path.exists(db_path):
-        st.error(f"Database not found at: {db_path}")
+        # Try to list what IS in the data directory
+        data_dir = os.path.join(PROJECT_ROOT, 'data')
+        if os.path.exists(data_dir):
+            print(f"[DEBUG] Files in data directory:")
+            for f in os.listdir(data_dir):
+                print(f"[DEBUG]   - {f}")
+        else:
+            print(f"[DEBUG] Data directory doesn't exist at: {data_dir}")
+        
+        st.error(f"❌ Database not found at: {db_path}")
+        st.info("💡 Make sure 'data/vantage_core.db' is committed to your GitHub repository and NOT in .gitignore")
         return None
     
     try:
@@ -76,7 +101,7 @@ def search_vantage_db(product_name: str):
             SELECT * FROM products 
             WHERE product_name ILIKE '%{safe_product_name}%'
             ORDER BY 
-                CASE WHEN product_name = '{safe_product_name.lower()}' THEN 0 ELSE 1 END,
+                CASE WHEN LOWER(product_name) = LOWER('{safe_product_name}') THEN 0 ELSE 1 END,
                 sugar DESC
             LIMIT 1
         """
@@ -98,7 +123,8 @@ def search_vantage_db(product_name: str):
             "rating": rating
         }]
     except Exception as e:
-        st.error(f"Error searching database: {str(e)}")
+        st.error(f"❌ Error searching database: {str(e)}")
+        print(f"[ERROR] Database query failed: {str(e)}")
         return None
 
 # --- 3. USER DATA DATABASE (READ-WRITE - SEPARATE FILE) ---
@@ -107,9 +133,12 @@ def get_db_connection():
     """
     Gets connection to the user data database (separate from scientific data).
     This database stores user accounts, calendar items, etc.
+    Uses PROJECT_ROOT to ensure correct path on Streamlit Cloud.
     """
     # Use a SEPARATE database file for user data to avoid locking issues
-    db_path = os.path.join(os.getcwd(), 'data', 'user_data.db')
+    db_path = os.path.join(PROJECT_ROOT, 'data', 'user_data.db')
+    
+    print(f"[DEBUG] User database path: {db_path}")
     
     # Create the data directory if it doesn't exist
     os.makedirs(os.path.dirname(db_path), exist_ok=True)
@@ -119,7 +148,14 @@ def get_db_connection():
     
     # Create tables if they don't exist
     con.execute("CREATE TABLE IF NOT EXISTS users (username VARCHAR PRIMARY KEY, password_hash VARCHAR)")
-    con.execute("CREATE SEQUENCE IF NOT EXISTS seq_cal_id START 1")
+    
+    # Check if sequence exists before creating
+    try:
+        con.execute("CREATE SEQUENCE IF NOT EXISTS seq_cal_id START 1")
+    except:
+        # Sequence might already exist, that's fine
+        pass
+    
     con.execute("""
         CREATE TABLE IF NOT EXISTS calendar (
             id INTEGER DEFAULT nextval('seq_cal_id'),
@@ -173,16 +209,22 @@ def get_trend_data_db(username, days=7):
             WHERE username = ? AND date >= current_date - INTERVAL ? DAY
             GROUP BY date, category ORDER BY date ASC
         """, [username, days]).fetchall()
-    except Exception: 
+    except Exception as e:
+        print(f"[ERROR] Trend data query failed: {str(e)}")
         return []
 
 # --- 4. GEMINI AI ---
 def get_gemini_api_key():
     """Get API key from Streamlit secrets or environment variables"""
     try:
-        return st.secrets.get("GEMINI_API_KEY")
+        # Try Streamlit secrets first (for Streamlit Cloud deployment)
+        if hasattr(st, 'secrets') and "GEMINI_API_KEY" in st.secrets:
+            return st.secrets["GEMINI_API_KEY"]
     except:
-        return os.getenv("GEMINI_API_KEY")
+        pass
+    
+    # Fall back to environment variable (for local development)
+    return os.getenv("GEMINI_API_KEY")
 
 def analyze_label_with_gemini(image):
     """
@@ -190,14 +232,27 @@ def analyze_label_with_gemini(image):
     This is a core requirement for the Gemini 3 Hackathon.
     """
     api_key = get_gemini_api_key()
+    
     if not api_key:
-        return "Error: GEMINI_API_KEY not found. Please add it to .env or Streamlit secrets."
+        return """❌ **Error: GEMINI_API_KEY not found**
+        
+Please add your Gemini API key:
+1. Go to Streamlit Cloud dashboard
+2. Click on your app → Settings → Secrets
+3. Add: `GEMINI_API_KEY = "your-api-key-here"`
+
+Or for local development, add to `.env` file:
+```
+GEMINI_API_KEY=your-api-key-here
+```
+"""
     
     try:
         client = genai.Client(api_key=api_key)
         prompt = """Analyze this food label image and identify the ingredients. 
         Return exactly 3 specific concerns related to insulin sensitivity and blood sugar impact.
-        Format your response in clear Markdown with bullet points."""
+        Format your response in clear Markdown with bullet points.
+        Be specific about which ingredients cause concern and why."""
         
         response = client.models.generate_content(
             model="gemini-2.0-flash-exp",  # Using Gemini 2.0 as required by hackathon
@@ -205,4 +260,12 @@ def analyze_label_with_gemini(image):
         )
         return response.text
     except Exception as e: 
-        return f"Error analyzing image: {str(e)}"
+        return f"""❌ **Error analyzing image:** {str(e)}
+        
+This might be due to:
+1. Invalid API key
+2. API quota exceeded
+3. Network issues
+4. Invalid image format
+
+Please check your Gemini API key in Streamlit secrets."""
