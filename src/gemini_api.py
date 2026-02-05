@@ -7,17 +7,18 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# === CRITICAL PATH FIX ===
-# On Streamlit Cloud, the app structure is:
-# /mount/src/foodvantage/app.py
-# /mount/src/foodvantage/src/gemini_api.py  <- we are HERE
-# /mount/src/foodvantage/data/vantage_core.db
-#
-# We need to go UP one level from this file to get to the project root
+# === PATH CONFIGURATION ===
+# Find project root from this file's location
+# This file is at: /mount/src/foodvantage/src/gemini_api.py
+# Project root is: /mount/src/foodvantage/
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-# --- 1. THE SCIENTIFIC ENGINE ---
+# --- 1. THE SCIENTIFIC ENGINE (UNCHANGED - YOUR ORIGINAL ALGORITHM) ---
 def calculate_vms_science(row):
+    """
+    Your original VMS (Vantage Metabolic Score) algorithm.
+    NO CHANGES to the scoring logic.
+    """
     try:
         name, _, cal, sug, fib, prot, fat, sod, _, nova = row
         cal = float(cal) if cal is not None else 0.0
@@ -58,40 +59,31 @@ def calculate_vms_science(row):
         if is_liquid and sug > 4.0: return max(score, 7.5)  
         if is_dried and sug > 15.0: return max(score, 7.0)  
         return max(-2.0, min(10.0, score))
-    except Exception:
+    except Exception as e:
+        print(f"[ERROR] calculate_vms_science failed: {e}")
         return 5.0
 
 # --- 2. DATABASE SEARCH (READ-ONLY - SCIENTIFIC DATA) ---
 def search_vantage_db(product_name: str):
     """
     Searches the read-only scientific database for product information.
-    Uses PROJECT_ROOT to find the database correctly on both local and Streamlit Cloud.
+    Creates a NEW connection each time to avoid conflicts.
+    Closes connection immediately after query.
     """
-    # CORRECT PATH: Use __file__ to find project root, then append 'data/vantage_core.db'
     db_path = os.path.join(PROJECT_ROOT, 'data', 'vantage_core.db')
     
-    # Debug info (will show in Streamlit Cloud logs)
-    print(f"[DEBUG] PROJECT_ROOT: {PROJECT_ROOT}")
-    print(f"[DEBUG] Looking for database at: {db_path}")
+    print(f"[DEBUG] search_vantage_db called for: {product_name}")
+    print(f"[DEBUG] Database path: {db_path}")
     print(f"[DEBUG] Database exists? {os.path.exists(db_path)}")
     
-    # Check if database exists
     if not os.path.exists(db_path):
-        # Try to list what IS in the data directory
-        data_dir = os.path.join(PROJECT_ROOT, 'data')
-        if os.path.exists(data_dir):
-            print(f"[DEBUG] Files in data directory:")
-            for f in os.listdir(data_dir):
-                print(f"[DEBUG]   - {f}")
-        else:
-            print(f"[DEBUG] Data directory doesn't exist at: {data_dir}")
-        
         st.error(f"❌ Database not found at: {db_path}")
-        st.info("💡 Make sure 'data/vantage_core.db' is committed to your GitHub repository and NOT in .gitignore")
         return None
     
+    # Create a NEW connection for this search only
+    con = None
     try:
-        # Open in read_only mode - this is ONLY for reading scientific data
+        # Open in read_only mode
         con = duckdb.connect(db_path, read_only=True)
         
         # Escape single quotes to prevent SQL injection
@@ -105,14 +97,21 @@ def search_vantage_db(product_name: str):
                 sugar DESC
             LIMIT 1
         """
-        results = con.execute(query).fetchall()
-        con.close()
         
-        if not results: 
+        print(f"[DEBUG] Executing query...")
+        results = con.execute(query).fetchall()
+        print(f"[DEBUG] Query returned {len(results)} results")
+        
+        if not results:
+            print(f"[DEBUG] No results found for: {product_name}")
             return None
             
         r = results[0]
+        print(f"[DEBUG] Found product: {r[0]}")
+        
+        # Calculate score using YOUR algorithm
         score = calculate_vms_science(r)
+        print(f"[DEBUG] Calculated score: {score}")
         
         rating = "Metabolic Green" if score < 3.0 else "Metabolic Yellow" if score < 7.0 else "Metabolic Red"
             
@@ -122,20 +121,30 @@ def search_vantage_db(product_name: str):
             "vms_score": score,
             "rating": rating
         }]
+        
     except Exception as e:
-        st.error(f"❌ Error searching database: {str(e)}")
-        print(f"[ERROR] Database query failed: {str(e)}")
+        error_msg = str(e)
+        print(f"[ERROR] Database query failed: {error_msg}")
+        st.error(f"❌ Search error: {error_msg}")
         return None
+        
+    finally:
+        # CRITICAL: Always close the connection
+        if con:
+            try:
+                con.close()
+                print("[DEBUG] Connection closed successfully")
+            except:
+                pass
 
 # --- 3. USER DATA DATABASE (READ-WRITE - SEPARATE FILE) ---
 @st.cache_resource
 def get_db_connection():
     """
-    Gets connection to the user data database (separate from scientific data).
-    This database stores user accounts, calendar items, etc.
-    Uses PROJECT_ROOT to ensure correct path on Streamlit Cloud.
+    Gets connection to the user data database (COMPLETELY SEPARATE from scientific data).
+    This uses a DIFFERENT database file to avoid any locking conflicts.
     """
-    # Use a SEPARATE database file for user data to avoid locking issues
+    # Use DIFFERENT database file for user data
     db_path = os.path.join(PROJECT_ROOT, 'data', 'user_data.db')
     
     print(f"[DEBUG] User database path: {db_path}")
@@ -153,7 +162,6 @@ def get_db_connection():
     try:
         con.execute("CREATE SEQUENCE IF NOT EXISTS seq_cal_id START 1")
     except:
-        # Sequence might already exist, that's fine
         pass
     
     con.execute("""
@@ -166,6 +174,8 @@ def get_db_connection():
             category VARCHAR
         )
     """)
+    
+    print(f"[DEBUG] User database initialized")
     return con
 
 def create_user(username, password):
@@ -217,13 +227,11 @@ def get_trend_data_db(username, days=7):
 def get_gemini_api_key():
     """Get API key from Streamlit secrets or environment variables"""
     try:
-        # Try Streamlit secrets first (for Streamlit Cloud deployment)
         if hasattr(st, 'secrets') and "GEMINI_API_KEY" in st.secrets:
             return st.secrets["GEMINI_API_KEY"]
     except:
         pass
     
-    # Fall back to environment variable (for local development)
     return os.getenv("GEMINI_API_KEY")
 
 def analyze_label_with_gemini(image):
@@ -237,14 +245,8 @@ def analyze_label_with_gemini(image):
         return """❌ **Error: GEMINI_API_KEY not found**
         
 Please add your Gemini API key:
-1. Go to Streamlit Cloud dashboard
-2. Click on your app → Settings → Secrets
-3. Add: `GEMINI_API_KEY = "your-api-key-here"`
-
-Or for local development, add to `.env` file:
-```
-GEMINI_API_KEY=your-api-key-here
-```
+1. Streamlit Cloud: Settings → Secrets → Add `GEMINI_API_KEY = "your-key"`
+2. Local: Add to `.env` file: `GEMINI_API_KEY=your-key`
 """
     
     try:
@@ -255,17 +257,9 @@ GEMINI_API_KEY=your-api-key-here
         Be specific about which ingredients cause concern and why."""
         
         response = client.models.generate_content(
-            model="gemini-2.0-flash-exp",  # Using Gemini 2.0 as required by hackathon
+            model="gemini-2.0-flash-exp",
             contents=[prompt, image]
         )
         return response.text
     except Exception as e: 
-        return f"""❌ **Error analyzing image:** {str(e)}
-        
-This might be due to:
-1. Invalid API key
-2. API quota exceeded
-3. Network issues
-4. Invalid image format
-
-Please check your Gemini API key in Streamlit secrets."""
+        return f"❌ **Error analyzing image:** {str(e)}"
