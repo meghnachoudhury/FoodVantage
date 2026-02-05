@@ -30,9 +30,13 @@ if 'camera_active' not in st.session_state: st.session_state.camera_active = Fal
 # --- 3. ASSETS ---
 CAMERA_ICON_URL = "https://cdn-icons-png.flaticon.com/512/3687/3687412.png" 
 
-# --- 4. CSS (Sanitized) ---
+# --- 4. CSS (Split to Fix Text Leak) ---
+
+# 4a. FontAwesome Link (Separate Command)
+st.markdown('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">', unsafe_allow_html=True)
+
+# 4b. Custom CSS Styles (Separate Command)
 st.markdown("""
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
     <style>
     .stApp { background-color: #F7F5F0; color: #1A1A1A; }
     .logo-text { font-family: 'Arial Black', sans-serif; font-size: 3rem; letter-spacing: -2px; line-height: 1.0; margin-bottom: 0; }
@@ -156,6 +160,7 @@ else:
                     st.rerun()
             else:
                 st.info("Camera Active: If you don't see a video, check browser permissions.")
+                # KEY FIX: Added unique key to camera widget
                 image = back_camera_input(key="grocery_scanner")
                 if st.button("❌ Stop Scanning"):
                     st.session_state.camera_active = False
