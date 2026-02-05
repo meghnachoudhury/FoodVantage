@@ -1,5 +1,6 @@
 streamlit==1.50.0
-google-genai==1.47.0
-duckdb==1.4.4
-python-dotenv==1.2.1
+google-genai
+duckdb
+python-dotenv
 streamlit-back-camera-input
+pandas
