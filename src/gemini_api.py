@@ -1,5 +1,5 @@
 """
-FoodVantage - Gemini API (ULTRA-SIMPLE VERSION WITH VISIBLE DEBUGGING)
+FoodVantage - Gemini API (FIXED - accounts for data/ folder in zip)
 """
 
 import duckdb
@@ -61,13 +61,13 @@ def calculate_vms_science(row):
     except Exception as e:
         return 5.0
 
-# === DATABASE WITH VISIBLE DEBUGGING ===
+# === DATABASE - FIXED FOR data/ FOLDER IN ZIP ===
 @st.cache_resource
 def get_scientific_db():
     """
-    Get scientific database with extraction to /tmp/ and VISIBLE debugging
+    Extract database - FIXED: zip contains 'data/vantage_core.db', not 'vantage_core.db'
     """
-    # Try multiple paths for the zip file
+    # Find the zip file
     possible_zip_paths = [
         'data/vantage_core.zip',
         './data/vantage_core.zip',
@@ -80,76 +80,44 @@ def get_scientific_db():
             zip_path = path
             break
     
-    # Destination in writable location
-    db_path = '/tmp/vantage_core.db'
+    # KEY FIX: Zip contains 'data/vantage_core.db', so extracted path is /tmp/data/vantage_core.db
+    db_path = '/tmp/data/vantage_core.db'
     
     # If already extracted, use it
     if os.path.exists(db_path):
         try:
             conn = duckdb.connect(db_path, read_only=True)
-            # Test the connection
             conn.execute("SELECT COUNT(*) FROM products").fetchone()
             return conn
         except:
-            pass  # If test fails, re-extract
+            pass
     
-    # Show debugging info IN THE APP
     if not zip_path:
-        st.error(f"""
-**❌ ZIP FILE NOT FOUND**
-
-Tried these locations:
-{chr(10).join(f'- {p} → {"✅ EXISTS" if os.path.exists(p) else "❌ NOT FOUND"}' for p in possible_zip_paths)}
-
-**Current directory:** `{os.getcwd()}`
-
-**Files in current directory:**
-```
-{chr(10).join(os.listdir('.')[:20])}
-```
-
-**Files in data/ (if exists):**
-```
-{chr(10).join(os.listdir('data')) if os.path.exists('data') else "data/ directory not found"}
-```
-""")
+        st.error("❌ Zip file not found in any expected location")
         return None
     
-    # Extract the zip
+    # Extract
     try:
-        st.info(f"📦 Extracting database from {zip_path}...")
         with zipfile.ZipFile(zip_path, 'r') as zip_ref:
             zip_ref.extractall('/tmp/')
         
         if not os.path.exists(db_path):
-            st.error(f"❌ Extraction completed but {db_path} not found. Zip contents: {zip_ref.namelist()}")
+            st.error(f"❌ Database not found at {db_path} after extraction")
             return None
         
-        # Open and test
         conn = duckdb.connect(db_path, read_only=True)
         count = conn.execute("SELECT COUNT(*) FROM products").fetchone()[0]
         st.success(f"✅ Database ready! {count:,} products loaded")
         return conn
         
     except Exception as e:
-        st.error(f"""
-**❌ EXTRACTION FAILED**
-
-Error: `{str(e)}`
-
-**Debug info:**
-- Zip path: `{zip_path}`
-- Zip exists: `{os.path.exists(zip_path)}`
-- Zip size: `{os.path.getsize(zip_path):,} bytes` if exists
-- Target: `{db_path}`
-- /tmp/ writable: `{os.access('/tmp/', os.W_OK)}`
-""")
+        st.error(f"❌ Extraction failed: {e}")
         import traceback
         st.code(traceback.format_exc())
         return None
 
 def search_vantage_db(product_name: str):
-    """Search with visible error handling"""
+    """Search scientific database"""
     con = get_scientific_db()
     
     if not con:
@@ -183,10 +151,10 @@ def search_vantage_db(product_name: str):
         }]
         
     except Exception as e:
-        st.error(f"Search error: {e}")
+        st.error(f"❌ Search error: {e}")
         return None
 
-# === USER DATABASE (writable /tmp/) ===
+# === USER DATABASE ===
 @st.cache_resource
 def get_db_connection():
     """User data database"""
