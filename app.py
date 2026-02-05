@@ -29,9 +29,8 @@ if 'camera_active' not in st.session_state: st.session_state.camera_active = Fal
 
 # --- 3. ASSETS ---
 CAMERA_ICON_URL = "https://cdn-icons-png.flaticon.com/512/3687/3687412.png" 
-# NOTE: Replace with your raw GitHub URL if you have a custom image
 
-# --- 4. CSS ---
+# --- 4. CSS (Sanitized) ---
 st.markdown("""
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
     <style>
@@ -40,7 +39,6 @@ st.markdown("""
     .logo-dot { color: #E2725B; }
     .card { background: white; padding: 24px; border-radius: 20px; border: 1px solid #EEE; box-shadow: 0 4px 12px rgba(0,0,0,0.04); margin-bottom: 20px; }
     
-    /* BIG TOMATO CAMERA BUTTON */
     div.stButton > button.big-cam {
         background-color: transparent !important;
         border: none !important;
@@ -53,10 +51,10 @@ st.markdown("""
         margin: 0 auto;
     }
     
-    /* Calendar Styling */
     .cal-table { width: 100%; text-align: center; border-collapse: collapse; }
     .cal-header { font-weight: bold; color: #E2725B; padding: 10px; }
     .cal-day { padding: 10px; border: 1px solid #F0F0F0; color: #555; }
+    .cal-today { background-color: #E2725B; color: white; border-radius: 50%; font-weight: bold; }
     .cal-selected { background-color: #E2725B; color: white; border-radius: 50%; font-weight: bold; box-shadow: 0 4px 8px rgba(226, 114, 91, 0.4); }
     
     #MainMenu {visibility: hidden;} footer {visibility: hidden;}
@@ -74,21 +72,16 @@ def get_consistent_score(text):
     return round(score, 1)
 
 def create_html_calendar(year, month, selected_day=None):
-    """Draws a calendar and highlights the selected day."""
     cal = cal_module.monthcalendar(year, month)
-    
     html = "<table class='cal-table'><thead><tr>"
     for day in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]:
         html += f"<th class='cal-header'>{day}</th>"
     html += "</tr></thead><tbody>"
-    
     for week in cal:
         html += "<tr>"
         for day in week:
-            if day == 0: 
-                html += "<td class='cal-day'></td>"
+            if day == 0: html += "<td class='cal-day'></td>"
             else:
-                # HIGHLIGHT LOGIC: Match the day picked in the dropdown
                 cls = "cal-selected" if day == selected_day else "cal-day"
                 html += f"<td class='{cls}'>{day}</td>"
         html += "</tr>"
@@ -163,7 +156,6 @@ else:
                     st.rerun()
             else:
                 st.info("Camera Active: If you don't see a video, check browser permissions.")
-                # KEY FIX: Added unique key to camera widget
                 image = back_camera_input(key="grocery_scanner")
                 if st.button("❌ Stop Scanning"):
                     st.session_state.camera_active = False
@@ -206,26 +198,19 @@ else:
             with cols[i%3]:
                 st.markdown(f"""<div style="background:white; padding:15px; border-radius:12px; border:1px solid #EEE; margin-bottom:10px; text-align:center;"><div style="font-size:2rem; margin-bottom:5px;">{r['icon']}</div><div style="font-weight:bold; font-size:1rem;">{r['n']}</div><div style="color:#666; font-size:0.8rem;">{r['c']} kcal • {r['t']}</div></div>""", unsafe_allow_html=True)
 
-    # === CALENDAR (FIXED) ===
+    # === CALENDAR ===
     elif st.session_state.page == 'calendar':
         st.markdown("## 📅 Grocery Calendar")
         c1, c2 = st.columns([1, 1.5])
-        
         with c1:
             st.markdown('<div class="card">', unsafe_allow_html=True)
-            # 1. Ask for Input FIRST
             st.markdown("### Select Day to Log")
             sel_date = st.date_input("Select Date", datetime.now(), label_visibility="collapsed")
             date_key = sel_date.strftime("%Y-%m-%d")
-            
             st.markdown("---")
-            
-            # 2. Draw Calendar based on that input
-            # We pass the selected year, month, and day to highlight it correctly
             st.markdown(f"<h3 style='text-align:center; color:#E2725B;'>{sel_date.strftime('%B %Y')}</h3>", unsafe_allow_html=True)
             st.markdown(create_html_calendar(sel_date.year, sel_date.month, sel_date.day), unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
-
         with c2:
             st.markdown(f"### List for {sel_date.strftime('%b %d')}")
             col_in, col_btn = st.columns([3, 1])
@@ -235,7 +220,6 @@ else:
                     score = get_consistent_score(new_item)
                     add_calendar_item_db(st.session_state.user_id, date_key, new_item, int(score * 10))
                     st.rerun()
-
             items = get_calendar_items_db(st.session_state.user_id, date_key)
             if not items: st.info("No items logged for this day.")
             for item_id, name, score_raw, cat, checked in items:
