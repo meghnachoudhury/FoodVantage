@@ -11,10 +11,9 @@ load_dotenv()
 @st.cache_resource
 def get_db_connection():
     """Connects to DB and creates secure tables if they don't exist."""
-    # Connects to a persistent file 'vantage_core.db'
     con = duckdb.connect('data/vantage_core.db', read_only=False)
     
-    # 1. Users Table (Secure Access)
+    # 1. Users Table
     con.execute("""
         CREATE TABLE IF NOT EXISTS users (
             username VARCHAR PRIMARY KEY,
@@ -22,7 +21,7 @@ def get_db_connection():
         )
     """)
     
-    # 2. Calendar/Log Table (Persistent Data)
+    # 2. Calendar/Log Table
     con.execute("""
         CREATE SEQUENCE IF NOT EXISTS seq_cal_id;
         CREATE TABLE IF NOT EXISTS calendar (
@@ -39,7 +38,6 @@ def get_db_connection():
     return con
 
 def create_user(username, password):
-    """Registers a new user securely."""
     con = get_db_connection()
     exists = con.execute("SELECT * FROM users WHERE username = ?", [username]).fetchone()
     if exists: return False
@@ -49,23 +47,23 @@ def create_user(username, password):
     return True
 
 def authenticate_user(username, password):
-    """Verifies login credentials."""
     con = get_db_connection()
     pwd_hash = hashlib.sha256(password.encode()).hexdigest()
     result = con.execute("SELECT * FROM users WHERE username = ? AND password_hash = ?", [username, pwd_hash]).fetchone()
     return result is not None
 
-# --- 2. DATA MANAGEMENT FUNCTIONS ---
+# --- 2. DATA MANAGEMENT ---
 def add_calendar_item_db(username, date_str, item_name, score):
-    """Saves a grocery item to the DB."""
     con = get_db_connection()
-    # Auto-determine category based on score
-    category = 'healthy' if score >= 70 else 'moderate' if score >= 40 else 'unhealthy'
+    # Logic: Score < 3 (Green/Healthy), > 7 (Red/Unhealthy) based on Rayner Scale 0-10
+    if score < 3.0: category = 'healthy'
+    elif score < 7.0: category = 'moderate' 
+    else: category = 'unhealthy'
+    
     con.execute("INSERT INTO calendar (username, date, item_name, score, category, checked) VALUES (?, ?, ?, ?, ?, ?)", 
                 [username, date_str, item_name, score, category, False])
 
 def get_calendar_items_db(username, date_str):
-    """Fetches items for a specific user and date."""
     con = get_db_connection()
     return con.execute("""
         SELECT id, item_name, score, category, checked 
@@ -74,24 +72,34 @@ def get_calendar_items_db(username, date_str):
     """, [username, date_str]).fetchall()
 
 def delete_item_db(item_id):
-    """Removes an item."""
     con = get_db_connection()
     con.execute("DELETE FROM calendar WHERE id = ?", [item_id])
 
 def get_log_history_db(username):
-    """Fetches ALL history for the Log page, grouped by date."""
     con = get_db_connection()
-    # Get recent 30 days
-    data = con.execute("""
+    return con.execute("""
         SELECT date, item_name, score, category 
         FROM calendar 
         WHERE username = ? 
         ORDER BY date DESC
     """, [username]).fetchall()
+
+# --- NEW: TREND DATA FOR GRAPH ---
+def get_trend_data_db(username, days=7):
+    """Aggregates healthy vs unhealthy counts per day."""
+    con = get_db_connection()
+    # Get counts grouped by date and category
+    data = con.execute("""
+        SELECT date, category, COUNT(*) as count
+        FROM calendar
+        WHERE username = ? 
+        AND date >= current_date - INTERVAL ? DAY
+        GROUP BY date, category
+        ORDER BY date ASC
+    """, [username, days]).fetchall()
     return data
 
-# --- 3. GEMINI 3 VISION & ANALYSIS ---
-# Initialize Gemini Client
+# --- 3. GEMINI AI ---
 api_key = st.secrets.get("GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY")
 client = genai.Client(api_key=api_key)
 
