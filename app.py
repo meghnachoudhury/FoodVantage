@@ -1,11 +1,9 @@
 import streamlit as st
 from streamlit_back_camera_input import back_camera_input
 import pandas as pd
-import random
-import time
 import hashlib
 import calendar as cal_module
-from datetime import datetime, timedelta
+from datetime import datetime
 from collections import defaultdict
 from src.gemini_api import (
     analyze_label_with_gemini, 
@@ -15,7 +13,8 @@ from src.gemini_api import (
     get_calendar_items_db,
     delete_item_db,
     get_log_history_db,
-    get_trend_data_db
+    get_trend_data_db,
+    search_vantage_db  # Re-integrated real science
 )
 
 # --- 1. CONFIGURATION ---
@@ -27,7 +26,7 @@ if 'page' not in st.session_state: st.session_state.page = 'dashboard'
 if 'user_id' not in st.session_state: st.session_state.user_id = ""
 if 'camera_active' not in st.session_state: st.session_state.camera_active = False
 
-# --- 3. CSS & FONTAWESOME ---
+# --- 3. CSS & FONTAWESOME (YOUR FINAL DESIGN) ---
 st.markdown('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">', unsafe_allow_html=True)
 
 st.markdown("""
@@ -72,11 +71,6 @@ st.markdown("""
 # --- 4. HELPERS ---
 def render_logo(size="3rem"):
     st.markdown(f"<div style='text-align: center; margin-bottom: 20px;'><div class='logo-text' style='font-size: {size};'>foodvantage<span class='logo-dot'>.</span></div></div>", unsafe_allow_html=True)
-
-def get_consistent_score(text):
-    if not text: return 0.0
-    hash_val = int(hashlib.sha256(text.lower().strip().encode()).hexdigest(), 16)
-    return round((hash_val % 100) / 10.0, 1)
 
 def create_html_calendar(year, month, selected_day=None):
     cal = cal_module.monthcalendar(year, month)
@@ -124,12 +118,33 @@ if not st.session_state.logged_in:
 else:
     with st.sidebar:
         st.write("")
-        st.markdown("##### 🔍 Search Groceries")
-        search_q = st.text_input("Check score", placeholder="e.g. Soda", label_visibility="collapsed")
+        st.markdown("##### 🔍 Scientific Search")
+        search_q = st.text_input("Check score", placeholder="e.g. Avocado", label_visibility="collapsed")
+        
+        # --- SCIENTIFIC SIDEBAR LOGIC (THE TRUTH) ---
         if search_q:
-            s = get_consistent_score(search_q)
-            c, b, l = ("#2E8B57", "#E8F5E9", "Healthy") if s < 3.0 else ("#F9A825", "#FFF8E1", "Moderate") if s < 7.0 else ("#D32F2F", "#FFEBEE", "Unhealthy")
-            st.markdown(f"<div style='background:white; padding:12px; border-radius:12px; border:1px solid #EEE; margin-top:10px;'><div style='font-weight:bold;'>{search_q}</div><div style='color:{c}; font-weight:900; font-size:1.8rem;'>{s}</div><div style='background:{b}; color:{c}; padding:2px 8px; border-radius:4px; font-size:0.8rem;'>{l}</div></div>", unsafe_allow_html=True)
+            res = search_vantage_db(search_q)
+            if res:
+                # search_vantage_db returns a list of 1 dict: [{"name":..., "vms_score":..., "rating":...}]
+                data = res[0]
+                s = data['vms_score']
+                label = data['rating']
+                
+                # Visual Feedback based on Score
+                if s < 3.0: c, b = "#2E8B57", "#E8F5E9" # Green
+                elif s < 7.0: c, b = "#F9A825", "#FFF8E1" # Yellow
+                else: c, b = "#D32F2F", "#FFEBEE" # Red
+                
+                st.markdown(f"""
+                <div style='background:white; padding:12px; border-radius:12px; border:1px solid #EEE; margin-top:10px;'>
+                    <div style='font-weight:bold;'>{data['name']}</div>
+                    <div style='color:{c}; font-weight:900; font-size:1.8rem;'>{s}</div>
+                    <div style='background:{b}; color:{c}; padding:2px 8px; border-radius:4px; font-size:0.8rem; font-weight:bold;'>{label}</div>
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.warning("Item not found.")
+
         st.markdown("---")
         if st.button("🏠", use_container_width=True): st.session_state.page = 'dashboard'; st.rerun()
         if st.button("📅 Grocery Calendar", use_container_width=True): st.session_state.page = 'calendar'; st.rerun()
@@ -141,13 +156,9 @@ else:
         render_logo(size="3.5rem")
         st.markdown("<h3 style='text-align: center;'>Scan Your Groceries</h3>", unsafe_allow_html=True)
         
-        # --- THE CAMERA SECTION (CENTERED) ---
         with st.container():
             st.markdown('<div class="card">', unsafe_allow_html=True)
-            
-            # Using columns to force center alignment
             cam_col1, cam_col2, cam_col3 = st.columns([1, 2, 1])
-            
             with cam_col2:
                 if not st.session_state.camera_active:
                     st.markdown('<div style="text-align: center;"><i class="fa fa-camera" style="font-size:150px; color:tomato; margin-bottom:20px;"></i></div>', unsafe_allow_html=True)
@@ -161,7 +172,6 @@ else:
                         st.rerun()
                     if image:
                         with st.spinner("Analyzing..."): st.markdown(analyze_label_with_gemini(image))
-            
             st.markdown('</div>', unsafe_allow_html=True)
 
         st.markdown("### 📈 Your Health Trends")
@@ -190,11 +200,14 @@ else:
             new_item = col_in.text_input("Add item...", label_visibility="collapsed")
             if col_btn.button("➕", use_container_width=True):
                 if new_item:
-                    add_calendar_item_db(st.session_state.user_id, sel_date.strftime("%Y-%m-%d"), new_item, get_consistent_score(new_item))
+                    # Look up science score before adding to calendar
+                    res = search_vantage_db(new_item)
+                    score = res[0]['vms_score'] if res else 5.0
+                    add_calendar_item_db(st.session_state.user_id, sel_date.strftime("%Y-%m-%d"), new_item, score)
                     st.rerun()
             
             items = get_calendar_items_db(st.session_state.user_id, sel_date.strftime("%Y-%m-%d"))
-            for iid, name, score, cat, chk in items:
+            for iid, name, score, cat in items:
                 col_c, col_d = ("#2E8B57", "#E8F5E9") if cat=='healthy' else ("#F9A825", "#FFF8E1") if cat=='moderate' else ("#D32F2F", "#FFEBEE")
                 c_row, c_del = st.columns([5, 1])
                 c_row.markdown(f"""<div class='list-row'><span>{name}</span><span class='badge-pill' style='background:{col_d}; color:{col_c};'>{score}</span></div>""", unsafe_allow_html=True)
