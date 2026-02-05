@@ -7,10 +7,47 @@ from dotenv import load_dotenv
 # Load local environment variables
 load_dotenv()
 
-# --- DATABASE OPTIMIZATION ---
+# --- 1. SECURE API INITIALIZATION ---
+# This ensures it works on both your Mac (local) and Streamlit Cloud (secrets)
+api_key = st.secrets.get("GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY")
+
+if not api_key:
+    print("Warning: API Key not found. Please check .env or Streamlit Secrets.")
+
+client = genai.Client(api_key=api_key)
+
+# --- 2. GEMINI 3 VISION FUNCTION (New Feature) ---
+def analyze_label_with_gemini(image):
+    """
+    The Brain: Uses Gemini 3 Flash to read labels and detect metabolic triggers.
+    """
+    prompt = """
+    Identify this food product and extract its core ingredient list.
+    Focus on:
+    1. Hidden sugars (Maltodextrin, syrups, concentrated juices).
+    2. High-GI refined starches.
+    3. Additives that impact gut-health or insulin.
+    
+    Return a metabolic summary: List the 3 most concerning ingredients 
+    and give a 'Gemini Insight' on why they matter for blood sugar.
+    Format using Markdown bullets.
+    """
+    
+    try:
+        # Calling the Gemini 3 Flash model
+        response = client.models.generate_content(
+            model="gemini-3-flash", # Or 'gemini-2.0-flash' / 'gemini-3-flash' depending on availability
+            contents=[prompt, image]
+        )
+        return response.text
+    except Exception as e:
+        return f"Gemini Analysis Error: {str(e)}"
+
+# --- 3. DATABASE OPTIMIZATION (Your Existing Logic) ---
 @st.cache_resource
 def get_db_connection():
     """Keeps the database connection open in the background for instant lookups."""
+    # Ensure the path is correct relative to where app.py runs
     return duckdb.connect('data/vantage_core.db', read_only=True)
 
 def calculate_vms_science(row):
@@ -109,6 +146,3 @@ def search_vantage_db(product_name: str):
     except Exception as e:
         print(f"Database error: {e}")
         return None
-
-# Initialize Gemini Client
-client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
