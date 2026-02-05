@@ -10,10 +10,8 @@ load_dotenv()
 # --- 1. SETUP & AUTHENTICATION ---
 @st.cache_resource
 def get_db_connection():
-    """Connects to DB and creates secure tables if they don't exist."""
     con = duckdb.connect('data/vantage_core.db', read_only=False)
     
-    # 1. Users Table
     con.execute("""
         CREATE TABLE IF NOT EXISTS users (
             username VARCHAR PRIMARY KEY,
@@ -21,7 +19,6 @@ def get_db_connection():
         )
     """)
     
-    # 2. Calendar/Log Table
     con.execute("""
         CREATE SEQUENCE IF NOT EXISTS seq_cal_id;
         CREATE TABLE IF NOT EXISTS calendar (
@@ -30,7 +27,7 @@ def get_db_connection():
             date DATE,
             item_name VARCHAR,
             score INTEGER,
-            category VARCHAR, -- 'healthy', 'moderate', 'unhealthy'
+            category VARCHAR,
             checked BOOLEAN DEFAULT FALSE,
             FOREIGN KEY (username) REFERENCES users(username)
         )
@@ -41,7 +38,6 @@ def create_user(username, password):
     con = get_db_connection()
     exists = con.execute("SELECT * FROM users WHERE username = ?", [username]).fetchone()
     if exists: return False
-    
     pwd_hash = hashlib.sha256(password.encode()).hexdigest()
     con.execute("INSERT INTO users VALUES (?, ?)", [username, pwd_hash])
     return True
@@ -84,20 +80,21 @@ def get_log_history_db(username):
         ORDER BY date DESC
     """, [username]).fetchall()
 
-# --- NEW: TREND DATA FOR GRAPH ---
 def get_trend_data_db(username, days=7):
-    """Aggregates healthy vs unhealthy counts per day."""
+    """SAFE Function: Returns [] if no data, never None."""
     con = get_db_connection()
-    # Get counts grouped by date and category
-    data = con.execute("""
-        SELECT date, category, COUNT(*) as count
-        FROM calendar
-        WHERE username = ? 
-        AND date >= current_date - INTERVAL ? DAY
-        GROUP BY date, category
-        ORDER BY date ASC
-    """, [username, days]).fetchall()
-    return data
+    try:
+        data = con.execute("""
+            SELECT date, category, COUNT(*) as count
+            FROM calendar
+            WHERE username = ? 
+            AND date >= current_date - INTERVAL ? DAY
+            GROUP BY date, category
+            ORDER BY date ASC
+        """, [username, days]).fetchall()
+        return data if data else []
+    except Exception:
+        return []
 
 # --- 3. GEMINI AI ---
 api_key = st.secrets.get("GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY")
