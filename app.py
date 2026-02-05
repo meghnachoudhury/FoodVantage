@@ -23,7 +23,7 @@ st.set_page_config(page_title="FoodVantage", page_icon="🥗", layout="wide", in
 
 # --- 2. SESSION STATE ---
 if 'logged_in' not in st.session_state: st.session_state.logged_in = False
-if 'page' not in st.session_state: st.session_state.page = 'login'
+if 'page' not in st.session_state: st.session_state.page = 'dashboard'
 if 'user_id' not in st.session_state: st.session_state.user_id = ""
 if 'camera_active' not in st.session_state: st.session_state.camera_active = False
 
@@ -37,8 +37,8 @@ st.markdown("""
     .logo-dot { color: #E2725B; }
     .card { background: white; padding: 24px; border-radius: 20px; border: 1px solid #EEE; box-shadow: 0 4px 12px rgba(0,0,0,0.04); margin-bottom: 20px; }
     
-    /* Center the Camera Section */
-    .centered-content { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+    /* Center text inside cards */
+    .centered-card-content { text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; }
     
     /* Calendar Styling */
     .cal-table { width: 100%; text-align: center; border-collapse: collapse; }
@@ -56,6 +56,7 @@ st.markdown("""
         border-radius: 12px;
         border: 1px solid #F0F0F0;
         margin-bottom: 8px;
+        width: 100%;
     }
     .badge-pill {
         padding: 2px 12px;
@@ -140,20 +141,27 @@ else:
         render_logo(size="3.5rem")
         st.markdown("<h3 style='text-align: center;'>Scan Your Groceries</h3>", unsafe_allow_html=True)
         
+        # --- THE CAMERA SECTION (CENTERED) ---
         with st.container():
-            st.markdown('<div class="card centered-content">', unsafe_allow_html=True)
-            if not st.session_state.camera_active:
-                st.markdown('<i class="fa fa-camera" style="font-size:150px; color:tomato; margin-bottom:20px;"></i>', unsafe_allow_html=True)
-                if st.button("Start Live Scan", type="primary"):
-                    st.session_state.camera_active = True
-                    st.rerun()
-            else:
-                image = back_camera_input(key="grocery_scanner")
-                if st.button("❌ Stop Scanning"):
-                    st.session_state.camera_active = False
-                    st.rerun()
-                if image:
-                    with st.spinner("Analyzing..."): st.markdown(analyze_label_with_gemini(image))
+            st.markdown('<div class="card">', unsafe_allow_html=True)
+            
+            # Using columns to force center alignment
+            cam_col1, cam_col2, cam_col3 = st.columns([1, 2, 1])
+            
+            with cam_col2:
+                if not st.session_state.camera_active:
+                    st.markdown('<div style="text-align: center;"><i class="fa fa-camera" style="font-size:150px; color:tomato; margin-bottom:20px;"></i></div>', unsafe_allow_html=True)
+                    if st.button("Start Live Scan", type="primary", use_container_width=True):
+                        st.session_state.camera_active = True
+                        st.rerun()
+                else:
+                    image = back_camera_input(key="grocery_scanner")
+                    if st.button("❌ Stop Scanning", use_container_width=True):
+                        st.session_state.camera_active = False
+                        st.rerun()
+                    if image:
+                        with st.spinner("Analyzing..."): st.markdown(analyze_label_with_gemini(image))
+            
             st.markdown('</div>', unsafe_allow_html=True)
 
         st.markdown("### 📈 Your Health Trends")
