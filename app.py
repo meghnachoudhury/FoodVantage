@@ -125,7 +125,7 @@ if not st.session_state.logged_in:
 else:
     with st.sidebar:
         st.write("")
-        st.markdown("##### 🔍 Scientific Search")
+        st.markdown("##### 🔍 Search")
         search_q = st.text_input("Check score", placeholder="e.g. Avocado", label_visibility="collapsed")
         
         if search_q:
