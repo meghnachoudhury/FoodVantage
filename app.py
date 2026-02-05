@@ -7,8 +7,8 @@ import calendar as cal_module
 from datetime import datetime
 from collections import defaultdict
 
-# --- PATH FIX FOR DEPLOYMENT ---
-# Ensures the 'src' folder is recognized on Streamlit Cloud
+# --- 1. PATH FIX FOR DEPLOYMENT ---
+# Ensures the 'src' folder is recognized correctly on Streamlit Cloud
 sys.path.append(os.path.join(os.path.dirname(__file__), "src"))
 
 from gemini_api import (
@@ -24,16 +24,21 @@ from gemini_api import (
 )
 from streamlit_back_camera_input import back_camera_input
 
-# --- 1. CONFIGURATION ---
-st.set_page_config(page_title="FoodVantage", page_icon="🥗", layout="wide", initial_sidebar_state="expanded")
+# --- 2. CONFIGURATION ---
+st.set_page_config(
+    page_title="FoodVantage", 
+    page_icon="🥗", 
+    layout="wide", 
+    initial_sidebar_state="expanded"
+)
 
-# --- 2. SESSION STATE ---
+# --- 3. SESSION STATE ---
 if 'logged_in' not in st.session_state: st.session_state.logged_in = False
 if 'page' not in st.session_state: st.session_state.page = 'dashboard'
 if 'user_id' not in st.session_state: st.session_state.user_id = ""
 if 'camera_active' not in st.session_state: st.session_state.camera_active = False
 
-# --- 3. CSS & FONTAWESOME ---
+# --- 4. CSS & FONTAWESOME (YOUR FINAL DESIGN) ---
 st.markdown('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">', unsafe_allow_html=True)
 
 st.markdown("""
@@ -42,17 +47,35 @@ st.markdown("""
     .logo-text { font-family: 'Arial Black', sans-serif; font-size: 3rem; letter-spacing: -2px; line-height: 1.0; margin-bottom: 0; }
     .logo-dot { color: #E2725B; }
     .card { background: white; padding: 24px; border-radius: 20px; border: 1px solid #EEE; box-shadow: 0 4px 12px rgba(0,0,0,0.04); margin-bottom: 20px; }
+    
     .cal-table { width: 100%; text-align: center; border-collapse: collapse; }
     .cal-header { font-weight: bold; color: #E2725B; padding: 10px; }
     .cal-day { padding: 10px; border: 1px solid #F0F0F0; color: #555; }
     .cal-selected { background-color: #E2725B; color: white; border-radius: 50%; font-weight: bold; box-shadow: 0 4px 8px rgba(226, 114, 91, 0.4); }
-    .list-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 15px; background: #FFF; border-radius: 12px; border: 1px solid #F0F0F0; margin-bottom: 8px; width: 100%; }
-    .badge-pill { padding: 2px 12px; border-radius: 20px; font-weight: bold; font-size: 0.9rem; }
+    
+    .list-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 15px;
+        background: #FFF;
+        border-radius: 12px;
+        border: 1px solid #F0F0F0;
+        margin-bottom: 8px;
+        width: 100%;
+    }
+    .badge-pill {
+        padding: 2px 12px;
+        border-radius: 20px;
+        font-weight: bold;
+        font-size: 0.9rem;
+    }
+
     #MainMenu {visibility: hidden;} footer {visibility: hidden;}
     </style>
 """, unsafe_allow_html=True)
 
-# --- 4. HELPERS ---
+# --- 5. HELPERS ---
 def render_logo(size="3rem"):
     st.markdown(f"<div style='text-align: center; margin-bottom: 20px;'><div class='logo-text' style='font-size: {size};'>foodvantage<span class='logo-dot'>.</span></div></div>", unsafe_allow_html=True)
 
@@ -73,7 +96,8 @@ def create_html_calendar(year, month, selected_day=None):
     html += "</tbody></table>"
     return html
 
-# --- 5. PAGE ROUTING ---
+# --- 6. PAGE ROUTING ---
+
 if not st.session_state.logged_in:
     col1, col2, col3 = st.columns([1, 1, 1])
     with col2:
@@ -97,19 +121,25 @@ if not st.session_state.logged_in:
                     if create_user(u2, p2): st.success("Created! Sign In now.")
                     else: st.error("Username taken.")
             st.markdown("</div>", unsafe_allow_html=True)
+
 else:
     with st.sidebar:
         st.write("")
         st.markdown("##### 🔍 Scientific Search")
         search_q = st.text_input("Check score", placeholder="e.g. Avocado", label_visibility="collapsed")
+        
         if search_q:
+            # search_vantage_db handles the Read-Only clinical lookup
             res = search_vantage_db(search_q)
             if res:
                 data = res[0]
-                s, label = data['vms_score'], data['rating']
+                s = data['vms_score']
+                label = data['rating']
+                
                 if s < 3.0: c, b = "#2E8B57", "#E8F5E9"
                 elif s < 7.0: c, b = "#F9A825", "#FFF8E1"
                 else: c, b = "#D32F2F", "#FFEBEE"
+                
                 st.markdown(f"""
                 <div style='background:white; padding:12px; border-radius:12px; border:1px solid #EEE; margin-top:10px;'>
                     <div style='font-weight:bold;'>{data['name']}</div>
@@ -117,7 +147,9 @@ else:
                     <div style='background:{b}; color:{c}; padding:2px 8px; border-radius:4px; font-size:0.8rem; font-weight:bold;'>{label}</div>
                 </div>
                 """, unsafe_allow_html=True)
-            else: st.warning("Item not found.")
+            else:
+                st.warning("Item not found.")
+
         st.markdown("---")
         if st.button("🏠", use_container_width=True): st.session_state.page = 'dashboard'; st.rerun()
         if st.button("📅 Grocery Calendar", use_container_width=True): st.session_state.page = 'calendar'; st.rerun()
@@ -128,6 +160,7 @@ else:
     if st.session_state.page == 'dashboard':
         render_logo(size="3.5rem")
         st.markdown("<h3 style='text-align: center;'>Scan Your Groceries</h3>", unsafe_allow_html=True)
+        
         with st.container():
             st.markdown('<div class="card">', unsafe_allow_html=True)
             cam_col1, cam_col2, cam_col3 = st.columns([1, 2, 1])
@@ -145,6 +178,7 @@ else:
                     if image:
                         with st.spinner("Analyzing..."): st.markdown(analyze_label_with_gemini(image))
             st.markdown('</div>', unsafe_allow_html=True)
+
         st.markdown("### 📈 Your Health Trends")
         with st.container():
             st.markdown('<div class="card">', unsafe_allow_html=True)
@@ -171,22 +205,28 @@ else:
             new_item = col_in.text_input("Add item...", label_visibility="collapsed")
             if col_btn.button("➕", use_container_width=True):
                 if new_item:
+                    # Look up science score first to avoid DB lock issues
                     res = search_vantage_db(new_item)
                     score = res[0]['vms_score'] if res else 5.0
                     add_calendar_item_db(st.session_state.user_id, sel_date.strftime("%Y-%m-%d"), new_item, score)
                     st.rerun()
+            
             items = get_calendar_items_db(st.session_state.user_id, sel_date.strftime("%Y-%m-%d"))
             for iid, name, score, cat in items:
                 col_c, col_d = ("#2E8B57", "#E8F5E9") if cat=='healthy' else ("#F9A825", "#FFF8E1") if cat=='moderate' else ("#D32F2F", "#FFEBEE")
                 c_row, c_del = st.columns([5, 1])
                 c_row.markdown(f"""<div class='list-row'><span>{name}</span><span class='badge-pill' style='background:{col_d}; color:{col_c};'>{score}</span></div>""", unsafe_allow_html=True)
-                if c_del.button("🗑️", key=f"d_{iid}"): delete_item_db(iid); st.rerun()
+                if c_del.button("🗑️", key=f"d_{iid}"): 
+                    delete_item_db(iid)
+                    st.rerun()
 
     elif st.session_state.page == 'log':
         st.markdown("## 📝 Grocery Log")
         history = get_log_history_db(st.session_state.user_id)
         grouped = defaultdict(list)
-        for d_obj, name, score, cat in history: grouped[d_obj.strftime("%a, %b %d")].append({"n": name, "s": score, "c": cat})
+        for d_obj, name, score, cat in history: 
+            grouped[d_obj.strftime("%a, %b %d")].append({"n": name, "s": score, "c": cat})
+        
         for d_lbl, items in grouped.items():
             st.markdown(f"""<div class="card"><div style="font-weight:bold; border-bottom:1px solid #EEE; padding-bottom:10px; margin-bottom:10px;">🛍️ {d_lbl}</div>""", unsafe_allow_html=True)
             for item in items:

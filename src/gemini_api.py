@@ -7,14 +7,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# --- 1. THE SCIENTIFIC ENGINE (STRESS-TESTED) ---
+# --- 1. THE SCIENTIFIC ENGINE ---
 def calculate_vms_science(row):
-    """
-    Advanced Metabolic Scoring Algorithm.
-    Incorporates Matrix Shield, Liquid Penalties, and NOVA Processing.
-    """
     try:
-        # Unpack & Force Sanitize
         name, _, cal, sug, fib, prot, fat, sod, _, nova = row
         cal = float(cal) if cal is not None else 0.0
         sug = float(sug) if sug is not None else 0.0
@@ -25,19 +20,12 @@ def calculate_vms_science(row):
         nova_val = int(nova) if nova is not None else 1
         
         n = name.lower()
-
-        # Advanced State Detection
         is_liquid = any(x in n for x in ['juice', 'soda', 'cola', 'drink', 'beverage', 'nectar', 'smoothie'])
         is_dried = any(x in n for x in ['dried', 'dehydrated', 'raisin', 'mango', 'date'])
-        
-        # Dairy & Superfood Precision Filter
         is_superfood = any(x in n for x in ['salmon', 'lentils', 'beans', 'apple', 'broccoli', 'egg', 'avocado'])
         is_dairy_plain = ('milk' in n or 'yogurt' in n) and sug < 5.0
-        
-        # Whole Food Matrix Protection
         is_whole_fresh = (nova_val <= 2 or is_superfood or is_dairy_plain) and not (is_liquid or is_dried)
 
-        # Balanced Scoring (Rayner 2024 Standard)
         pts_energy = min(cal / 80, 10.0)
         pts_fat = min(fat / 2.0, 10.0) 
         pts_sodium = min(sod / 150, 10.0)
@@ -45,11 +33,10 @@ def calculate_vms_science(row):
         if is_liquid:
             pts_sugar = min(sug / 1.5, 10.0) 
         elif is_whole_fresh:
-            pts_sugar = min((sug * 0.2) / 4.5, 10.0) # 80% Matrix Shield
+            pts_sugar = min((sug * 0.2) / 4.5, 10.0)
         else:
             pts_sugar = min(sug / 4.5, 10.0)
 
-        # Rewards (C-Points)
         if is_liquid or is_dried:
             c_total = 0.0 
         else:
@@ -58,19 +45,20 @@ def calculate_vms_science(row):
             c_total = c_fiber + c_protein
 
         score = round((pts_energy + pts_fat + pts_sodium + pts_sugar) - c_total, 2)
-
-        # Final Clinical Overrides (The Truth)
         if is_whole_fresh: return min(score, -1.0) 
         if is_liquid and sug > 4.0: return max(score, 7.5)  
         if is_dried and sug > 15.0: return max(score, 7.0)  
-        
-        return max(-2.0, min(10.0, score)) # Final clamping
+        return max(-2.0, min(10.0, score))
     except Exception:
         return 5.0
 
-# --- 2. DATABASE SEARCH ---
+# --- 2. DATABASE SEARCH (FIXED PATHS) ---
 def search_vantage_db(product_name: str):
-    con = duckdb.connect('data/vantage_core.db', read_only=True)
+    # Use an absolute path or a relative path consistent with the root
+    db_path = os.path.join(os.getcwd(), 'data', 'vantage_core.db')
+    
+    # Open in read_only=True to prevent locking issues on Streamlit Cloud
+    con = duckdb.connect(db_path, read_only=True)
     try:
         query = f"""
             SELECT * FROM products 
@@ -85,26 +73,25 @@ def search_vantage_db(product_name: str):
         r = results[0]
         score = calculate_vms_science(r)
         
-        if score < 3.0: rating = "Metabolic Green"
-        elif 3.0 <= score < 7.0: rating = "Metabolic Yellow"
-        else: rating = "Metabolic Red"
+        rating = "Metabolic Green" if score < 3.0 else "Metabolic Yellow" if score < 7.0 else "Metabolic Red"
             
-        return {
+        return [{
             "name": r[0].title(),
             "brand": str(r[1]).title() if r[1] else "Generic",
             "vms_score": score,
             "rating": rating
-        }
+        }]
     finally:
         con.close()
 
 # --- 3. UI SUPPORT FUNCTIONS ---
 @st.cache_resource
 def get_db_connection():
-    con = duckdb.connect('data/vantage_core.db', read_only=False)
+    db_path = os.path.join(os.getcwd(), 'data', 'vantage_core.db')
+    con = duckdb.connect(db_path, read_only=False)
     con.execute("CREATE TABLE IF NOT EXISTS users (username VARCHAR PRIMARY KEY, password_hash VARCHAR)")
+    con.execute("CREATE SEQUENCE IF NOT EXISTS seq_cal_id")
     con.execute("""
-        CREATE SEQUENCE IF NOT EXISTS seq_cal_id;
         CREATE TABLE IF NOT EXISTS calendar (
             id INTEGER DEFAULT nextval('seq_cal_id'),
             username VARCHAR, date DATE, item_name VARCHAR, score FLOAT, category VARCHAR
