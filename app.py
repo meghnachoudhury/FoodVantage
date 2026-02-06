@@ -149,34 +149,26 @@ st.markdown("""
         50% { opacity: 1.0; }
     }
     
-    .result-option {
-        background: white;
-        padding: 16px;
-        border-radius: 12px;
-        border: 2px solid #EEE;
-        margin-bottom: 10px;
-        cursor: pointer;
-        transition: all 0.2s;
-    }
-    
-    .result-option:hover {
-        border-color: #E2725B;
-        box-shadow: 0 4px 12px rgba(226, 114, 91, 0.2);
-    }
-    
-    .result-option.selected {
-        border-color: #E2725B;
-        background: #FFF5F3;
-    }
-    
     .list-row { 
         display: flex; 
         justify-content: space-between; 
-        padding: 10px; 
+        align-items: center;
+        padding: 12px; 
         background: #FFF; 
         border-radius: 12px; 
         border: 1px solid #F0F0F0; 
         margin-bottom: 8px; 
+    }
+    
+    .search-result-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 12px;
+        background: white;
+        border: 1px solid #EEE;
+        border-radius: 8px;
+        margin-bottom: 8px;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -212,20 +204,32 @@ if not st.session_state.logged_in:
             u = st.text_input("User ID", key="l_u")
             p = st.text_input("Password", type="password", key="l_p")
             if st.button("Sign In", type="primary", use_container_width=True):
-                if authenticate_user(u, p): 
-                    st.session_state.user_id = u
-                    st.session_state.logged_in = True
-                    st.session_state.welcome_shown = False
-                    st.session_state.welcome_start_time = time.time()
-                    st.rerun()
-                else: 
-                    st.error("Access Denied.")
+                if u and p:  # Check fields not empty
+                    if authenticate_user(u, p): 
+                        st.session_state.user_id = u
+                        st.session_state.logged_in = True
+                        st.session_state.welcome_shown = False
+                        st.session_state.welcome_start_time = time.time()
+                        st.rerun()
+                    else: 
+                        st.error("❌ Access Denied. Check username and password.")
+                else:
+                    st.warning("⚠️ Please enter both username and password.")
         with t2:
             u2 = st.text_input("Choose ID", key="s_u")
             p2 = st.text_input("Choose PWD", type="password", key="s_p")
             if st.button("Create Account", use_container_width=True):
-                if create_user(u2, p2): 
-                    st.success("✅ Account Created! Please sign in.")
+                if u2 and p2:  # Check fields not empty
+                    if len(p2) < 4:
+                        st.error("❌ Password must be at least 4 characters.")
+                    else:
+                        success = create_user(u2, p2)
+                        if success:
+                            st.success("✅ Account Created! Please sign in above.")
+                        else:
+                            st.error("❌ Username already exists. Try a different one.")
+                else:
+                    st.warning("⚠️ Please enter both username and password.")
         st.markdown("</div>", unsafe_allow_html=True)
 
 elif not st.session_state.welcome_shown:
@@ -241,7 +245,6 @@ elif not st.session_state.welcome_shown:
         </div>
     """, unsafe_allow_html=True)
     
-    # Auto-transition after 3 seconds
     if st.session_state.welcome_start_time:
         elapsed = time.time() - st.session_state.welcome_start_time
         if elapsed >= 3:
@@ -300,7 +303,6 @@ else:
             if st.session_state.scanning:
                 st.markdown('<div class="scanning-indicator">🔍 Scanning...</div>', unsafe_allow_html=True)
             
-            # Show primary result bubble
             if st.session_state.selected_result:
                 ls = st.session_state.selected_result
                 clr = "#2E8B57" if ls['vms_score'] < 3.0 else "#F9A825" if ls['vms_score'] < 7.0 else "#D32F2F"
@@ -335,7 +337,7 @@ else:
                     results = vision_live_scan(image)
                     if results:
                         st.session_state.scan_results = results
-                        st.session_state.selected_result = results[0]  # Auto-select first (best match)
+                        st.session_state.selected_result = results[0]
                         st.session_state.scanning = False
                         st.rerun()
 
@@ -403,20 +405,62 @@ else:
     elif st.session_state.page == 'calendar':
         st.markdown("## 📅 Grocery Calendar")
         c1, c2 = st.columns([1, 1.5])
+        
         with c1:
             st.markdown('<div class="card">', unsafe_allow_html=True)
             sel_date = st.date_input("Select Date", datetime.now(), label_visibility="collapsed")
             st.markdown(create_html_calendar(sel_date.year, sel_date.month, sel_date.day), unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
+        
         with c2:
-            st.markdown(f"### List for {sel_date.strftime('%b %d')}")
+            st.markdown(f"### 🗓️ {sel_date.strftime('%b %d, %Y')}")
+            
+            # RESTORED: ADD ITEM FEATURE
+            st.markdown("#### ➕ Add Item to This Day")
+            search_item = st.text_input("Search for an item", key="calendar_search", placeholder="e.g., banana, coca cola, avocado...")
+            
+            if search_item:
+                search_results = search_vantage_db(search_item, limit=5)
+                if search_results:
+                    for idx, result in enumerate(search_results):
+                        clr = "#2E8B57" if result['vms_score'] < 3.0 else "#F9A825" if result['vms_score'] < 7.0 else "#D32F2F"
+                        
+                        col_a, col_b, col_c = st.columns([3, 1, 0.6])
+                        with col_a:
+                            st.markdown(f"**{result['name']}**")
+                        with col_b:
+                            st.markdown(f"<div style='text-align:center; color:{clr}; font-weight:bold; font-size:1.2rem;'>{result['vms_score']}</div>", unsafe_allow_html=True)
+                        with col_c:
+                            if st.button("➕", key=f"add_cal_{idx}_{sel_date}", help=f"Add {result['name']}"):
+                                add_calendar_item_db(
+                                    st.session_state.user_id,
+                                    sel_date.strftime("%Y-%m-%d"),
+                                    result['name'],
+                                    result['vms_score']
+                                )
+                                st.success(f"✅ Added!")
+                                time.sleep(0.5)
+                                st.rerun()
+                else:
+                    st.info("No items found. Try a different search term.")
+            
+            st.markdown("---")
+            st.markdown("#### 📝 Items for This Day")
+            
+            # SHOW ITEMS FOR SELECTED DATE
             items = get_calendar_items_db(st.session_state.user_id, sel_date.strftime("%Y-%m-%d"))
             if items:
                 for iid, name, score, cat in items:
                     clr = "#2E8B57" if score < 3.0 else "#F9A825" if score < 7.0 else "#D32F2F"
-                    st.markdown(f"<div class='list-row'><span>{name}</span><strong style='color:{clr}'>{score}</strong></div>", unsafe_allow_html=True)
+                    col_item, col_del = st.columns([5, 1])
+                    with col_item:
+                        st.markdown(f"<div class='list-row'><span>{name}</span><strong style='color:{clr}'>{score}</strong></div>", unsafe_allow_html=True)
+                    with col_del:
+                        if st.button("🗑️", key=f"del_{iid}", help="Delete this item"):
+                            delete_item_db(iid)
+                            st.rerun()
             else:
-                st.info("No items for this date.")
+                st.info("📭 No items for this date. Add items above!")
 
     elif st.session_state.page == 'log':
         st.markdown("## 📝 Log History")
@@ -426,4 +470,4 @@ else:
                 clr = "#2E8B57" if score < 3.0 else "#F9A825" if score < 7.0 else "#D32F2F"
                 st.markdown(f"<div class='list-row'><span><b>{d}</b>: {name}</span><strong style='color:{clr}'>{score}</strong></div>", unsafe_allow_html=True)
         else:
-            st.info("No history yet.")
+            st.info("📭 No history yet. Start logging items!")
