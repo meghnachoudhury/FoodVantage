@@ -10,7 +10,6 @@ from PIL import Image
 import io
 import base64
 import requests
-
 load_dotenv()
 
 # === 1. VMS ALGORITHM ===
