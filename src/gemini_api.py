@@ -8,7 +8,6 @@ from dotenv import load_dotenv
 from PIL import Image
 import io
 import base64
-
 load_dotenv()
 
 # === 1. ACCURATE DATABASE ENGINE (UNCHANGED) ===
