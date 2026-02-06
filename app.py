@@ -7,6 +7,7 @@ import calendar as cal_module
 import time
 from datetime import datetime, timedelta
 import plotly.graph_objects as go
+
 sys.path.append(os.path.join(os.path.dirname(__file__), "src"))
 from gemini_api import *
 from streamlit_back_camera_input import back_camera_input
@@ -151,24 +152,24 @@ st.markdown(f"""
         margin: 0 auto;
     }}
 
-    /* FIXED: Focus square now relative to camera, not screen */
-    .focus-square {{
+    /* FIXED: Tap instruction instead of focus square */
+    .tap-instruction {{
         position: absolute;
-        top: 50%;
+        top: 10px;
         left: 50%;
-        transform: translate(-50%, -50%);
-        width: 200px;
-        height: 200px;
-        border: 4px dashed {COLORS['terracotta']};
-        border-radius: 30px;
-        z-index: 999;
-        pointer-events: none;
-        animation: pulseFocus 2s ease-in-out infinite;
+        transform: translateX(-50%);
+        background: rgba(212, 118, 94, 0.95);
+        color: white;
+        padding: 12px 24px;
+        border-radius: 25px;
+        font-weight: 600;
+        z-index: 1000;
+        animation: pulse 2s ease-in-out infinite;
     }}
     
-    @keyframes pulseFocus {{
-        0%, 100% {{ opacity: 0.6; }}
-        50% {{ opacity: 1.0; }}
+    @keyframes pulse {{
+        0%, 100% {{ opacity: 0.8; transform: translateX(-50%) scale(1); }}
+        50% {{ opacity: 1.0; transform: translateX(-50%) scale(1.05); }}
     }}
     
     .hud-bubble {{
@@ -388,9 +389,13 @@ else:
                     </div>
                 """, unsafe_allow_html=True)
 
-            # FIXED: Focus square now inside camera container (position: absolute)
+            # FIXED: Tap instruction instead of focus square
             st.markdown('<div class="hud-container">', unsafe_allow_html=True)
-            st.markdown('<div class="focus-square"></div>', unsafe_allow_html=True)
+            st.markdown("""
+                <div class="tap-instruction">
+                    👆 Tap anywhere on camera to scan
+                </div>
+            """, unsafe_allow_html=True)
             image = back_camera_input(key="hud_cam")
             st.markdown('</div>', unsafe_allow_html=True)
             
