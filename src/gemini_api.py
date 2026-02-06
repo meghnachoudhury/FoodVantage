@@ -4,9 +4,11 @@ import zipfile
 import streamlit as st
 import hashlib
 from google import genai
+from google.genai import types
 from dotenv import load_dotenv
 from PIL import Image
 import io
+import base64
 
 load_dotenv()
 
@@ -119,10 +121,10 @@ def search_vantage_db(product_name: str, limit=5):
         traceback.print_exc()
         return None
 
-# === 3. ROBUST VISION SCAN WITH FIXED RGBA HANDLING ===
+# === 3. FIXED GEMINI API CALL ===
 def vision_live_scan(image_bytes):
     """
-    FULLY FIXED: Robust RGBA to RGB conversion for all image types
+    FIXED: Proper Gemini API format with types.Content and types.Part
     """
     api_key = get_gemini_api_key()
     if not api_key: 
@@ -143,30 +145,19 @@ def vision_live_scan(image_bytes):
         w, h = img.size
         print(f"[DEBUG] Image dimensions: {w}x{h}, mode: {img.mode}")
         
-        # Step 3: CRITICAL FIX - Convert ANY non-RGB mode to RGB
+        # Step 3: Convert to RGB
         if img.mode == 'RGBA':
-            print("[DEBUG] Converting RGBA to RGB (with white background)...")
-            # Create white background
+            print("[DEBUG] Converting RGBA to RGB...")
             background = Image.new('RGB', img.size, (255, 255, 255))
-            # Paste image using alpha channel as mask
             background.paste(img, mask=img.split()[3] if len(img.split()) == 4 else None)
             img = background
-        elif img.mode == 'LA':  # Grayscale with alpha
+        elif img.mode == 'LA':
             print("[DEBUG] Converting LA to RGB...")
             background = Image.new('RGB', img.size, (255, 255, 255))
             background.paste(img, mask=img.split()[1])
             img = background
-        elif img.mode == 'P':  # Palette mode
-            print("[DEBUG] Converting P (palette) to RGB...")
-            img = img.convert('RGB')
-        elif img.mode == 'L':  # Grayscale
-            print("[DEBUG] Converting L (grayscale) to RGB...")
-            img = img.convert('RGB')
-        elif img.mode == 'CMYK':
-            print("[DEBUG] Converting CMYK to RGB...")
-            img = img.convert('RGB')
         elif img.mode != 'RGB':
-            print(f"[DEBUG] Converting {img.mode} to RGB (generic)...")
+            print(f"[DEBUG] Converting {img.mode} to RGB...")
             img = img.convert('RGB')
         
         print(f"[DEBUG] After conversion, mode: {img.mode}")
@@ -185,20 +176,20 @@ def vision_live_scan(image_bytes):
         enhancer = ImageEnhance.Brightness(img_cropped)
         img_cropped = enhancer.enhance(1.2)
         
-        # Step 6: DOUBLE CHECK - Ensure RGB before saving as JPEG
+        # Step 6: Final RGB check
         if img_cropped.mode != 'RGB':
-            print(f"[DEBUG] Final conversion: {img_cropped.mode} -> RGB")
             img_cropped = img_cropped.convert('RGB')
         
-        # Step 7: Convert to bytes (JPEG format)
+        # Step 7: Convert to base64 (Gemini SDK expects base64 for inline_data)
         buf = io.BytesIO()
         img_cropped.save(buf, format="JPEG", quality=95)
         buf.seek(0)
-        img_data = buf.read()
+        img_bytes = buf.read()
+        img_b64 = base64.b64encode(img_bytes).decode('utf-8')
         
-        print(f"[DEBUG] Processed image size: {len(img_data)} bytes, saved as JPEG")
+        print(f"[DEBUG] Image converted to base64, length: {len(img_b64)}")
         
-        # Step 8: Call Gemini
+        # Step 8: Create prompt
         prompt = """You are a precise product identifier. Look at this image and identify the food item.
 
 RULES:
@@ -209,21 +200,50 @@ RULES:
 
 What do you see?"""
         
+        # Step 9: FIXED - Proper Gemini API call using types.Content
         client = genai.Client(api_key=api_key)
         
-        print("[DEBUG] Calling Gemini API...")
+        print("[DEBUG] Calling Gemini API with proper format...")
         st.info("🔍 Analyzing image with Gemini...")
         
-        response = client.models.generate_content(
-            model="gemini-3-flash-preview",
-            contents=[prompt, img_data]
-        )
+        try:
+            response = client.models.generate_content(
+                model="gemini-3-flash-preview",
+                contents=types.Content(
+                    parts=[
+                        types.Part(text=prompt),
+                        types.Part(
+                            inline_data=types.Blob(
+                                mime_type="image/jpeg",
+                                data=img_b64
+                            )
+                        )
+                    ]
+                )
+            )
+            
+            product_name = response.text.strip().replace('"', '').replace('*', '').replace('.', '')
+            print(f"✅ [GEMINI] Identified: '{product_name}'")
+            st.success(f"👁️ Gemini detected: **{product_name}**")
+            
+        except Exception as gemini_error:
+            print(f"[GEMINI ERROR] {gemini_error}")
+            # Try alternative format
+            print("[DEBUG] Trying alternative API format...")
+            response = client.models.generate_content(
+                model="gemini-3-flash-preview",
+                contents={
+                    "parts": [
+                        {"text": prompt},
+                        {"inline_data": {"mime_type": "image/jpeg", "data": img_b64}}
+                    ]
+                }
+            )
+            product_name = response.text.strip().replace('"', '').replace('*', '').replace('.', '')
+            print(f"✅ [GEMINI] Identified (alt format): '{product_name}'")
+            st.success(f"👁️ Gemini detected: **{product_name}**")
         
-        product_name = response.text.strip().replace('"', '').replace('*', '').replace('.', '')
-        print(f"✅ [GEMINI] Identified: '{product_name}'")
-        st.success(f"👁️ Gemini detected: **{product_name}**")
-        
-        # Step 9: Search database
+        # Step 10: Search database
         results = search_vantage_db(product_name, limit=5)
         
         if results:
@@ -242,7 +262,7 @@ What do you see?"""
         print(f"❌ [SCAN ERROR] {error_msg}")
         import traceback
         traceback.print_exc()
-        st.error(f"⚠️ Scan error: {error_msg[:200]}")
+        st.error(f"⚠️ Scan error: {error_msg[:300]}")
         return None
 
 # === 4. USER DB & TRENDS ===
@@ -270,14 +290,13 @@ def get_trend_data_db(username, days=30):
         print(f"[TRENDS ERROR] {e}")
         return []
 
-# === 5. AUTH HELPERS WITH BETTER ERROR HANDLING ===
+# === 5. AUTH HELPERS ===
 def get_gemini_api_key():
     if hasattr(st, 'secrets') and "GEMINI_API_KEY" in st.secrets: 
         return st.secrets["GEMINI_API_KEY"]
     return os.getenv("GEMINI_API_KEY")
 
 def authenticate_user(username, password):
-    """Authenticate user with better error handling"""
     try:
         con = get_db_connection()
         pwd_hash = hashlib.sha256(password.encode()).hexdigest()
@@ -287,12 +306,9 @@ def authenticate_user(username, password):
         return is_valid
     except Exception as e:
         print(f"[AUTH ERROR] {e}")
-        import traceback
-        traceback.print_exc()
         return False
 
 def add_calendar_item_db(username, date_str, item_name, score):
-    """Add item to calendar"""
     try:
         con = get_db_connection()
         category = 'healthy' if score < 3.0 else 'moderate' if score < 7.0 else 'unhealthy'
@@ -301,11 +317,8 @@ def add_calendar_item_db(username, date_str, item_name, score):
         print(f"[CALENDAR] Added: {item_name} ({score}) for {username} on {date_str}")
     except Exception as e:
         print(f"[CALENDAR ERROR] {e}")
-        import traceback
-        traceback.print_exc()
 
 def get_calendar_items_db(username, date_str):
-    """Get calendar items for a specific date"""
     try:
         con = get_db_connection()
         return con.execute("SELECT id, item_name, score, category FROM calendar WHERE username = ? AND date = ?", 
@@ -315,7 +328,6 @@ def get_calendar_items_db(username, date_str):
         return []
 
 def delete_item_db(item_id):
-    """Delete calendar item"""
     try:
         con = get_db_connection()
         con.execute("DELETE FROM calendar WHERE id = ?", [item_id])
@@ -324,7 +336,6 @@ def delete_item_db(item_id):
         print(f"[CALENDAR ERROR] {e}")
 
 def get_log_history_db(username):
-    """Get full log history for user"""
     try:
         con = get_db_connection()
         return con.execute("SELECT date, item_name, score, category FROM calendar WHERE username = ? ORDER BY date DESC", 
@@ -334,7 +345,6 @@ def get_log_history_db(username):
         return []
 
 def create_user(username, password):
-    """Create new user with better error handling"""
     try:
         con = get_db_connection()
         exists = con.execute("SELECT * FROM users WHERE username = ?", [username]).fetchone()
@@ -347,6 +357,4 @@ def create_user(username, password):
         return True
     except Exception as e:
         print(f"[AUTH ERROR] Failed to create user '{username}': {e}")
-        import traceback
-        traceback.print_exc()
         return False
