@@ -72,6 +72,27 @@ st.markdown(f"""
         border: none !important;
     }}
 
+    /* CRITICAL FIX: DARK TEXT FOR CLINICAL DATA */
+    [data-testid="stMetricValue"] {{
+        color: #1A1A1A !important;
+        font-weight: 700 !important;
+        font-size: 1.5rem !important;
+    }}
+    
+    [data-testid="stMetricLabel"] {{
+        color: #2C2C2C !important;
+        font-weight: 600 !important;
+    }}
+    
+    .stExpander {{
+        background: white !important;
+        color: #1A1A1A !important;
+    }}
+    
+    .stExpander p, .stExpander div, .stExpander span {{
+        color: #1A1A1A !important;
+    }}
+
     /* WELCOME SCREEN */
     .welcome-container {{
         display: flex;
@@ -131,8 +152,9 @@ st.markdown(f"""
         margin: 0 auto;
     }}
 
+    /* FIXED: Focus square now relative to camera, not screen */
     .focus-square {{
-        position: fixed;
+        position: absolute;
         top: 50%;
         left: 50%;
         transform: translate(-50%, -50%);
@@ -184,7 +206,7 @@ st.markdown(f"""
         50% {{ opacity: 1.0; }}
     }}
     
-    /* FIXED: DARKER SCANNER RESULT TEXT */
+    /* DARK SCANNER RESULT TEXT */
     .scanner-result {{
         background: white;
         padding: 16px;
@@ -218,42 +240,10 @@ st.markdown(f"""
         margin-bottom: 8px; 
     }}
     
-    /* PROFESSIONAL TABS - GOOGLE FIT STYLE */
-    .trends-tabs {{
-        display: flex;
-        gap: 0;
-        background: white;
-        border-radius: 12px;
-        padding: 4px;
-        margin-bottom: 20px;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-    }}
-    
-    .tab-button {{
-        flex: 1;
-        padding: 12px 20px;
-        text-align: center;
-        font-weight: 600;
-        font-size: 0.95rem;
-        color: #666;
-        background: transparent;
-        border: none;
-        cursor: pointer;
-        transition: all 0.3s;
-        border-radius: 8px;
-    }}
-    
-    .tab-button.active {{
-        color: {COLORS['olive']};
-        background: {COLORS['beige']};
-    }}
-    
-    .tab-underline {{
-        height: 3px;
-        background: {COLORS['olive']};
-        border-radius: 3px;
-        margin-top: -3px;
-        transition: all 0.3s;
+    /* COMPACT TABS FOR DESKTOP */
+    .trend-tabs-container {{
+        max-width: 400px;
+        margin: 0 auto 20px auto;
     }}
     </style>
 """, unsafe_allow_html=True)
@@ -399,9 +389,9 @@ else:
                     </div>
                 """, unsafe_allow_html=True)
 
-            st.markdown('<div class="focus-square"></div>', unsafe_allow_html=True)
-            
+            # FIXED: Focus square now inside camera container (position: absolute)
             st.markdown('<div class="hud-container">', unsafe_allow_html=True)
+            st.markdown('<div class="focus-square"></div>', unsafe_allow_html=True)
             image = back_camera_input(key="hud_cam")
             st.markdown('</div>', unsafe_allow_html=True)
             
@@ -419,7 +409,7 @@ else:
                 st.session_state.scan_count += 1
                 
                 if st.session_state.scan_count % 2 == 0:
-                    results = vision_live_scan_dark(image)  # Using new dark text function
+                    results = vision_live_scan_dark(image)
                     if results:
                         st.session_state.scan_results = results
                         st.session_state.selected_result = results[0]
@@ -448,16 +438,23 @@ else:
                 with col2:
                     st.markdown(f"<div style='text-align:center; color:{clr}; font-size:1.5rem; font-weight:bold;'>{result['vms_score']}</div>", unsafe_allow_html=True)
 
-        # DEEP DIVE
+        # DEEP DIVE WITH DARK TEXT
         if st.session_state.selected_result:
             with st.expander("📊 Metabolic Nutrient Deep Dive", expanded=True):
                 ls_raw = st.session_state.selected_result['raw']
                 st.markdown("#### Clinical Data")
-                c1, c2, c3, c4 = st.columns(4)
-                c1.metric("Sugar", f"{ls_raw[3]}g")
-                c2.metric("Fiber", f"{ls_raw[4]}g")
-                c3.metric("Protein", f"{ls_raw[5]}g")
-                c4.metric("Sodium", f"{ls_raw[7]}mg")
+                
+                # First row: Calories, Sugar, Fiber
+                c1, c2, c3 = st.columns(3)
+                c1.metric("Calories", f"{ls_raw[2]}")
+                c2.metric("Sugar", f"{ls_raw[3]}g")
+                c3.metric("Fiber", f"{ls_raw[4]}g")
+                
+                # Second row: Protein, Fat, Sodium
+                c4, c5, c6 = st.columns(3)
+                c4.metric("Protein", f"{ls_raw[5]}g")
+                c5.metric("Fat", f"{ls_raw[6]}g")
+                c6.metric("Sodium", f"{ls_raw[7]}mg")
                 
                 col1, col2 = st.columns(2)
                 with col1:
@@ -476,10 +473,11 @@ else:
                         st.session_state.scanning = True
                         st.rerun()
 
-        # PROFESSIONAL TRENDS WITH GOOGLE FIT STYLE TABS
+        # COMPACT TRENDS TABS
         st.markdown("### 📈 Your Health Trends")
         
-        # Professional tab buttons
+        # Compact centered tabs
+        st.markdown('<div class="trend-tabs-container">', unsafe_allow_html=True)
         col_d, col_w, col_m = st.columns(3)
         with col_d:
             if st.button("Day", use_container_width=True, key="day_tab",
@@ -496,6 +494,7 @@ else:
                         type="primary" if st.session_state.trends_view == 'monthly' else "secondary"):
                 st.session_state.trends_view = 'monthly'
                 st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
         
         # Get data based on view
         if st.session_state.trends_view == 'daily':
@@ -507,13 +506,18 @@ else:
             
         raw = get_trend_data_db(st.session_state.user_id, days=days)
         
-        if raw:
+        print(f"[TRENDS DEBUG] View: {st.session_state.trends_view}, Days: {days}")
+        print(f"[TRENDS DEBUG] Raw data: {raw}")
+        
+        if raw and len(raw) > 0:
             # Create bar chart with Plotly
             df = pd.DataFrame(raw, columns=["date", "category", "count"])
             df['date'] = pd.to_datetime(df['date'])
+            print(f"[TRENDS DEBUG] DataFrame: {df}")
             
             # Prepare data for bar chart
             df_pivot = df.pivot_table(index='date', columns='category', values='count', aggfunc='sum', fill_value=0)
+            print(f"[TRENDS DEBUG] Pivot table: {df_pivot}")
             
             # Create stacked bar chart
             fig = go.Figure()
@@ -546,11 +550,11 @@ else:
                     hovertemplate='%{y} unhealthy items<extra></extra>'
                 ))
             
-            # Update layout - Google Fit style
+            # Update layout
             fig.update_layout(
                 barmode='stack',
                 height=300,
-                margin=dict(l=20, r=20, t=20, b=20),
+                margin=dict(l=20, r=20, t=20, b=40),
                 plot_bgcolor='rgba(0,0,0,0)',
                 paper_bgcolor='rgba(0,0,0,0)',
                 xaxis=dict(
@@ -581,6 +585,7 @@ else:
             healthy_count = int(df[df['category'] == 'healthy']['count'].sum()) if 'healthy' in df['category'].values else 0
             st.markdown(f"**Total items:** {total_items} | **Healthy choices:** {healthy_count}")
         else:
+            print("[TRENDS DEBUG] No data found")
             st.info("📊 No data yet. Start logging items!")
 
     elif st.session_state.page == 'calendar':
