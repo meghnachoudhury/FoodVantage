@@ -10,6 +10,8 @@ from PIL import Image
 import io
 import base64
 import requests
+from datetime import datetime, timedelta
+
 load_dotenv()
 
 # === 1. VMS ALGORITHM ===
@@ -141,62 +143,96 @@ def search_vantage_db(product_name: str, limit=5):
 
 def search_open_food_facts(product_name: str, limit=5):
     """
-    Fallback: Search Open Food Facts API when product not in local database
-    Returns data in same format as local database
+    FIXED: Fallback to Open Food Facts API when product not in local database
+    Includes retry logic and better error handling
     """
     try:
-        print(f"[OPEN FOOD FACTS] Searching for: {product_name}")
-        
-        # Clean product name for API search
+        # Clean search term - remove special characters
         search_term = product_name.lower().strip()
+        search_term = search_term.replace("'", "").replace('"', '').replace("'s", "s")
         
-        # Open Food Facts API endpoint
-        url = f"https://world.openfoodfacts.org/cgi/search.pl"
-        params = {
-            "search_terms": search_term,
-            "page_size": limit,
-            "json": 1,
-            "fields": "product_name,brands,nutriments,nova_group"
-        }
+        print(f"\n[OPEN FOOD FACTS] ==================")
+        print(f"[OPEN FOOD FACTS] Original query: '{product_name}'")
+        print(f"[OPEN FOOD FACTS] Cleaned query: '{search_term}'")
         
-        response = requests.get(url, params=params, timeout=5)
+        # Try multiple search strategies
+        search_attempts = [
+            search_term,  # Full cleaned term
+            " ".join(search_term.split()[:3]),  # First 3 words only
+            search_term.split()[0] if search_term.split() else search_term  # Just first word
+        ]
         
-        if response.status_code != 200:
-            print(f"[OPEN FOOD FACTS] API error: {response.status_code}")
+        all_products = []
+        
+        for attempt_num, term in enumerate(search_attempts):
+            if not term or len(term) < 3:
+                continue
+                
+            print(f"[OPEN FOOD FACTS] Attempt {attempt_num + 1}: '{term}'")
+            
+            url = "https://world.openfoodfacts.org/cgi/search.pl"
+            params = {
+                "search_terms": term,
+                "page_size": limit * 3,  # Get more results to filter
+                "json": 1,
+                "fields": "product_name,brands,nutriments,nova_group"
+            }
+            
+            try:
+                response = requests.get(url, params=params, timeout=10)  # Increased from 5 to 10
+                print(f"[OPEN FOOD FACTS] Status code: {response.status_code}")
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    products = data.get('products', [])
+                    print(f"[OPEN FOOD FACTS] Found {len(products)} raw results")
+                    
+                    if products:
+                        all_products.extend(products)
+                        if len(all_products) >= limit:
+                            break  # Got enough results
+                            
+            except requests.Timeout:
+                print(f"[OPEN FOOD FACTS] Timeout on attempt {attempt_num + 1}")
+                continue
+            except Exception as e:
+                print(f"[OPEN FOOD FACTS] Error on attempt {attempt_num + 1}: {e}")
+                continue
+        
+        if not all_products:
+            print(f"[OPEN FOOD FACTS] No results found after all attempts")
             return None
         
-        data = response.json()
-        products = data.get('products', [])
-        
-        if not products:
-            print(f"[OPEN FOOD FACTS] No products found")
-            return None
-        
-        print(f"[OPEN FOOD FACTS] Found {len(products)} products")
-        
+        # Process results
         output = []
-        for p in products[:limit]:
+        seen_names = set()
+        
+        for p in all_products[:limit * 2]:  # Process more than limit to filter
             try:
                 # Extract nutrition data
                 nutriments = p.get('nutriments', {})
                 
-                name = p.get('product_name', 'Unknown Product')
-                brand = p.get('brands', '').split(',')[0] if p.get('brands') else ''
+                name = p.get('product_name', '').strip()
+                if not name or name in seen_names:
+                    continue
+                seen_names.add(name)
+                
+                brand = p.get('brands', '').split(',')[0].strip() if p.get('brands') else ''
                 
                 # Get per 100g values (Open Food Facts standard)
-                calories = nutriments.get('energy-kcal_100g', 0) or 0
-                sugar = nutriments.get('sugars_100g', 0) or 0
-                fiber = nutriments.get('fiber_100g', 0) or 0
-                protein = nutriments.get('proteins_100g', 0) or 0
-                fat = nutriments.get('fat_100g', 0) or 0
-                sodium = nutriments.get('sodium_100g', 0) * 1000 or 0  # Convert g to mg
-                nova = p.get('nova_group', 3) or 3
+                calories = float(nutriments.get('energy-kcal_100g', 0) or 0)
+                sugar = float(nutriments.get('sugars_100g', 0) or 0)
+                fiber = float(nutriments.get('fiber_100g', 0) or 0)
+                protein = float(nutriments.get('proteins_100g', 0) or 0)
+                fat = float(nutriments.get('fat_100g', 0) or 0)
+                sodium = float(nutriments.get('sodium_100g', 0) or 0) * 1000  # Convert g to mg
+                nova = int(p.get('nova_group', 3) or 3)
                 
                 # Create row in same format as local database
                 # [name, brand, calories, sugar, fiber, protein, fat, sodium, _, nova]
                 row = [name, brand, calories, sugar, fiber, protein, fat, sodium, None, nova]
                 
-                # Calculate VMS score
+                # Calculate VMS score using YOUR algorithm
                 score = calculate_vms_science(row)
                 rating = "Metabolic Green" if score < 3.0 else "Metabolic Yellow" if score < 7.0 else "Metabolic Red"
                 
@@ -210,19 +246,24 @@ def search_open_food_facts(product_name: str, limit=5):
                     "raw": row
                 })
                 
-                print(f"[OPEN FOOD FACTS] Added: {display_name} (Score: {score})")
+                print(f"[OPEN FOOD FACTS] ✅ Added: {display_name} (Score: {score})")
+                
+                if len(output) >= limit:
+                    break
                 
             except Exception as e:
                 print(f"[OPEN FOOD FACTS] Error processing product: {e}")
                 continue
         
-        return output if output else None
+        if output:
+            print(f"[OPEN FOOD FACTS] Successfully processed {len(output)} products")
+            return output
+        else:
+            print(f"[OPEN FOOD FACTS] No valid products after processing")
+            return None
         
-    except requests.Timeout:
-        print("[OPEN FOOD FACTS] Request timeout")
-        return None
     except Exception as e:
-        print(f"[OPEN FOOD FACTS] Error: {e}")
+        print(f"[OPEN FOOD FACTS] Fatal error: {e}")
         import traceback
         traceback.print_exc()
         return None
@@ -234,7 +275,6 @@ def vision_live_scan_dark(image_bytes):
     """
     api_key = get_gemini_api_key()
     if not api_key: 
-        # Dark error message
         st.markdown("""
             <div class="scanner-result">
                 <div class="scanner-result-title">⚠️ Configuration Error</div>
@@ -371,7 +411,7 @@ What do you see?"""
                 </div>
             """, unsafe_allow_html=True)
         
-        # Search database
+        # Search database (will try Open Food Facts if not in local DB)
         results = search_vantage_db(product_name, limit=5)
         
         if results:
@@ -383,7 +423,7 @@ What do you see?"""
             st.markdown(f"""
                 <div class="scanner-result">
                     <div class="scanner-result-title">✅ Database Match</div>
-                    <div class="scanner-result-text">Found {len(results)} option(s) in database</div>
+                    <div class="scanner-result-text">Found {len(results)} option(s)</div>
                 </div>
             """, unsafe_allow_html=True)
             
@@ -395,7 +435,7 @@ What do you see?"""
             st.markdown(f"""
                 <div class="scanner-result" style="border-left-color: #D4765E;">
                     <div class="scanner-result-title">❌ Not Found</div>
-                    <div class="scanner-result-text">'{product_name}' not in database</div>
+                    <div class="scanner-result-text">'{product_name}' not in any database</div>
                     <div style="font-size: 0.9rem; color: #666; margin-top: 8px;">
                         Try: Repositioning • Better lighting • Different angle
                     </div>
@@ -431,18 +471,42 @@ def get_db_connection():
     return con
 
 def get_trend_data_db(username, days=30):
+    """
+    FIXED: Use DuckDB-compatible date math
+    Calculate threshold in Python, not SQL
+    """
     con = get_db_connection()
-    try: 
+    try:
+        # Calculate date threshold in PYTHON (not SQL)
+        threshold_date = datetime.now().date() - timedelta(days=days - 1)  # Include today
+        threshold_str = threshold_date.strftime('%Y-%m-%d')
+        
+        print(f"\n[TRENDS] ==================")
+        print(f"[TRENDS] Username: {username}")
+        print(f"[TRENDS] Looking for items since: {threshold_str}")
+        print(f"[TRENDS] Days requested: {days}")
+        print(f"[TRENDS] Today's date: {datetime.now().date()}")
+        
+        # Simple SQL that WORKS in DuckDB
         results = con.execute("""
             SELECT date, category, COUNT(*) as count
             FROM calendar 
-            WHERE username = ? AND date >= current_date - INTERVAL ? DAY 
+            WHERE username = ? AND date >= ?
             GROUP BY date, category 
             ORDER BY date ASC
-        """, [username, days]).fetchall()
+        """, [username, threshold_str]).fetchall()
+        
+        print(f"[TRENDS] Found {len(results)} result rows")
+        for row in results:
+            print(f"[TRENDS]   {row[0]} - {row[1]}: {row[2]} items")
+        print(f"[TRENDS] ==================\n")
+        
         return results
+        
     except Exception as e:
         print(f"[TRENDS ERROR] {e}")
+        import traceback
+        traceback.print_exc()
         return []
 
 def get_all_calendar_data_db(username):

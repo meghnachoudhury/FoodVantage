@@ -1,0 +1,12 @@
+[server]
+enableWebsocketCompression = true
+maxUploadSize = 200
+maxMessageSize = 200
+enableXsrfProtection = false
+headless = true
+
+[browser]
+gatherUsageStats = false
+
+[client]
+showErrorDetails = true
