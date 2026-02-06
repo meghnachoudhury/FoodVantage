@@ -5,7 +5,7 @@ import pandas as pd
 import hashlib
 import calendar as cal_module
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "src"))
 from gemini_api import *
@@ -24,6 +24,7 @@ if 'scan_results' not in st.session_state: st.session_state.scan_results = None
 if 'selected_result' not in st.session_state: st.session_state.selected_result = None
 if 'scanning' not in st.session_state: st.session_state.scanning = False
 if 'scan_count' not in st.session_state: st.session_state.scan_count = 0
+if 'trends_view' not in st.session_state: st.session_state.trends_view = 'weekly'
 
 # --- CSS ---
 st.markdown('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">', unsafe_allow_html=True)
@@ -36,6 +37,29 @@ st.markdown("""
     .white-shelf { background: white; height: 35px; border-radius: 10px; border: 1px solid #EEE; margin-bottom: 25px; }
     .tomato-wrapper { width: 100%; text-align: center; padding: 30px 0; }
     .tomato-icon { font-size: 150px !important; color: tomato !important; }
+
+    /* MOBILE FIX - Force white backgrounds and dark text on inputs */
+    input[type="text"], input[type="password"] {
+        background-color: white !important;
+        color: #1A1A1A !important;
+        border: 1px solid #DDD !important;
+        border-radius: 8px !important;
+        padding: 12px !important;
+    }
+    
+    /* Fix for Streamlit's default input styling on mobile */
+    .stTextInput > div > div > input {
+        background-color: white !important;
+        color: #1A1A1A !important;
+        -webkit-text-fill-color: #1A1A1A !important;
+    }
+    
+    /* Fix button visibility on mobile */
+    .stButton > button {
+        background-color: #E2725B !important;
+        color: white !important;
+        border: none !important;
+    }
 
     /* WELCOME SCREEN */
     .welcome-container {
@@ -170,6 +194,22 @@ st.markdown("""
         border-radius: 8px;
         margin-bottom: 8px;
     }
+    
+    .toggle-button {
+        padding: 8px 16px;
+        border-radius: 20px;
+        border: 2px solid #E2725B;
+        background: white;
+        color: #E2725B;
+        font-weight: bold;
+        cursor: pointer;
+        transition: all 0.3s;
+    }
+    
+    .toggle-button.active {
+        background: #E2725B;
+        color: white;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -201,10 +241,10 @@ if not st.session_state.logged_in:
         render_logo(size="3.5rem")
         t1, t2 = st.tabs(["Sign In", "Create Account"])
         with t1:
-            u = st.text_input("User ID", key="l_u")
-            p = st.text_input("Password", type="password", key="l_p")
+            u = st.text_input("User ID", key="l_u", placeholder="Enter username")
+            p = st.text_input("Password", type="password", key="l_p", placeholder="Enter password")
             if st.button("Sign In", type="primary", use_container_width=True):
-                if u and p:  # Check fields not empty
+                if u and p:
                     if authenticate_user(u, p): 
                         st.session_state.user_id = u
                         st.session_state.logged_in = True
@@ -216,10 +256,10 @@ if not st.session_state.logged_in:
                 else:
                     st.warning("⚠️ Please enter both username and password.")
         with t2:
-            u2 = st.text_input("Choose ID", key="s_u")
-            p2 = st.text_input("Choose PWD", type="password", key="s_p")
+            u2 = st.text_input("Choose ID", key="s_u", placeholder="Username")
+            p2 = st.text_input("Choose PWD", type="password", key="s_p", placeholder="Password (min 4 chars)")
             if st.button("Create Account", use_container_width=True):
-                if u2 and p2:  # Check fields not empty
+                if u2 and p2:
                     if len(p2) < 4:
                         st.error("❌ Password must be at least 4 characters.")
                     else:
@@ -391,14 +431,43 @@ else:
                         st.session_state.scanning = True
                         st.rerun()
 
-        # TRENDS
+        # TRENDS WITH WEEKLY/MONTHLY TOGGLE
         st.markdown("### 📈 Your Health Trends")
-        raw = get_trend_data_db(st.session_state.user_id)
+        
+        # Toggle buttons
+        col_w, col_m = st.columns(2)
+        with col_w:
+            if st.button("📅 Weekly", use_container_width=True, 
+                        type="primary" if st.session_state.trends_view == 'weekly' else "secondary"):
+                st.session_state.trends_view = 'weekly'
+                st.rerun()
+        with col_m:
+            if st.button("📆 Monthly", use_container_width=True,
+                        type="primary" if st.session_state.trends_view == 'monthly' else "secondary"):
+                st.session_state.trends_view = 'monthly'
+                st.rerun()
+        
+        # Get data based on view
+        days = 7 if st.session_state.trends_view == 'weekly' else 30
+        raw = get_trend_data_db(st.session_state.user_id, days=days)
+        
         if raw:
+            # Process data for cumulative chart
             df = pd.DataFrame(raw, columns=["date", "category", "count"])
-            df['date'] = pd.to_datetime(df['date']).dt.strftime('%Y-%m-%d')
-            df_pivot = df.pivot(index='date', columns='category', values='count').fillna(0)
-            st.area_chart(df_pivot)
+            df['date'] = pd.to_datetime(df['date'])
+            
+            # Create cumulative sum by category
+            df = df.sort_values('date')
+            df_pivot = df.pivot_table(index='date', columns='category', values='count', aggfunc='sum', fill_value=0)
+            df_cumulative = df_pivot.cumsum()
+            
+            # Display line chart
+            st.line_chart(df_cumulative)
+            
+            # Show summary stats
+            total_items = int(df['count'].sum())
+            healthy_count = int(df[df['category'] == 'healthy']['count'].sum()) if 'healthy' in df['category'].values else 0
+            st.markdown(f"**Total items logged:** {total_items} | **Healthy choices:** {healthy_count}")
         else:
             st.info("📊 No data yet. Start logging items!")
 
@@ -415,7 +484,7 @@ else:
         with c2:
             st.markdown(f"### 🗓️ {sel_date.strftime('%b %d, %Y')}")
             
-            # RESTORED: ADD ITEM FEATURE
+            # ADD ITEM FEATURE
             st.markdown("#### ➕ Add Item to This Day")
             search_item = st.text_input("Search for an item", key="calendar_search", placeholder="e.g., banana, coca cola, avocado...")
             
