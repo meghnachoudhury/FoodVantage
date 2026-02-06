@@ -473,7 +473,7 @@ else:
                         st.session_state.scanning = True
                         st.rerun()
 
-        # COMPACT TRENDS TABS
+        # COMPACT TRENDS TABS WITH BETTER DEBUGGING
         st.markdown("### 📈 Your Health Trends")
         
         # Compact centered tabs
@@ -503,21 +503,33 @@ else:
             days = 7
         else:
             days = 30
-            
-        raw = get_trend_data_db(st.session_state.user_id, days=days)
         
+        # DEBUG: Check if user has ANY calendar data
+        print(f"\n[TRENDS DEBUG] ============================================")
+        print(f"[TRENDS DEBUG] User: {st.session_state.user_id}")
         print(f"[TRENDS DEBUG] View: {st.session_state.trends_view}, Days: {days}")
+        
+        # Get ALL user data first to verify
+        all_data = get_all_calendar_data_db(st.session_state.user_id)
+        print(f"[TRENDS DEBUG] Total calendar items for user: {len(all_data) if all_data else 0}")
+        if all_data and len(all_data) > 0:
+            print(f"[TRENDS DEBUG] Sample items: {all_data[:3]}")
+        
+        # Now get trend data
+        raw = get_trend_data_db(st.session_state.user_id, days=days)
+        print(f"[TRENDS DEBUG] Trend data for last {days} days: {len(raw) if raw else 0} rows")
         print(f"[TRENDS DEBUG] Raw data: {raw}")
+        print(f"[TRENDS DEBUG] ============================================\n")
         
         if raw and len(raw) > 0:
             # Create bar chart with Plotly
             df = pd.DataFrame(raw, columns=["date", "category", "count"])
             df['date'] = pd.to_datetime(df['date'])
-            print(f"[TRENDS DEBUG] DataFrame: {df}")
+            print(f"[TRENDS DEBUG] DataFrame:\n{df}")
             
             # Prepare data for bar chart
             df_pivot = df.pivot_table(index='date', columns='category', values='count', aggfunc='sum', fill_value=0)
-            print(f"[TRENDS DEBUG] Pivot table: {df_pivot}")
+            print(f"[TRENDS DEBUG] Pivot table:\n{df_pivot}")
             
             # Create stacked bar chart
             fig = go.Figure()
@@ -531,6 +543,7 @@ else:
                     marker_color=COLORS['olive'],
                     hovertemplate='%{y} healthy items<extra></extra>'
                 ))
+                print(f"[TRENDS DEBUG] Added healthy bars: {df_pivot['healthy'].tolist()}")
             
             if 'moderate' in df_pivot.columns:
                 fig.add_trace(go.Bar(
@@ -540,6 +553,7 @@ else:
                     marker_color=COLORS['salmon'],
                     hovertemplate='%{y} moderate items<extra></extra>'
                 ))
+                print(f"[TRENDS DEBUG] Added moderate bars: {df_pivot['moderate'].tolist()}")
             
             if 'unhealthy' in df_pivot.columns:
                 fig.add_trace(go.Bar(
@@ -549,6 +563,7 @@ else:
                     marker_color=COLORS['terracotta'],
                     hovertemplate='%{y} unhealthy items<extra></extra>'
                 ))
+                print(f"[TRENDS DEBUG] Added unhealthy bars: {df_pivot['unhealthy'].tolist()}")
             
             # Update layout
             fig.update_layout(
@@ -585,8 +600,11 @@ else:
             healthy_count = int(df[df['category'] == 'healthy']['count'].sum()) if 'healthy' in df['category'].values else 0
             st.markdown(f"**Total items:** {total_items} | **Healthy choices:** {healthy_count}")
         else:
-            print("[TRENDS DEBUG] No data found")
-            st.info("📊 No data yet. Start logging items!")
+            print("[TRENDS DEBUG] No data found - showing info message")
+            if all_data and len(all_data) > 0:
+                st.warning(f"⚠️ You have {len(all_data)} logged items, but none in the last {days} day(s). Try selecting a different time range.")
+            else:
+                st.info("📊 No data yet. Start logging items!")
 
     elif st.session_state.page == 'calendar':
         st.markdown("## 📅 Grocery Calendar")
