@@ -1,14 +1,8 @@
 import streamlit as st
 
 st.set_page_config(page_title="FoodVantage", page_icon="🥗", layout="wide", initial_sidebar_state="expanded")
-st.title("FoodVantage 🥗")
-st.caption("Smart food & nutrition insights")
-
-if st.button("Launch App"):
-    st.session_state["launched"] = True
-
-# STOP HERE if not launched (previews never go past this)
-if not st.session_state.get("launched"):
+if "human" not in st.session_state:
+    st.session_state.human = True
     st.stop()
 import sys
 import os
