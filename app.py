@@ -1,6 +1,18 @@
 import streamlit as st
 
 st.set_page_config(page_title="FoodVantage", page_icon="🥗", layout="wide", initial_sidebar_state="expanded")
+# Initialize phase
+if "phase" not in st.session_state:
+    st.session_state.phase = "launch"
+if st.session_state.phase == "launch":
+    st.title("FoodVantage 🥗")
+    st.caption("Smart food & nutrition insights")
+
+    if st.button("Launch App"):
+        st.session_state.phase = "login"
+        st.rerun()
+
+    st.stop()
 import sys
 import os
 import pandas as pd
