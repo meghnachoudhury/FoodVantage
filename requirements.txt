@@ -6,3 +6,4 @@ streamlit-back-camera-input
 pandas
 Pillow
 plotly>=5.18.0
+requests>=2.31.0
