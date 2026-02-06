@@ -27,7 +27,7 @@ if 'scanning' not in st.session_state: st.session_state.scanning = False
 if 'scan_count' not in st.session_state: st.session_state.scan_count = 0
 if 'trends_view' not in st.session_state: st.session_state.trends_view = 'weekly'
 
-# --- MVP COLOR PALETTE ---
+# --- COLOR PALETTE ---
 COLORS = {
     'olive': '#6B7E54',
     'terracotta': '#D4765E',
@@ -38,67 +38,23 @@ COLORS = {
     'yellow': '#E8B54D',
     'red': '#D4765E',
     # MVP COLORS
-    'unhealthy': '#ffb3b3',  # Light pink
-    'camera_icon': '#c6d9ec',  # Light blue
-    'sidebar_bg': '#262626',  # Dark grey
-    'sidebar_button': '#808080',  # Grey buttons
-    'sidebar_search_bg': '#404040',  # Search textbox background
-    'toggle_button': '#737373'  # LIGHTER GREY for toggle buttons
+    'camera_icon': '#c6d9ec',  # FIX 1: Light blue
+    'toggle_button': '#737373'  # FIX 2: Lighter grey
 }
 
-# --- CSS WITH MVP COLORS AND FONTS ---
+# --- CSS ---
 st.markdown('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">', unsafe_allow_html=True)
-st.markdown('<link href="https://fonts.googleapis.com/css2?family=Alegreya+Sans+SC:wght@400;500;700;800;900&display=swap" rel="stylesheet">', unsafe_allow_html=True)
-
 st.markdown(f"""
     <style>
-    /* GLOBAL FONT - ALEGREYA SANS SC (except logo and welcome) */
-    * {{
-        font-family: 'Alegreya Sans SC', sans-serif !important;
-    }}
-    
-    .stApp {{ 
-        background-color: #F7F5F0; 
-        color: #1A1A1A; 
-    }}
-    
-    /* ORIGINAL FONT FOR LOGO ONLY */
-    .logo-text {{ 
-        font-family: 'Arial Black', sans-serif !important;
-        font-size: 3rem; 
-        text-align: center; 
-    }}
-    
+    .stApp {{ background-color: #F7F5F0; color: #1A1A1A; }}
+    .logo-text {{ font-family: 'Arial Black', sans-serif; font-size: 3rem; text-align: center; }}
     .logo-dot {{ color: {COLORS['terracotta']}; }}
+    .card {{ background: white; padding: 24px; border-radius: 20px; border: 1px solid #EEE; box-shadow: 0 4px 12px rgba(0,0,0,0.04); margin-bottom: 20px; }}
+    .white-shelf {{ background: white; height: 35px; border-radius: 10px; border: 1px solid #EEE; margin-bottom: 25px; }}
+    .tomato-wrapper {{ width: 100%; text-align: center; padding: 30px 0; }}
     
-    .card {{ 
-        background: white; 
-        padding: 24px; 
-        border-radius: 20px; 
-        border: 1px solid #EEE; 
-        box-shadow: 0 4px 12px rgba(0,0,0,0.04); 
-        margin-bottom: 20px; 
-    }}
-    
-    .white-shelf {{ 
-        background: white; 
-        height: 35px; 
-        border-radius: 10px; 
-        border: 1px solid #EEE; 
-        margin-bottom: 25px; 
-    }}
-    
-    .tomato-wrapper {{ 
-        width: 100%; 
-        text-align: center; 
-        padding: 30px 0; 
-    }}
-    
-    /* FIXED: CAMERA ICON RESTORED WITH NEW COLOR */
-    .tomato-icon {{ 
-        font-size: 150px !important; 
-        color: {COLORS['camera_icon']} !important; 
-    }}
+    /* FIX 1: CAMERA ICON - LIGHT BLUE COLOR (ONLY COLOR CHANGED) */
+    .tomato-icon {{ font-size: 150px !important; color: {COLORS['camera_icon']} !important; }}
 
     /* MOBILE FIX */
     input[type="text"], input[type="password"] {{
@@ -107,64 +63,19 @@ st.markdown(f"""
         border: 1px solid #DDD !important;
         border-radius: 8px !important;
         padding: 12px !important;
-        font-family: 'Alegreya Sans SC', sans-serif !important;
     }}
     
     .stTextInput > div > div > input {{
         background-color: white !important;
         color: #1A1A1A !important;
         -webkit-text-fill-color: #1A1A1A !important;
-        font-family: 'Alegreya Sans SC', sans-serif !important;
     }}
     
+    /* FIX 3: ALL BUTTONS TERRACOTTA (INCLUDING STOP SCANNING) */
     .stButton > button {{
-        font-family: 'Alegreya Sans SC', sans-serif !important;
-    }}
-    
-    /* FIXED: LOGIN TABS - BLACK TEXT */
-    .stTabs [data-baseweb="tab-list"] button {{
-        color: #000000 !important;
-        font-family: 'Alegreya Sans SC', sans-serif !important;
-    }}
-    
-    .stTabs [data-baseweb="tab-list"] button[aria-selected="true"] {{
-        color: #000000 !important;
-    }}
-    
-    /* MVP: SIDEBAR DARK GREY BACKGROUND */
-    [data-testid="stSidebar"] {{
-        background-color: {COLORS['sidebar_bg']} !important;
-    }}
-    
-    [data-testid="stSidebar"] * {{
-        color: white !important;
-        font-family: 'Alegreya Sans SC', sans-serif !important;
-    }}
-    
-    /* MVP: SIDEBAR BUTTONS - GREY COLOR */
-    [data-testid="stSidebar"] .stButton > button {{
-        background-color: {COLORS['sidebar_button']} !important;
+        background-color: {COLORS['terracotta']} !important;
         color: white !important;
         border: none !important;
-        font-family: 'Alegreya Sans SC', sans-serif !important;
-    }}
-    
-    [data-testid="stSidebar"] .stButton > button:hover {{
-        background-color: #999999 !important;
-    }}
-    
-    /* MVP: SIDEBAR SEARCH TEXTBOX - DARK BACKGROUND WITH WHITE TEXT */
-    [data-testid="stSidebar"] input {{
-        background-color: {COLORS['sidebar_search_bg']} !important;
-        color: white !important;
-        border: 1px solid #555 !important;
-        font-family: 'Alegreya Sans SC', sans-serif !important;
-        -webkit-text-fill-color: white !important;
-    }}
-    
-    [data-testid="stSidebar"] input::placeholder {{
-        color: #aaa !important;
-        -webkit-text-fill-color: #aaa !important;
     }}
 
     /* CRITICAL FIX: DARK TEXT FOR CLINICAL DATA */
@@ -172,13 +83,11 @@ st.markdown(f"""
         color: #1A1A1A !important;
         font-weight: 700 !important;
         font-size: 1.5rem !important;
-        font-family: 'Alegreya Sans SC', sans-serif !important;
     }}
     
     [data-testid="stMetricLabel"] {{
         color: #2C2C2C !important;
         font-weight: 600 !important;
-        font-family: 'Alegreya Sans SC', sans-serif !important;
     }}
     
     .stExpander {{
@@ -188,10 +97,9 @@ st.markdown(f"""
     
     .stExpander p, .stExpander div, .stExpander span {{
         color: #1A1A1A !important;
-        font-family: 'Alegreya Sans SC', sans-serif !important;
     }}
 
-    /* WELCOME SCREEN - ORIGINAL FONT */
+    /* WELCOME SCREEN */
     .welcome-container {{
         display: flex;
         flex-direction: column;
@@ -206,7 +114,6 @@ st.markdown(f"""
         color: #1A1A1A;
         text-align: center;
         margin-bottom: 30px;
-        font-family: 'Arial Black', sans-serif !important;
     }}
     
     .dots {{
@@ -264,7 +171,6 @@ st.markdown(f"""
         font-weight: 600;
         z-index: 1000;
         animation: pulse 2s ease-in-out infinite;
-        font-family: 'Alegreya Sans SC', sans-serif !important;
     }}
     
     @keyframes pulse {{
@@ -285,7 +191,6 @@ st.markdown(f"""
         z-index: 1000;
         text-align: center;
         min-width: 220px;
-        font-family: 'Alegreya Sans SC', sans-serif !important;
     }}
     
     .scanning-indicator {{
@@ -300,7 +205,6 @@ st.markdown(f"""
         z-index: 1000;
         font-weight: bold;
         animation: blink 1.5s infinite;
-        font-family: 'Alegreya Sans SC', sans-serif !important;
     }}
     
     @keyframes blink {{
@@ -315,7 +219,6 @@ st.markdown(f"""
         border-radius: 12px;
         margin: 12px 0;
         border-left: 4px solid {COLORS['olive']};
-        font-family: 'Alegreya Sans SC', sans-serif !important;
     }}
     
     .scanner-result-title {{
@@ -323,7 +226,6 @@ st.markdown(f"""
         font-weight: 800;
         font-size: 1.1rem;
         margin-bottom: 8px;
-        font-family: 'Alegreya Sans SC', sans-serif !important;
     }}
     
     .scanner-result-text {{
@@ -331,7 +233,6 @@ st.markdown(f"""
         font-weight: 700;
         font-size: 1.3rem;
         line-height: 1.6;
-        font-family: 'Alegreya Sans SC', sans-serif !important;
     }}
     
     .list-row {{ 
@@ -342,22 +243,19 @@ st.markdown(f"""
         background: #FFF; 
         border-radius: 12px; 
         border: 1px solid #F0F0F0; 
-        margin-bottom: 8px;
-        font-family: 'Alegreya Sans SC', sans-serif !important;
+        margin-bottom: 8px; 
     }}
     
-    /* COMPACT TABS FOR DESKTOP */
+    /* FIX 2: DAY/WEEK/MONTH TOGGLE BUTTONS - LIGHTER GREY WITH WHITE TEXT */
     .trend-tabs-container {{
         max-width: 400px;
         margin: 0 auto 20px auto;
     }}
     
-    /* FIXED: DAY/WEEK/MONTH TOGGLE BUTTONS - WHITE TEXT */
     .trend-tabs-container .stButton > button {{
         background-color: {COLORS['toggle_button']} !important;
         color: white !important;
         border: none !important;
-        font-family: 'Alegreya Sans SC', sans-serif !important;
     }}
     
     .trend-tabs-container .stButton > button[kind="primary"] {{
@@ -366,9 +264,16 @@ st.markdown(f"""
         font-weight: bold !important;
     }}
     
-    /* ALL TEXT ELEMENTS */
-    h1, h2, h3, h4, h5, h6, p, span, div, label {{
-        font-family: 'Alegreya Sans SC', sans-serif !important;
+    /* FIX 5: HIDE KEYBOARD TEXT FROM SIDEBAR ARROW */
+    [data-testid="collapsedControl"] {{
+        color: transparent !important;
+        font-size: 0 !important;
+    }}
+    
+    [data-testid="collapsedControl"]::before {{
+        content: "»";
+        font-size: 1.5rem;
+        color: white;
     }}
     </style>
 """, unsafe_allow_html=True)
@@ -378,7 +283,7 @@ def render_logo(size="3rem"):
 
 def create_html_calendar(year, month, selected_day=None):
     cal = cal_module.monthcalendar(year, month)
-    html = "<table style='width:100%; text-align:center; font-family: \"Alegreya Sans SC\", sans-serif;'><thead><tr>"
+    html = "<table style='width:100%; text-align:center;'><thead><tr>"
     for day in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]: html += f"<th style='color:{COLORS['terracotta']};'>{day}</th>"
     html += "</tr></thead><tbody>"
     for week in cal:
@@ -433,7 +338,7 @@ if not st.session_state.logged_in:
         st.markdown("</div>", unsafe_allow_html=True)
 
 elif not st.session_state.welcome_shown:
-    # WELCOME SCREEN - ORIGINAL FONT
+    # WELCOME SCREEN
     st.markdown("""
         <div class="welcome-container">
             <div class="welcome-text">Let's start your health journey</div>
@@ -462,9 +367,12 @@ else:
         search_q = st.text_input("Quick check score", key="sidebar_search")
         if search_q:
             results = search_vantage_db(search_q, limit=5)
-            if results:
+            # FIX 4: Filter out vague 10.0 default scores
+            filtered_results = [r for r in results if r['vms_score'] != 10.0] if results else []
+            
+            if filtered_results:
                 st.markdown("**Top Results:**")
-                for i, d in enumerate(results):
+                for i, d in enumerate(filtered_results):
                     c = COLORS['green'] if d['vms_score'] < 3.0 else COLORS['yellow'] if d['vms_score'] < 7.0 else COLORS['red']
                     st.markdown(f"""
                         <div class='card' style='padding:12px; margin-bottom:8px;'>
@@ -490,7 +398,7 @@ else:
         st.markdown('<div class="white-shelf"></div>', unsafe_allow_html=True)
         
         if not st.session_state.camera_active:
-            # FIXED: CAMERA ICON RESTORED
+            # FIX 1: CAMERA ICON WITH LIGHT BLUE COLOR
             st.markdown('<div class="tomato-wrapper"><i class="fa fa-camera tomato-icon"></i></div>', unsafe_allow_html=True)
             if st.button("Start Live Scan", type="primary", use_container_width=True):
                 st.session_state.camera_active = True
@@ -525,6 +433,7 @@ else:
             image = back_camera_input(key="hud_cam")
             st.markdown('</div>', unsafe_allow_html=True)
             
+            # FIX 3: STOP BUTTON ALREADY TERRACOTTA (DEFAULT BUTTON COLOR)
             col1, col2, col3 = st.columns([1, 2, 1])
             with col2:
                 if st.button("❌ Stop Scanning", use_container_width=True):
@@ -603,10 +512,10 @@ else:
                         st.session_state.scanning = True
                         st.rerun()
 
-        # MVP: TRENDS WITH BLACK AXIS TEXT AND NEW COLORS
+        # TRENDS WITH FIX 2 APPLIED
         st.markdown("### 📈 Your Health Trends")
         
-        # MVP: Compact centered tabs with LIGHTER GREY and WHITE TEXT
+        # FIX 2: Lighter grey toggle buttons with white text
         st.markdown('<div class="trend-tabs-container">', unsafe_allow_html=True)
         col_d, col_w, col_m = st.columns(3)
         with col_d:
@@ -646,10 +555,10 @@ else:
             # Prepare data for bar chart
             df_pivot = df.pivot_table(index='date', columns='category', values='count', aggfunc='sum', fill_value=0)
             
-            # MVP: Create stacked bar chart with BLACK AXIS TEXT
+            # Create stacked bar chart
             fig = go.Figure()
             
-            # Add bars for each category with MVP color palette
+            # Add bars for each category with color palette
             if 'healthy' in df_pivot.columns:
                 fig.add_trace(go.Bar(
                     x=df_pivot.index,
@@ -673,53 +582,34 @@ else:
                     x=df_pivot.index,
                     y=df_pivot['unhealthy'],
                     name='Unhealthy',
-                    marker_color=COLORS['unhealthy'],  # MVP: LIGHT PINK
+                    marker_color=COLORS['terracotta'],
                     hovertemplate='%{y} unhealthy items<extra></extra>'
                 ))
             
-            # MVP: BLACK AXIS TEXT - READABLE ON LIGHT BACKGROUND
+            # Update layout
             fig.update_layout(
                 barmode='stack',
                 height=300,
                 margin=dict(l=20, r=20, t=20, b=40),
                 plot_bgcolor='rgba(0,0,0,0)',
                 paper_bgcolor='rgba(0,0,0,0)',
-                font=dict(
-                    family='Alegreya Sans SC, sans-serif',
-                    size=14,
-                    color='#000000'  # BLACK TEXT
-                ),
                 xaxis=dict(
                     showgrid=False,
                     showline=False,
-                    title=None,
-                    tickfont=dict(
-                        color='#000000',  # BLACK AXIS NUMBERS
-                        size=13,
-                        family='Alegreya Sans SC, sans-serif'
-                    )
+                    title=None
                 ),
                 yaxis=dict(
                     showgrid=True,
                     gridcolor='#E0E0E0',
                     showline=False,
-                    title=None,
-                    tickfont=dict(
-                        color='#000000',  # BLACK AXIS NUMBERS
-                        size=13,
-                        family='Alegreya Sans SC, sans-serif'
-                    )
+                    title=None
                 ),
                 legend=dict(
                     orientation="h",
                     yanchor="bottom",
                     y=1.02,
                     xanchor="center",
-                    x=0.5,
-                    font=dict(
-                        color='#000000',  # BLACK LEGEND TEXT
-                        family='Alegreya Sans SC, sans-serif'
-                    )
+                    x=0.5
                 ),
                 hovermode='x unified'
             )
@@ -755,8 +645,11 @@ else:
             
             if search_item:
                 search_results = search_vantage_db(search_item, limit=5)
-                if search_results:
-                    for idx, result in enumerate(search_results):
+                # FIX 4: Filter out vague 10.0 default scores
+                filtered_results = [r for r in search_results if r['vms_score'] != 10.0] if search_results else []
+                
+                if filtered_results:
+                    for idx, result in enumerate(filtered_results):
                         clr = COLORS['green'] if result['vms_score'] < 3.0 else COLORS['yellow'] if result['vms_score'] < 7.0 else COLORS['red']
                         
                         col_a, col_b, col_c = st.columns([3, 1, 0.6])
