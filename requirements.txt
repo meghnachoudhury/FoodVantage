@@ -4,3 +4,4 @@ duckdb
 python-dotenv
 streamlit-back-camera-input
 pandas
+Pillow
