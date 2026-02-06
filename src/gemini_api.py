@@ -8,9 +8,10 @@ from dotenv import load_dotenv
 from PIL import Image
 import io
 import base64
+
 load_dotenv()
 
-# === 1. ACCURATE DATABASE ENGINE (UNCHANGED) ===
+# === 1. FIXED VMS ALGORITHM - PROPER FRUIT HANDLING ===
 def calculate_vms_science(row):
     try:
         name, _, cal, sug, fib, prot, fat, sod, _, nova = row
@@ -18,19 +19,41 @@ def calculate_vms_science(row):
         nova_val = int(nova or 1)
         
         n = name.lower()
-        is_liquid = any(x in n for x in ['juice', 'soda', 'cola', 'drink', 'beverage'])
-        is_whole_fresh = (nova_val <= 2) and not is_liquid
+        
+        # Comprehensive fruit detection
+        common_fruits = ['apple', 'banana', 'orange', 'grape', 'strawberry', 'blueberry', 
+                        'raspberry', 'mango', 'pineapple', 'watermelon', 'melon', 'kiwi',
+                        'peach', 'pear', 'plum', 'cherry', 'lime', 'lemon', 'grapefruit',
+                        'papaya', 'guava', 'passion fruit', 'dragon fruit', 'avocado']
+        
+        is_fruit = any(fruit in n for fruit in common_fruits)
+        is_liquid = any(x in n for x in ['juice', 'soda', 'cola', 'drink', 'beverage', 'smoothie'])
+        is_dried = any(x in n for x in ['dried', 'dehydrated', 'raisin'])
+        
+        is_superfood = any(x in n for x in ['salmon', 'lentils', 'beans', 'broccoli', 'egg', 'avocado', 'spinach', 'kale'])
+        is_dairy_plain = ('milk' in n or 'yogurt' in n) and sug < 5.0
+        
+        is_whole_fresh = ((nova_val <= 2 or is_superfood or is_dairy_plain or is_fruit) 
+                         and not (is_liquid or is_dried))
 
         pts_energy = min(cal / 80, 10.0)
         pts_fat = min(fat / 2.0, 10.0) 
         pts_sodium = min(sod / 150, 10.0)
-        pts_sugar = min((sug * 0.2) / 4.5, 10.0) if is_whole_fresh else min(sug / 1.5, 10.0) if is_liquid else min(sug / 4.5, 10.0)
+        
+        if is_liquid:
+            pts_sugar = min(sug / 1.5, 10.0)
+        elif is_whole_fresh:
+            pts_sugar = min((sug * 0.2) / 4.5, 10.0)
+        else:
+            pts_sugar = min(sug / 4.5, 10.0)
 
         c_total = 0.0 if is_liquid else (min(fib / 0.5, 7.0) + min(prot / 1.2, 7.0))
         score = round((pts_energy + pts_fat + pts_sodium + pts_sugar) - c_total, 2)
         
         if is_whole_fresh: return min(score, -1.0)
         if is_liquid and sug > 4.0: return max(score, 7.5)
+        if is_dried and sug > 15.0: return max(score, 7.0)
+        
         return max(-2.0, min(10.0, score))
     except: return 5.0
 
@@ -44,37 +67,64 @@ def get_scientific_db():
             zip_ref.extractall('/tmp/')
     return duckdb.connect(db_path, read_only=True)
 
-def search_vantage_db(product_name: str):
-    """Search database for product"""
+def search_vantage_db(product_name: str, limit=5):
+    """
+    FIXED: Returns top 5 results, prioritizing exact/simple matches
+    """
     con = get_scientific_db()
     if not con: return None
     try:
         safe_name = product_name.replace("'", "''")
-        query = f"SELECT * FROM products WHERE product_name ILIKE '%{safe_name}%' ORDER BY sugar DESC LIMIT 1"
         
-        r = con.execute(query).fetchone()
-        if not r: return None
-        score = calculate_vms_science(r)
-        rating = "Metabolic Green" if score < 3.0 else "Metabolic Yellow" if score < 7.0 else "Metabolic Red"
-        return [{
-            "name": r[0].title(), 
-            "brand": str(r[1]).title() if r[1] else "Generic",
-            "vms_score": score, 
-            "rating": rating, 
-            "raw": r
-        }]
+        # Smart search query that prioritizes:
+        # 1. Exact matches
+        # 2. Simple/plain versions (no brand names)
+        # 3. Products with fewer words (more likely to be the base item)
+        query = f"""
+            SELECT * FROM products 
+            WHERE product_name ILIKE '%{safe_name}%'
+            ORDER BY 
+                CASE 
+                    WHEN LOWER(product_name) = LOWER('{safe_name}') THEN 0
+                    WHEN LOWER(product_name) LIKE LOWER('{safe_name}') || '%' THEN 1
+                    WHEN brand IS NULL OR brand = '' THEN 2
+                    ELSE 3
+                END,
+                LENGTH(product_name),
+                sugar DESC
+            LIMIT {limit}
+        """
+        
+        results = con.execute(query).fetchall()
+        if not results: return None
+        
+        # Calculate scores for all results
+        output = []
+        for r in results:
+            score = calculate_vms_science(r)
+            rating = "Metabolic Green" if score < 3.0 else "Metabolic Yellow" if score < 7.0 else "Metabolic Red"
+            output.append({
+                "name": r[0].title(), 
+                "brand": str(r[1]).title() if r[1] else "Generic",
+                "vms_score": score, 
+                "rating": rating, 
+                "raw": r
+            })
+        
+        return output
+        
     except Exception as e:
-        print(f"DB Error: {e}")
+        print(f"[DB ERROR] {e}")
         return None
 
-# === 3. PRECISION VISION SCAN (GEMINI 3 FLASH) ===
+# === 3. ENHANCED VISION SCAN ===
 def vision_live_scan(image_bytes):
     """
-    FIXED: Uses Gemini 3 Flash and handles image processing properly
+    Enhanced scanning with better error handling and feedback
     """
     api_key = get_gemini_api_key()
     if not api_key: 
-        print("No API key found!")
+        st.error("⚠️ No Gemini API key configured!")
         return None
     
     try:
@@ -82,55 +132,79 @@ def vision_live_scan(image_bytes):
         img = Image.open(io.BytesIO(image_bytes))
         w, h = img.size
         
-        # MATHEMATICAL CROP: Target center 30% to match HUD reticle
-        left = int(w * 0.35)
-        top = int(h * 0.35)
-        right = int(w * 0.65)
-        bottom = int(h * 0.65)
+        # Crop center 50% of image
+        left = int(w * 0.25)
+        top = int(h * 0.25)
+        right = int(w * 0.75)
+        bottom = int(h * 0.75)
         img_cropped = img.crop((left, top, right, bottom))
         
-        # Convert to bytes for Gemini
+        # Enhance contrast for better recognition
+        from PIL import ImageEnhance
+        enhancer = ImageEnhance.Contrast(img_cropped)
+        img_cropped = enhancer.enhance(1.5)
+        
+        # Enhance brightness
+        enhancer = ImageEnhance.Brightness(img_cropped)
+        img_cropped = enhancer.enhance(1.2)
+        
+        # Convert to bytes
         buf = io.BytesIO()
-        img_cropped.save(buf, format="JPEG", quality=85)
+        img_cropped.save(buf, format="JPEG", quality=95)
         img_data = buf.getvalue()
         
-        # Call Gemini 3 Flash
-        client = genai.Client(api_key=api_key)
-        
-        prompt = """Look at this product image and identify the food product.
-        
-Return ONLY the product name in this format:
-[Brand] [Product Name]
+        # ENHANCED PROMPT
+        prompt = """You are a grocery product identifier. Look at this image and identify the food product.
+
+CRITICAL RULES:
+1. If you see a FRUIT or VEGETABLE (apple, banana, lime, carrot, etc.), return ONLY the item name
+2. If you see a PACKAGED product, return "[Brand] [Product]"
+3. Be SPECIFIC and CONCISE - maximum 3 words
+4. Return ONLY the product name, NO extra text
 
 Examples:
-- "Coca Cola"
-- "Lay's Potato Chips"
-- "Tropicana Orange Juice"
+- Lime → "lime"
+- Banana → "banana"
+- Coca Cola can → "coca cola"
+- Lay's chips → "lays chips"
+- Tropicana juice → "tropicana juice"
 
-Be concise. Return only the product name, nothing else."""
+What product do you see?"""
+        
+        # Call Gemini
+        client = genai.Client(api_key=api_key)
+        
+        st.info("🔍 Analyzing image...")
         
         response = client.models.generate_content(
-            model="gemini-3-flash-preview",  # FIXED: Using Gemini 3
+            model="gemini-3-flash-preview",
             contents=[prompt, img_data]
         )
         
-        product_name = response.text.strip()
-        print(f"[VISION] Gemini identified: {product_name}")
+        product_name = response.text.strip().replace('"', '').replace('*', '').replace('.', '')
+        print(f"🔍 [GEMINI] Identified: '{product_name}'")
+        st.info(f"👁️ Gemini detected: **{product_name}**")
         
-        # Search database
-        result = search_vantage_db(product_name)
+        # Search database (get top 5 results)
+        results = search_vantage_db(product_name, limit=5)
         
-        if result:
-            print(f"[VISION] Found in DB: {result[0]['name']} - Score: {result[0]['vms_score']}")
+        if results:
+            print(f"✅ [DATABASE] Found {len(results)} matches")
+            for i, r in enumerate(results):
+                print(f"   {i+1}. {r['name']} - Score: {r['vms_score']}")
+            st.success(f"✅ Found {len(results)} matches!")
+            return results
         else:
-            print(f"[VISION] Not found in DB: {product_name}")
-        
-        return result
+            print(f"❌ [DATABASE] No matches for: '{product_name}'")
+            st.warning(f"❌ Product '{product_name}' not found in database. Try:\n- Repositioning the camera\n- Better lighting\n- A different angle")
+            return None
         
     except Exception as e:
-        print(f"[VISION ERROR] {e}")
+        error_msg = str(e)
+        print(f"❌ [SCAN ERROR] {error_msg}")
         import traceback
         traceback.print_exc()
+        st.error(f"⚠️ Scan error: {error_msg}")
         return None
 
 # === 4. USER DB & TRENDS ===
@@ -143,11 +217,9 @@ def get_db_connection():
     con.execute("CREATE TABLE IF NOT EXISTS calendar (id INTEGER DEFAULT nextval('seq_cal_id'), username VARCHAR, date DATE, item_name VARCHAR, score FLOAT, category VARCHAR)")
     return con
 
-def get_trend_data_db(username, days=7):
-    """FIXED: Returns data in correct format for Streamlit charts"""
+def get_trend_data_db(username, days=30):
     con = get_db_connection()
     try: 
-        # Simplified query that works with Streamlit area_chart
         results = con.execute("""
             SELECT 
                 date,
@@ -158,8 +230,6 @@ def get_trend_data_db(username, days=7):
             GROUP BY date, category 
             ORDER BY date ASC
         """, [username, days]).fetchall()
-        
-        print(f"[TRENDS] Found {len(results)} data points for {username}")
         return results
     except Exception as e:
         print(f"[TRENDS ERROR] {e}")
@@ -169,12 +239,7 @@ def get_trend_data_db(username, days=7):
 def get_gemini_api_key():
     if hasattr(st, 'secrets') and "GEMINI_API_KEY" in st.secrets: 
         return st.secrets["GEMINI_API_KEY"]
-    key = os.getenv("GEMINI_API_KEY")
-    if key:
-        print(f"[API KEY] Found: {key[:10]}...")
-    else:
-        print("[API KEY] NOT FOUND!")
-    return key
+    return os.getenv("GEMINI_API_KEY")
 
 def authenticate_user(username, password):
     con = get_db_connection()
@@ -186,7 +251,6 @@ def add_calendar_item_db(username, date_str, item_name, score):
     con = get_db_connection()
     category = 'healthy' if score < 3.0 else 'moderate' if score < 7.0 else 'unhealthy'
     con.execute("INSERT INTO calendar (username, date, item_name, score, category) VALUES (?, ?, ?, ?, ?)", [username, date_str, item_name, score, category])
-    print(f"[CALENDAR] Added: {item_name} ({score}) for {username} on {date_str}")
 
 def get_calendar_items_db(username, date_str):
     con = get_db_connection()
