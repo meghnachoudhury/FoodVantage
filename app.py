@@ -4,11 +4,11 @@ import os
 import pandas as pd
 import hashlib
 import calendar as cal_module
+import time  # For the animated transition
 from datetime import datetime
 from collections import defaultdict
 
 # --- 1. PATH FIX FOR DEPLOYMENT ---
-# Ensures the 'src' folder is recognized correctly on Streamlit Cloud
 sys.path.append(os.path.join(os.path.dirname(__file__), "src"))
 
 from gemini_api import (
@@ -37,8 +37,9 @@ if 'logged_in' not in st.session_state: st.session_state.logged_in = False
 if 'page' not in st.session_state: st.session_state.page = 'dashboard'
 if 'user_id' not in st.session_state: st.session_state.user_id = ""
 if 'camera_active' not in st.session_state: st.session_state.camera_active = False
+if 'transitioning' not in st.session_state: st.session_state.transitioning = False
 
-# --- 4. CSS & FONTAWESOME (YOUR FINAL DESIGN) ---
+# --- 4. CSS & FONTAWESOME ---
 st.markdown('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">', unsafe_allow_html=True)
 
 st.markdown("""
@@ -48,6 +49,29 @@ st.markdown("""
     .logo-dot { color: #E2725B; }
     .card { background: white; padding: 24px; border-radius: 20px; border: 1px solid #EEE; box-shadow: 0 4px 12px rgba(0,0,0,0.04); margin-bottom: 20px; }
     
+    /* Login Tab Design Fix */
+    button[data-baseweb="tab"] p {
+        color: black !important;
+        font-weight: bold !important;
+    }
+
+    /* Subtitle Styling */
+    .welcome-subtitle {
+        font-size: 22px !important;
+        color: #2c3e50 !important;
+        font-weight: 600;
+        margin-bottom: 20px;
+    }
+
+    /* Transition Message Styling */
+    .transition-text {
+        font-family: 'Arial Black', sans-serif;
+        font-size: 2.5rem;
+        color: #2c3e50;
+        text-align: center;
+        margin-top: 20vh;
+    }
+
     .cal-table { width: 100%; text-align: center; border-collapse: collapse; }
     .cal-header { font-weight: bold; color: #E2725B; padding: 10px; }
     .cal-day { padding: 10px; border: 1px solid #F0F0F0; color: #555; }
@@ -77,7 +101,7 @@ st.markdown("""
 
 # --- 5. HELPERS ---
 def render_logo(size="3rem"):
-    st.markdown(f"<div style='text-align: center; margin-bottom: 20px;'><div class='logo-text' style='font-size: {size};'>foodvantage<span class='logo-dot'>.</span></div></div>", unsafe_allow_html=True)
+    st.markdown(f"<div style='text-align: center; margin-bottom: 10px;'><div class='logo-text' style='font-size: {size};'>foodvantage<span class='logo-dot'>.</span></div></div>", unsafe_allow_html=True)
 
 def create_html_calendar(year, month, selected_day=None):
     cal = cal_module.monthcalendar(year, month)
@@ -98,21 +122,35 @@ def create_html_calendar(year, month, selected_day=None):
 
 # --- 6. PAGE ROUTING ---
 
+# Animated Transition Screen
+if st.session_state.transitioning:
+    placeholder = st.empty()
+    for i in range(2): # Repeat animation twice
+        for dots in [".", "..", "..."]:
+            placeholder.markdown(f"<div class='transition-text'>Let us start your health journey{dots}</div>", unsafe_allow_html=True)
+            time.sleep(0.5)
+    st.session_state.transitioning = False
+    st.rerun()
+
+# Login Logic
 if not st.session_state.logged_in:
-    col1, col2, col3 = st.columns([1, 1, 1])
+    col1, col2, col3 = st.columns([1, 1.5, 1])
     with col2:
         st.write(""); st.write("")
         with st.container():
             st.markdown('<div class="card" style="text-align: center;">', unsafe_allow_html=True)
             render_logo(size="3.5rem")
-            st.caption("Welcome! Ready to eat healthy?")
+            st.markdown('<p class="welcome-subtitle">Welcome! Ready to eat healthy?</p>', unsafe_allow_html=True)
+            
             tab1, tab2 = st.tabs(["Sign In", "Create Account"])
             with tab1:
                 u = st.text_input("User ID", key="l_u")
                 p = st.text_input("Password", type="password", key="l_p")
                 if st.button("Sign In", type="primary", use_container_width=True):
                     if authenticate_user(u, p):
-                        st.session_state.logged_in, st.session_state.user_id, st.session_state.page = True, u, 'dashboard'
+                        st.session_state.user_id = u
+                        st.session_state.logged_in = True
+                        st.session_state.transitioning = True # Trigger Animation
                         st.rerun()
                     else: st.error("User not found.")
             with tab2:
@@ -122,6 +160,7 @@ if not st.session_state.logged_in:
                     else: st.error("Username taken.")
             st.markdown("</div>", unsafe_allow_html=True)
 
+# Main App Logic
 else:
     with st.sidebar:
         st.write("")
@@ -129,7 +168,6 @@ else:
         search_q = st.text_input("Check score", placeholder="e.g. Avocado", label_visibility="collapsed")
         
         if search_q:
-            # search_vantage_db handles the Read-Only clinical lookup
             res = search_vantage_db(search_q)
             if res:
                 data = res[0]
@@ -205,7 +243,6 @@ else:
             new_item = col_in.text_input("Add item...", label_visibility="collapsed")
             if col_btn.button("➕", use_container_width=True):
                 if new_item:
-                    # Look up science score first to avoid DB lock issues
                     res = search_vantage_db(new_item)
                     score = res[0]['vms_score'] if res else 5.0
                     add_calendar_item_db(st.session_state.user_id, sel_date.strftime("%Y-%m-%d"), new_item, score)
