@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 from PIL import Image
 import io
 import base64
+import requests
 
 load_dotenv()
 
@@ -104,7 +105,11 @@ def search_vantage_db(product_name: str, limit=5):
         """
         
         results = con.execute(query).fetchall()
-        if not results: return None
+        
+        # If no results in local DB, try Open Food Facts API
+        if not results or len(results) == 0:
+            print(f"[DB] No results in local database, trying Open Food Facts...")
+            return search_open_food_facts(product_name, limit)
         
         output = []
         for r in results:
@@ -131,6 +136,94 @@ def search_vantage_db(product_name: str, limit=5):
         
     except Exception as e:
         print(f"[DB ERROR] {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+def search_open_food_facts(product_name: str, limit=5):
+    """
+    Fallback: Search Open Food Facts API when product not in local database
+    Returns data in same format as local database
+    """
+    try:
+        print(f"[OPEN FOOD FACTS] Searching for: {product_name}")
+        
+        # Clean product name for API search
+        search_term = product_name.lower().strip()
+        
+        # Open Food Facts API endpoint
+        url = f"https://world.openfoodfacts.org/cgi/search.pl"
+        params = {
+            "search_terms": search_term,
+            "page_size": limit,
+            "json": 1,
+            "fields": "product_name,brands,nutriments,nova_group"
+        }
+        
+        response = requests.get(url, params=params, timeout=5)
+        
+        if response.status_code != 200:
+            print(f"[OPEN FOOD FACTS] API error: {response.status_code}")
+            return None
+        
+        data = response.json()
+        products = data.get('products', [])
+        
+        if not products:
+            print(f"[OPEN FOOD FACTS] No products found")
+            return None
+        
+        print(f"[OPEN FOOD FACTS] Found {len(products)} products")
+        
+        output = []
+        for p in products[:limit]:
+            try:
+                # Extract nutrition data
+                nutriments = p.get('nutriments', {})
+                
+                name = p.get('product_name', 'Unknown Product')
+                brand = p.get('brands', '').split(',')[0] if p.get('brands') else ''
+                
+                # Get per 100g values (Open Food Facts standard)
+                calories = nutriments.get('energy-kcal_100g', 0) or 0
+                sugar = nutriments.get('sugars_100g', 0) or 0
+                fiber = nutriments.get('fiber_100g', 0) or 0
+                protein = nutriments.get('proteins_100g', 0) or 0
+                fat = nutriments.get('fat_100g', 0) or 0
+                sodium = nutriments.get('sodium_100g', 0) * 1000 or 0  # Convert g to mg
+                nova = p.get('nova_group', 3) or 3
+                
+                # Create row in same format as local database
+                # [name, brand, calories, sugar, fiber, protein, fat, sodium, _, nova]
+                row = [name, brand, calories, sugar, fiber, protein, fat, sodium, None, nova]
+                
+                # Calculate VMS score
+                score = calculate_vms_science(row)
+                rating = "Metabolic Green" if score < 3.0 else "Metabolic Yellow" if score < 7.0 else "Metabolic Red"
+                
+                display_name = f"{brand.title()} {name.title()}" if brand else name.title()
+                
+                output.append({
+                    "name": display_name,
+                    "brand": brand.title() if brand else "",
+                    "vms_score": score,
+                    "rating": rating,
+                    "raw": row
+                })
+                
+                print(f"[OPEN FOOD FACTS] Added: {display_name} (Score: {score})")
+                
+            except Exception as e:
+                print(f"[OPEN FOOD FACTS] Error processing product: {e}")
+                continue
+        
+        return output if output else None
+        
+    except requests.Timeout:
+        print("[OPEN FOOD FACTS] Request timeout")
+        return None
+    except Exception as e:
+        print(f"[OPEN FOOD FACTS] Error: {e}")
         import traceback
         traceback.print_exc()
         return None
@@ -351,6 +444,21 @@ def get_trend_data_db(username, days=30):
         return results
     except Exception as e:
         print(f"[TRENDS ERROR] {e}")
+        return []
+
+def get_all_calendar_data_db(username):
+    """Get ALL calendar items for debugging - no date filter"""
+    con = get_db_connection()
+    try:
+        results = con.execute("""
+            SELECT date, item_name, score, category 
+            FROM calendar 
+            WHERE username = ? 
+            ORDER BY date DESC
+        """, [username]).fetchall()
+        return results
+    except Exception as e:
+        print(f"[ALL CALENDAR ERROR] {e}")
         return []
 
 # === 5. AUTH HELPERS ===
