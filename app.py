@@ -1,4 +1,15 @@
 import streamlit as st
+
+st.set_page_config(page_title="FoodVantage", page_icon="🥗", layout="wide", initial_sidebar_state="expanded")
+st.title("FoodVantage 🥗")
+st.caption("Smart food & nutrition insights")
+
+if st.button("Launch App"):
+    st.session_state["launched"] = True
+
+# STOP HERE if not launched (previews never go past this)
+if not st.session_state.get("launched"):
+    st.stop()
 import sys
 import os
 import pandas as pd
@@ -11,9 +22,6 @@ import plotly.graph_objects as go
 sys.path.append(os.path.join(os.path.dirname(__file__), "src"))
 from gemini_api import *
 from streamlit_back_camera_input import back_camera_input
-
-st.set_page_config(page_title="FoodVantage", page_icon="🥗", layout="wide", initial_sidebar_state="expanded")
-
 # --- SESSION STATE ---
 if 'logged_in' not in st.session_state: st.session_state.logged_in = False
 if 'welcome_shown' not in st.session_state: st.session_state.welcome_shown = False
