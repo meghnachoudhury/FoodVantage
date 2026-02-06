@@ -1,9 +1,6 @@
 import streamlit as st
 
 st.set_page_config(page_title="FoodVantage", page_icon="🥗", layout="wide", initial_sidebar_state="expanded")
-if "human" not in st.session_state:
-    st.session_state.human = True
-    st.stop()
 import sys
 import os
 import pandas as pd
