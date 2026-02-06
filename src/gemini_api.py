@@ -7,6 +7,7 @@ from google import genai
 from dotenv import load_dotenv
 from PIL import Image
 import io
+import base64
 
 load_dotenv()
 
@@ -45,43 +46,93 @@ def get_scientific_db():
     return duckdb.connect(db_path, read_only=True)
 
 def search_vantage_db(product_name: str):
+    """Search database for product"""
     con = get_scientific_db()
     if not con: return None
     try:
-        # FIXED SYNTAX: Handle SQL single quotes safely
         safe_name = product_name.replace("'", "''")
-        query = f"SELECT * FROM products WHERE product_name ILIKE '%{safe_name}%' LIMIT 1"
+        query = f"SELECT * FROM products WHERE product_name ILIKE '%{safe_name}%' ORDER BY sugar DESC LIMIT 1"
         
         r = con.execute(query).fetchone()
         if not r: return None
         score = calculate_vms_science(r)
         rating = "Metabolic Green" if score < 3.0 else "Metabolic Yellow" if score < 7.0 else "Metabolic Red"
-        return [{"name": r[0].title(), "vms_score": score, "rating": rating, "raw": r}]
+        return [{
+            "name": r[0].title(), 
+            "brand": str(r[1]).title() if r[1] else "Generic",
+            "vms_score": score, 
+            "rating": rating, 
+            "raw": r
+        }]
     except Exception as e:
         print(f"DB Error: {e}")
         return None
 
-# === 3. PRECISION VISION SCAN (GEMINI 2.0 FLASH) ===
+# === 3. PRECISION VISION SCAN (GEMINI 3 FLASH) ===
 def vision_live_scan(image_bytes):
+    """
+    FIXED: Uses Gemini 3 Flash and handles image processing properly
+    """
     api_key = get_gemini_api_key()
-    if not api_key: return None
+    if not api_key: 
+        print("No API key found!")
+        return None
+    
     try:
+        # Convert bytes to PIL Image
         img = Image.open(io.BytesIO(image_bytes))
         w, h = img.size
-        # MATHEMATICAL CROP: Target center 30% to match HUD
-        left, top, right, bottom = w*0.35, h*0.35, w*0.65, h*0.65
+        
+        # MATHEMATICAL CROP: Target center 30% to match HUD reticle
+        left = int(w * 0.35)
+        top = int(h * 0.35)
+        right = int(w * 0.65)
+        bottom = int(h * 0.65)
         img_cropped = img.crop((left, top, right, bottom))
         
+        # Convert to bytes for Gemini
         buf = io.BytesIO()
-        img_cropped.save(buf, format="JPEG")
+        img_cropped.save(buf, format="JPEG", quality=85)
+        img_data = buf.getvalue()
         
+        # Call Gemini 3 Flash
         client = genai.Client(api_key=api_key)
+        
+        prompt = """Look at this product image and identify the food product.
+        
+Return ONLY the product name in this format:
+[Brand] [Product Name]
+
+Examples:
+- "Coca Cola"
+- "Lay's Potato Chips"
+- "Tropicana Orange Juice"
+
+Be concise. Return only the product name, nothing else."""
+        
         response = client.models.generate_content(
-            model="gemini-2.0-flash", 
-            contents=["Identify Brand and Product Name. Return ONLY the name.", buf.getvalue()]
+            model="gemini-3-flash-preview",  # FIXED: Using Gemini 3
+            contents=[prompt, img_data]
         )
-        return search_vantage_db(response.text.strip())
-    except: return None
+        
+        product_name = response.text.strip()
+        print(f"[VISION] Gemini identified: {product_name}")
+        
+        # Search database
+        result = search_vantage_db(product_name)
+        
+        if result:
+            print(f"[VISION] Found in DB: {result[0]['name']} - Score: {result[0]['vms_score']}")
+        else:
+            print(f"[VISION] Not found in DB: {product_name}")
+        
+        return result
+        
+    except Exception as e:
+        print(f"[VISION ERROR] {e}")
+        import traceback
+        traceback.print_exc()
+        return None
 
 # === 4. USER DB & TRENDS ===
 @st.cache_resource
@@ -94,21 +145,37 @@ def get_db_connection():
     return con
 
 def get_trend_data_db(username, days=7):
+    """FIXED: Returns data in correct format for Streamlit charts"""
     con = get_db_connection()
     try: 
-        return con.execute("""
-            SELECT CAST(date AS VARCHAR), category, COUNT(*) 
+        # Simplified query that works with Streamlit area_chart
+        results = con.execute("""
+            SELECT 
+                date,
+                category,
+                COUNT(*) as count
             FROM calendar 
             WHERE username = ? AND date >= current_date - INTERVAL ? DAY 
-            GROUP BY date, category ORDER BY date ASC
+            GROUP BY date, category 
+            ORDER BY date ASC
         """, [username, days]).fetchall()
-    except: return []
+        
+        print(f"[TRENDS] Found {len(results)} data points for {username}")
+        return results
+    except Exception as e:
+        print(f"[TRENDS ERROR] {e}")
+        return []
 
 # === 5. AUTH HELPERS ===
 def get_gemini_api_key():
     if hasattr(st, 'secrets') and "GEMINI_API_KEY" in st.secrets: 
         return st.secrets["GEMINI_API_KEY"]
-    return os.getenv("GEMINI_API_KEY")
+    key = os.getenv("GEMINI_API_KEY")
+    if key:
+        print(f"[API KEY] Found: {key[:10]}...")
+    else:
+        print("[API KEY] NOT FOUND!")
+    return key
 
 def authenticate_user(username, password):
     con = get_db_connection()
@@ -120,6 +187,7 @@ def add_calendar_item_db(username, date_str, item_name, score):
     con = get_db_connection()
     category = 'healthy' if score < 3.0 else 'moderate' if score < 7.0 else 'unhealthy'
     con.execute("INSERT INTO calendar (username, date, item_name, score, category) VALUES (?, ?, ?, ?, ?)", [username, date_str, item_name, score, category])
+    print(f"[CALENDAR] Added: {item_name} ({score}) for {username} on {date_str}")
 
 def get_calendar_items_db(username, date_str):
     con = get_db_connection()

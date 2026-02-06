@@ -21,9 +21,10 @@ if 'page' not in st.session_state: st.session_state.page = 'dashboard'
 if 'user_id' not in st.session_state: st.session_state.user_id = ""
 if 'camera_active' not in st.session_state: st.session_state.camera_active = False
 if 'last_scan' not in st.session_state: st.session_state.last_scan = None
-if 'transitioning' not in st.session_state: st.session_state.transitioning = False
+if 'scanning' not in st.session_state: st.session_state.scanning = False
+if 'scan_count' not in st.session_state: st.session_state.scan_count = 0
 
-# --- CSS ENGINE (TRUE CENTER ALIGNMENT) ---
+# --- CSS ENGINE (PERFECT CENTERING + HUD) ---
 st.markdown('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">', unsafe_allow_html=True)
 st.markdown("""
     <style>
@@ -33,44 +34,97 @@ st.markdown("""
     .card { background: white; padding: 24px; border-radius: 20px; border: 1px solid #EEE; box-shadow: 0 4px 12px rgba(0,0,0,0.04); margin-bottom: 20px; }
     .white-shelf { background: white; height: 35px; border-radius: 10px; border: 1px solid #EEE; margin-bottom: 25px; }
 
-    /* NUCLEAR CENTERING FOR TOMATO */
+    /* PERFECT CENTER TOMATO */
     .tomato-wrapper { width: 100%; text-align: center; padding: 30px 0; }
     .tomato-icon { font-size: 150px !important; color: tomato !important; }
 
-    /* THE COORDINATE ANCHOR: Video widget center-lock */
-    .hud-anchor {
+    /* === FIXED: PERFECT CAMERA WIDGET CENTERING === */
+    
+    /* Target Streamlit's camera widget container */
+    [data-testid="stCameraInput"] {
+        display: flex !important;
+        justify-content: center !important;
+        align-items: center !important;
+    }
+    
+    /* Center the video element itself */
+    [data-testid="stCameraInput"] video {
+        display: block !important;
+        margin: 0 auto !important;
+    }
+    
+    /* HUD Container - wraps everything */
+    .hud-container {
         position: relative;
         width: 100%;
-        max-width: 500px;
+        max-width: 640px;
         margin: 0 auto;
         display: flex;
         justify-content: center;
         align-items: center;
-        overflow: visible;
     }
 
-    /* THE RETICLE: Mathematically locked to center of the HUD Anchor */
+    /* THE RETICLE: Mathematically locked to absolute center */
     .focus-square {
-        position: absolute;
+        position: fixed;
         top: 50%;
         left: 50%;
-        transform: translate(-50%, -50%); /* Absolute Center Formula */
+        transform: translate(-50%, -50%);
         width: 180px;
         height: 180px;
         border: 4px dashed #E2725B;
         border-radius: 30px;
-        z-index: 100;
+        z-index: 999;
         pointer-events: none;
+        animation: pulse 2s ease-in-out infinite;
     }
     
+    @keyframes pulse {
+        0%, 100% { opacity: 0.6; }
+        50% { opacity: 1.0; }
+    }
+    
+    /* HUD Bubble - floats above reticle */
     .hud-bubble {
-        position: absolute;
-        bottom: 110%; 
+        position: fixed;
+        top: calc(50% - 180px);
         left: 50%;
         transform: translateX(-50%);
-        background: white; padding: 12px 24px; border-radius: 50px;
-        box-shadow: 0 10px 25px rgba(0,0,0,0.1); border: 2px solid #E2725B;
-        z-index: 101; text-align: center; font-weight: bold;
+        background: white; 
+        padding: 16px 28px; 
+        border-radius: 50px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.15); 
+        border: 3px solid #E2725B;
+        z-index: 1000;
+        text-align: center;
+        font-weight: bold;
+        min-width: 200px;
+        animation: slideDown 0.3s ease-out;
+    }
+    
+    @keyframes slideDown {
+        from { top: calc(50% - 220px); opacity: 0; }
+        to { top: calc(50% - 180px); opacity: 1; }
+    }
+    
+    /* Scanning indicator */
+    .scanning-indicator {
+        position: fixed;
+        top: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(226, 114, 91, 0.9);
+        color: white;
+        padding: 8px 20px;
+        border-radius: 20px;
+        z-index: 1000;
+        font-weight: bold;
+        animation: blink 1.5s ease-in-out infinite;
+    }
+    
+    @keyframes blink {
+        0%, 100% { opacity: 0.7; }
+        50% { opacity: 1.0; }
     }
     
     .list-row { display: flex; justify-content: space-between; align-items: center; padding: 10px; background: #FFF; border-radius: 12px; border: 1px solid #F0F0F0; margin-bottom: 8px; }
@@ -117,7 +171,7 @@ if not st.session_state.logged_in:
         st.markdown("</div>", unsafe_allow_html=True)
 
 else:
-    # --- SIDEBAR (RESTORED ORIGINAL) ---
+    # --- SIDEBAR ---
     with st.sidebar:
         st.write(""); st.markdown("##### 🔍 Search")
         search_q = st.text_input("Quick check score", key="sidebar_search")
@@ -127,6 +181,8 @@ else:
                 d = res[0]
                 c = "#2E8B57" if d['vms_score'] < 3.0 else "#F9A825" if d['vms_score'] < 7.0 else "#D32F2F"
                 st.markdown(f"<div class='card'><b>{d['name']}</b><br><span style='color:{c}; font-weight:bold; font-size:1.5rem;'>{d['vms_score']}</span></div>", unsafe_allow_html=True)
+            else:
+                st.warning("Item not found.")
         st.markdown("---")
         if st.button("🏠 Dashboard", use_container_width=True): st.session_state.page = 'dashboard'; st.rerun()
         if st.button("📅 Calendar", use_container_width=True): st.session_state.page = 'calendar'; st.rerun()
@@ -139,36 +195,62 @@ else:
         st.markdown('<div class="white-shelf"></div>', unsafe_allow_html=True)
         
         if not st.session_state.camera_active:
-            # RESTORED DASHBOARD ICON
+            # DASHBOARD ICON
             st.markdown('<div class="tomato-wrapper"><i class="fa fa-camera tomato-icon"></i></div>', unsafe_allow_html=True)
             if st.button("Start Live Scan", type="primary", use_container_width=True):
-                st.session_state.camera_active = True; st.rerun()
+                st.session_state.camera_active = True
+                st.session_state.scanning = True
+                st.rerun()
         else:
-            # --- THE MATHEMATICAL HUD ---
-            st.markdown('<div class="hud-anchor">', unsafe_allow_html=True)
+            # === LIVE SCANNER WITH PERFECT CENTERING ===
             
+            # Scanning indicator
+            if st.session_state.scanning:
+                st.markdown('<div class="scanning-indicator">🔍 Scanning...</div>', unsafe_allow_html=True)
+            
+            # Show HUD bubble if product detected
             if st.session_state.last_scan:
                 ls = st.session_state.last_scan
                 clr = "#2E8B57" if ls['vms_score'] < 3.0 else "#F9A825" if ls['vms_score'] < 7.0 else "#D32F2F"
                 st.markdown(f"""
                     <div class="hud-bubble">
-                        <b>{ls['name']}</b><br>
-                        <span style="color:{clr}; font-size:1.8rem; font-weight:900;">{ls['vms_score']}</span>
+                        <div style="font-size: 0.9rem; margin-bottom: 4px;">{ls['name']}</div>
+                        <div style="color:{clr}; font-size:2.2rem; font-weight:900;">{ls['vms_score']}</div>
+                        <div style="font-size: 0.8rem; color: {clr};">{ls['rating']}</div>
                     </div>
                 """, unsafe_allow_html=True)
 
+            # The reticle (focus square)
             st.markdown('<div class="focus-square"></div>', unsafe_allow_html=True)
+            
+            # Camera widget in HUD container
+            st.markdown('<div class="hud-container">', unsafe_allow_html=True)
             image = back_camera_input(key="hud_cam")
             st.markdown('</div>', unsafe_allow_html=True)
             
-            if st.button("❌ Stop Scanning", use_container_width=True):
-                st.session_state.camera_active = False; st.session_state.last_scan = None; st.rerun()
+            # Stop button
+            col1, col2, col3 = st.columns([1, 2, 1])
+            with col2:
+                if st.button("❌ Stop Scanning", use_container_width=True):
+                    st.session_state.camera_active = False
+                    st.session_state.last_scan = None
+                    st.session_state.scanning = False
+                    st.rerun()
             
-            if image:
-                res = vision_live_scan(image)
-                if res: st.session_state.last_scan = res[0]
+            # === CONTINUOUS SCANNING LOGIC ===
+            if image and st.session_state.scanning:
+                # Only scan every 3rd capture to avoid overwhelming the API
+                st.session_state.scan_count += 1
+                
+                if st.session_state.scan_count % 3 == 0:
+                    with st.spinner("Analyzing..."):
+                        res = vision_live_scan(image)
+                        if res:
+                            st.session_state.last_scan = res[0]
+                            st.session_state.scanning = False  # Stop after successful scan
+                            st.rerun()
 
-        # --- THE DEEP DIVE ---
+        # --- DEEP DIVE SECTION ---
         if st.session_state.last_scan:
             with st.expander("📊 Metabolic Nutrient Deep Dive", expanded=True):
                 ls_raw = st.session_state.last_scan['raw']
@@ -178,16 +260,50 @@ else:
                 c2.metric("Fiber", f"{ls_raw[4]}g")
                 c3.metric("Protein", f"{ls_raw[5]}g")
                 c4.metric("Sodium", f"{ls_raw[7]}mg")
-                if st.button("➕ Log to My Journey", use_container_width=True):
-                    add_calendar_item_db(st.session_state.user_id, datetime.now().strftime("%Y-%m-%d"), st.session_state.last_scan['name'], st.session_state.last_scan['vms_score'])
-                    st.toast("Success!")
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("➕ Log to My Journey", use_container_width=True):
+                        add_calendar_item_db(
+                            st.session_state.user_id, 
+                            datetime.now().strftime("%Y-%m-%d"), 
+                            st.session_state.last_scan['name'], 
+                            st.session_state.last_scan['vms_score']
+                        )
+                        st.success("✅ Added to calendar!")
+                with col2:
+                    if st.button("🔄 Scan Again", use_container_width=True):
+                        st.session_state.last_scan = None
+                        st.session_state.scanning = True
+                        st.rerun()
 
-        # RESTORED TRENDS
+        # === FIXED: TRENDS GRAPH ===
         st.markdown("### 📈 Your Health Trends")
-        raw = get_trend_data_db(st.session_state.user_id)
-        if raw:
-            df = pd.DataFrame(raw, columns=["Date", "Category", "Count"])
-            st.area_chart(df, x="Date", y="Count", color="Category")
+        raw = get_trend_data_db(st.session_state.user_id, days=30)
+        
+        if raw and len(raw) > 0:
+            # Convert to DataFrame
+            df = pd.DataFrame(raw, columns=["date", "category", "count"])
+            
+            # Convert date column to string for display
+            df['date'] = pd.to_datetime(df['date']).dt.strftime('%Y-%m-%d')
+            
+            # Pivot for better chart display
+            df_pivot = df.pivot(index='date', columns='category', values='count').fillna(0)
+            
+            st.area_chart(df_pivot)
+        else:
+            st.info("📊 No data yet. Start logging items to see your trends!")
+            
+            # Add sample data button for testing
+            if st.button("📝 Add Sample Data (for testing)"):
+                from datetime import timedelta
+                today = datetime.now()
+                for i in range(7):
+                    date = (today - timedelta(days=i)).strftime("%Y-%m-%d")
+                    add_calendar_item_db(st.session_state.user_id, date, f"Sample Item {i}", float(i % 10))
+                st.success("Sample data added! Refresh to see trends.")
+                st.rerun()
 
     elif st.session_state.page == 'calendar':
         st.markdown("## 📅 Grocery Calendar")
@@ -200,11 +316,19 @@ else:
         with c2:
             st.markdown(f"### List for {sel_date.strftime('%b %d')}")
             items = get_calendar_items_db(st.session_state.user_id, sel_date.strftime("%Y-%m-%d"))
-            for iid, name, score, cat in items:
-                st.markdown(f"<div class='list-row'><span>{name}</span><strong>{score}</strong></div>", unsafe_allow_html=True)
+            if items:
+                for iid, name, score, cat in items:
+                    clr = "#2E8B57" if score < 3.0 else "#F9A825" if score < 7.0 else "#D32F2F"
+                    st.markdown(f"<div class='list-row'><span>{name}</span><strong style='color:{clr}'>{score}</strong></div>", unsafe_allow_html=True)
+            else:
+                st.info("No items for this date.")
 
     elif st.session_state.page == 'log':
         st.markdown("## 📝 Log History")
         history = get_log_history_db(st.session_state.user_id)
-        for d, name, score, cat in history:
-            st.write(f"{d}: {name} ({score})")
+        if history:
+            for d, name, score, cat in history:
+                clr = "#2E8B57" if score < 3.0 else "#F9A825" if score < 7.0 else "#D32F2F"
+                st.markdown(f"<div class='list-row'><span><b>{d}</b>: {name}</span><strong style='color:{clr}'>{score}</strong></div>", unsafe_allow_html=True)
+        else:
+            st.info("No history yet. Start scanning items!")
