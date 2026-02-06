@@ -43,16 +43,16 @@ COLORS = {
     'sidebar_bg': '#262626',  # Dark grey
     'sidebar_button': '#808080',  # Grey buttons
     'sidebar_search_bg': '#404040',  # Search textbox background
-    'toggle_button': '#262626'  # Dark grey toggle
+    'toggle_button': '#737373'  # LIGHTER GREY for toggle buttons
 }
 
-# --- CSS WITH MVP COLORS AND FONT ---
+# --- CSS WITH MVP COLORS AND FONTS ---
 st.markdown('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">', unsafe_allow_html=True)
 st.markdown('<link href="https://fonts.googleapis.com/css2?family=Alegreya+Sans+SC:wght@400;500;700;800;900&display=swap" rel="stylesheet">', unsafe_allow_html=True)
 
 st.markdown(f"""
     <style>
-    /* GLOBAL FONT - ALEGREYA SANS SC */
+    /* GLOBAL FONT - ALEGREYA SANS SC (except logo and welcome) */
     * {{
         font-family: 'Alegreya Sans SC', sans-serif !important;
     }}
@@ -62,8 +62,9 @@ st.markdown(f"""
         color: #1A1A1A; 
     }}
     
+    /* ORIGINAL FONT FOR LOGO ONLY */
     .logo-text {{ 
-        font-family: 'Alegreya Sans SC', sans-serif !important;
+        font-family: 'Arial Black', sans-serif !important;
         font-size: 3rem; 
         text-align: center; 
     }}
@@ -93,7 +94,7 @@ st.markdown(f"""
         padding: 30px 0; 
     }}
     
-    /* MVP: CAMERA ICON COLOR - LIGHT BLUE */
+    /* FIXED: CAMERA ICON RESTORED WITH NEW COLOR */
     .tomato-icon {{ 
         font-size: 150px !important; 
         color: {COLORS['camera_icon']} !important; 
@@ -118,6 +119,16 @@ st.markdown(f"""
     
     .stButton > button {{
         font-family: 'Alegreya Sans SC', sans-serif !important;
+    }}
+    
+    /* FIXED: LOGIN TABS - BLACK TEXT */
+    .stTabs [data-baseweb="tab-list"] button {{
+        color: #000000 !important;
+        font-family: 'Alegreya Sans SC', sans-serif !important;
+    }}
+    
+    .stTabs [data-baseweb="tab-list"] button[aria-selected="true"] {{
+        color: #000000 !important;
     }}
     
     /* MVP: SIDEBAR DARK GREY BACKGROUND */
@@ -180,7 +191,7 @@ st.markdown(f"""
         font-family: 'Alegreya Sans SC', sans-serif !important;
     }}
 
-    /* WELCOME SCREEN */
+    /* WELCOME SCREEN - ORIGINAL FONT */
     .welcome-container {{
         display: flex;
         flex-direction: column;
@@ -195,7 +206,7 @@ st.markdown(f"""
         color: #1A1A1A;
         text-align: center;
         margin-bottom: 30px;
-        font-family: 'Alegreya Sans SC', sans-serif !important;
+        font-family: 'Arial Black', sans-serif !important;
     }}
     
     .dots {{
@@ -341,6 +352,20 @@ st.markdown(f"""
         margin: 0 auto 20px auto;
     }}
     
+    /* FIXED: DAY/WEEK/MONTH TOGGLE BUTTONS - WHITE TEXT */
+    .trend-tabs-container .stButton > button {{
+        background-color: {COLORS['toggle_button']} !important;
+        color: white !important;
+        border: none !important;
+        font-family: 'Alegreya Sans SC', sans-serif !important;
+    }}
+    
+    .trend-tabs-container .stButton > button[kind="primary"] {{
+        background-color: {COLORS['toggle_button']} !important;
+        color: white !important;
+        font-weight: bold !important;
+    }}
+    
     /* ALL TEXT ELEMENTS */
     h1, h2, h3, h4, h5, h6, p, span, div, label {{
         font-family: 'Alegreya Sans SC', sans-serif !important;
@@ -408,7 +433,7 @@ if not st.session_state.logged_in:
         st.markdown("</div>", unsafe_allow_html=True)
 
 elif not st.session_state.welcome_shown:
-    # WELCOME SCREEN
+    # WELCOME SCREEN - ORIGINAL FONT
     st.markdown("""
         <div class="welcome-container">
             <div class="welcome-text">Let's start your health journey</div>
@@ -465,6 +490,7 @@ else:
         st.markdown('<div class="white-shelf"></div>', unsafe_allow_html=True)
         
         if not st.session_state.camera_active:
+            # FIXED: CAMERA ICON RESTORED
             st.markdown('<div class="tomato-wrapper"><i class="fa fa-camera tomato-icon"></i></div>', unsafe_allow_html=True)
             if st.button("Start Live Scan", type="primary", use_container_width=True):
                 st.session_state.camera_active = True
@@ -580,7 +606,7 @@ else:
         # MVP: TRENDS WITH BLACK AXIS TEXT AND NEW COLORS
         st.markdown("### 📈 Your Health Trends")
         
-        # MVP: Compact centered tabs with DARK GREY COLOR
+        # MVP: Compact centered tabs with LIGHTER GREY and WHITE TEXT
         st.markdown('<div class="trend-tabs-container">', unsafe_allow_html=True)
         col_d, col_w, col_m = st.columns(3)
         with col_d:
