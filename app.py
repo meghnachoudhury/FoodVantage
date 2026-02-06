@@ -39,7 +39,8 @@ COLORS = {
     'red': '#D4765E',
     # MVP COLORS
     'camera_icon': '#c6d9ec',  # FIX 1: Light blue
-    'toggle_button': '#737373'  # FIX 2: Lighter grey
+    'toggle_button': '#737373',  # FIX 2: Lighter grey
+    'unhealthy_bar': '#ffb3b3'  # FINAL: Light pink for unhealthy bars
 }
 
 # --- CSS ---
@@ -69,6 +70,23 @@ st.markdown(f"""
         background-color: white !important;
         color: #1A1A1A !important;
         -webkit-text-fill-color: #1A1A1A !important;
+    }}
+    
+    /* FINAL FIX: LOGIN TABS BLACK TEXT ON DESKTOP AND MOBILE */
+    .stTabs [data-baseweb="tab-list"] button {{
+        color: #000000 !important;
+    }}
+    
+    .stTabs [data-baseweb="tab-list"] button[aria-selected="true"] {{
+        color: #000000 !important;
+    }}
+    
+    .stTabs [data-baseweb="tab-list"] button div {{
+        color: #000000 !important;
+    }}
+    
+    .stTabs [data-baseweb="tab-list"] button p {{
+        color: #000000 !important;
     }}
     
     /* FIX 3: ALL BUTTONS TERRACOTTA (INCLUDING STOP SCANNING) */
@@ -582,7 +600,7 @@ else:
                     x=df_pivot.index,
                     y=df_pivot['unhealthy'],
                     name='Unhealthy',
-                    marker_color=COLORS['terracotta'],
+                    marker_color=COLORS['unhealthy_bar'],  # FINAL: Light pink
                     hovertemplate='%{y} unhealthy items<extra></extra>'
                 ))
             
