@@ -27,7 +27,7 @@ if 'scanning' not in st.session_state: st.session_state.scanning = False
 if 'scan_count' not in st.session_state: st.session_state.scan_count = 0
 if 'trends_view' not in st.session_state: st.session_state.trends_view = 'weekly'
 
-# --- COLOR PALETTE ---
+# --- MVP COLOR PALETTE ---
 COLORS = {
     'olive': '#6B7E54',
     'terracotta': '#D4765E',
@@ -36,20 +36,68 @@ COLORS = {
     'dark_text': '#2C2C2C',
     'green': '#6B7E54',
     'yellow': '#E8B54D',
-    'red': '#D4765E'
+    'red': '#D4765E',
+    # MVP COLORS
+    'unhealthy': '#ffb3b3',  # Light pink
+    'camera_icon': '#c6d9ec',  # Light blue
+    'sidebar_bg': '#262626',  # Dark grey
+    'sidebar_button': '#808080',  # Grey buttons
+    'sidebar_search_bg': '#404040',  # Search textbox background
+    'toggle_button': '#262626'  # Dark grey toggle
 }
 
-# --- CSS ---
+# --- CSS WITH MVP COLORS AND FONT ---
 st.markdown('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">', unsafe_allow_html=True)
+st.markdown('<link href="https://fonts.googleapis.com/css2?family=Alegreya+Sans+SC:wght@400;500;700;800;900&display=swap" rel="stylesheet">', unsafe_allow_html=True)
+
 st.markdown(f"""
     <style>
-    .stApp {{ background-color: #F7F5F0; color: #1A1A1A; }}
-    .logo-text {{ font-family: 'Arial Black', sans-serif; font-size: 3rem; text-align: center; }}
+    /* GLOBAL FONT - ALEGREYA SANS SC */
+    * {{
+        font-family: 'Alegreya Sans SC', sans-serif !important;
+    }}
+    
+    .stApp {{ 
+        background-color: #F7F5F0; 
+        color: #1A1A1A; 
+    }}
+    
+    .logo-text {{ 
+        font-family: 'Alegreya Sans SC', sans-serif !important;
+        font-size: 3rem; 
+        text-align: center; 
+    }}
+    
     .logo-dot {{ color: {COLORS['terracotta']}; }}
-    .card {{ background: white; padding: 24px; border-radius: 20px; border: 1px solid #EEE; box-shadow: 0 4px 12px rgba(0,0,0,0.04); margin-bottom: 20px; }}
-    .white-shelf {{ background: white; height: 35px; border-radius: 10px; border: 1px solid #EEE; margin-bottom: 25px; }}
-    .tomato-wrapper {{ width: 100%; text-align: center; padding: 30px 0; }}
-    .tomato-icon {{ font-size: 150px !important; color: {COLORS['terracotta']} !important; }}
+    
+    .card {{ 
+        background: white; 
+        padding: 24px; 
+        border-radius: 20px; 
+        border: 1px solid #EEE; 
+        box-shadow: 0 4px 12px rgba(0,0,0,0.04); 
+        margin-bottom: 20px; 
+    }}
+    
+    .white-shelf {{ 
+        background: white; 
+        height: 35px; 
+        border-radius: 10px; 
+        border: 1px solid #EEE; 
+        margin-bottom: 25px; 
+    }}
+    
+    .tomato-wrapper {{ 
+        width: 100%; 
+        text-align: center; 
+        padding: 30px 0; 
+    }}
+    
+    /* MVP: CAMERA ICON COLOR - LIGHT BLUE */
+    .tomato-icon {{ 
+        font-size: 150px !important; 
+        color: {COLORS['camera_icon']} !important; 
+    }}
 
     /* MOBILE FIX */
     input[type="text"], input[type="password"] {{
@@ -58,18 +106,54 @@ st.markdown(f"""
         border: 1px solid #DDD !important;
         border-radius: 8px !important;
         padding: 12px !important;
+        font-family: 'Alegreya Sans SC', sans-serif !important;
     }}
     
     .stTextInput > div > div > input {{
         background-color: white !important;
         color: #1A1A1A !important;
         -webkit-text-fill-color: #1A1A1A !important;
+        font-family: 'Alegreya Sans SC', sans-serif !important;
     }}
     
     .stButton > button {{
-        background-color: {COLORS['terracotta']} !important;
+        font-family: 'Alegreya Sans SC', sans-serif !important;
+    }}
+    
+    /* MVP: SIDEBAR DARK GREY BACKGROUND */
+    [data-testid="stSidebar"] {{
+        background-color: {COLORS['sidebar_bg']} !important;
+    }}
+    
+    [data-testid="stSidebar"] * {{
+        color: white !important;
+        font-family: 'Alegreya Sans SC', sans-serif !important;
+    }}
+    
+    /* MVP: SIDEBAR BUTTONS - GREY COLOR */
+    [data-testid="stSidebar"] .stButton > button {{
+        background-color: {COLORS['sidebar_button']} !important;
         color: white !important;
         border: none !important;
+        font-family: 'Alegreya Sans SC', sans-serif !important;
+    }}
+    
+    [data-testid="stSidebar"] .stButton > button:hover {{
+        background-color: #999999 !important;
+    }}
+    
+    /* MVP: SIDEBAR SEARCH TEXTBOX - DARK BACKGROUND WITH WHITE TEXT */
+    [data-testid="stSidebar"] input {{
+        background-color: {COLORS['sidebar_search_bg']} !important;
+        color: white !important;
+        border: 1px solid #555 !important;
+        font-family: 'Alegreya Sans SC', sans-serif !important;
+        -webkit-text-fill-color: white !important;
+    }}
+    
+    [data-testid="stSidebar"] input::placeholder {{
+        color: #aaa !important;
+        -webkit-text-fill-color: #aaa !important;
     }}
 
     /* CRITICAL FIX: DARK TEXT FOR CLINICAL DATA */
@@ -77,11 +161,13 @@ st.markdown(f"""
         color: #1A1A1A !important;
         font-weight: 700 !important;
         font-size: 1.5rem !important;
+        font-family: 'Alegreya Sans SC', sans-serif !important;
     }}
     
     [data-testid="stMetricLabel"] {{
         color: #2C2C2C !important;
         font-weight: 600 !important;
+        font-family: 'Alegreya Sans SC', sans-serif !important;
     }}
     
     .stExpander {{
@@ -91,6 +177,7 @@ st.markdown(f"""
     
     .stExpander p, .stExpander div, .stExpander span {{
         color: #1A1A1A !important;
+        font-family: 'Alegreya Sans SC', sans-serif !important;
     }}
 
     /* WELCOME SCREEN */
@@ -108,6 +195,7 @@ st.markdown(f"""
         color: #1A1A1A;
         text-align: center;
         margin-bottom: 30px;
+        font-family: 'Alegreya Sans SC', sans-serif !important;
     }}
     
     .dots {{
@@ -152,7 +240,7 @@ st.markdown(f"""
         margin: 0 auto;
     }}
 
-    /* FIXED: Tap instruction instead of focus square */
+    /* TAP INSTRUCTION */
     .tap-instruction {{
         position: absolute;
         top: 10px;
@@ -165,6 +253,7 @@ st.markdown(f"""
         font-weight: 600;
         z-index: 1000;
         animation: pulse 2s ease-in-out infinite;
+        font-family: 'Alegreya Sans SC', sans-serif !important;
     }}
     
     @keyframes pulse {{
@@ -185,6 +274,7 @@ st.markdown(f"""
         z-index: 1000;
         text-align: center;
         min-width: 220px;
+        font-family: 'Alegreya Sans SC', sans-serif !important;
     }}
     
     .scanning-indicator {{
@@ -199,6 +289,7 @@ st.markdown(f"""
         z-index: 1000;
         font-weight: bold;
         animation: blink 1.5s infinite;
+        font-family: 'Alegreya Sans SC', sans-serif !important;
     }}
     
     @keyframes blink {{
@@ -213,6 +304,7 @@ st.markdown(f"""
         border-radius: 12px;
         margin: 12px 0;
         border-left: 4px solid {COLORS['olive']};
+        font-family: 'Alegreya Sans SC', sans-serif !important;
     }}
     
     .scanner-result-title {{
@@ -220,6 +312,7 @@ st.markdown(f"""
         font-weight: 800;
         font-size: 1.1rem;
         margin-bottom: 8px;
+        font-family: 'Alegreya Sans SC', sans-serif !important;
     }}
     
     .scanner-result-text {{
@@ -227,6 +320,7 @@ st.markdown(f"""
         font-weight: 700;
         font-size: 1.3rem;
         line-height: 1.6;
+        font-family: 'Alegreya Sans SC', sans-serif !important;
     }}
     
     .list-row {{ 
@@ -237,13 +331,19 @@ st.markdown(f"""
         background: #FFF; 
         border-radius: 12px; 
         border: 1px solid #F0F0F0; 
-        margin-bottom: 8px; 
+        margin-bottom: 8px;
+        font-family: 'Alegreya Sans SC', sans-serif !important;
     }}
     
     /* COMPACT TABS FOR DESKTOP */
     .trend-tabs-container {{
         max-width: 400px;
         margin: 0 auto 20px auto;
+    }}
+    
+    /* ALL TEXT ELEMENTS */
+    h1, h2, h3, h4, h5, h6, p, span, div, label {{
+        font-family: 'Alegreya Sans SC', sans-serif !important;
     }}
     </style>
 """, unsafe_allow_html=True)
@@ -253,7 +353,7 @@ def render_logo(size="3rem"):
 
 def create_html_calendar(year, month, selected_day=None):
     cal = cal_module.monthcalendar(year, month)
-    html = "<table style='width:100%; text-align:center;'><thead><tr>"
+    html = "<table style='width:100%; text-align:center; font-family: \"Alegreya Sans SC\", sans-serif;'><thead><tr>"
     for day in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]: html += f"<th style='color:{COLORS['terracotta']};'>{day}</th>"
     html += "</tr></thead><tbody>"
     for week in cal:
@@ -389,7 +489,7 @@ else:
                     </div>
                 """, unsafe_allow_html=True)
 
-            # FIXED: Tap instruction instead of focus square
+            # TAP INSTRUCTION
             st.markdown('<div class="hud-container">', unsafe_allow_html=True)
             st.markdown("""
                 <div class="tap-instruction">
@@ -477,10 +577,10 @@ else:
                         st.session_state.scanning = True
                         st.rerun()
 
-        # COMPACT TRENDS TABS WITH BETTER DEBUGGING
+        # MVP: TRENDS WITH BLACK AXIS TEXT AND NEW COLORS
         st.markdown("### 📈 Your Health Trends")
         
-        # Compact centered tabs
+        # MVP: Compact centered tabs with DARK GREY COLOR
         st.markdown('<div class="trend-tabs-container">', unsafe_allow_html=True)
         col_d, col_w, col_m = st.columns(3)
         with col_d:
@@ -508,37 +608,22 @@ else:
         else:
             days = 30
         
-        # DEBUG: Check if user has ANY calendar data
-        print(f"\n[TRENDS DEBUG] ============================================")
-        print(f"[TRENDS DEBUG] User: {st.session_state.user_id}")
-        print(f"[TRENDS DEBUG] View: {st.session_state.trends_view}, Days: {days}")
-        
-        # Get ALL user data first to verify
+        # Get trend data
         all_data = get_all_calendar_data_db(st.session_state.user_id)
-        print(f"[TRENDS DEBUG] Total calendar items for user: {len(all_data) if all_data else 0}")
-        if all_data and len(all_data) > 0:
-            print(f"[TRENDS DEBUG] Sample items: {all_data[:3]}")
-        
-        # Now get trend data
         raw = get_trend_data_db(st.session_state.user_id, days=days)
-        print(f"[TRENDS DEBUG] Trend data for last {days} days: {len(raw) if raw else 0} rows")
-        print(f"[TRENDS DEBUG] Raw data: {raw}")
-        print(f"[TRENDS DEBUG] ============================================\n")
         
         if raw and len(raw) > 0:
             # Create bar chart with Plotly
             df = pd.DataFrame(raw, columns=["date", "category", "count"])
             df['date'] = pd.to_datetime(df['date'])
-            print(f"[TRENDS DEBUG] DataFrame:\n{df}")
             
             # Prepare data for bar chart
             df_pivot = df.pivot_table(index='date', columns='category', values='count', aggfunc='sum', fill_value=0)
-            print(f"[TRENDS DEBUG] Pivot table:\n{df_pivot}")
             
-            # Create stacked bar chart
+            # MVP: Create stacked bar chart with BLACK AXIS TEXT
             fig = go.Figure()
             
-            # Add bars for each category with color palette
+            # Add bars for each category with MVP color palette
             if 'healthy' in df_pivot.columns:
                 fig.add_trace(go.Bar(
                     x=df_pivot.index,
@@ -547,7 +632,6 @@ else:
                     marker_color=COLORS['olive'],
                     hovertemplate='%{y} healthy items<extra></extra>'
                 ))
-                print(f"[TRENDS DEBUG] Added healthy bars: {df_pivot['healthy'].tolist()}")
             
             if 'moderate' in df_pivot.columns:
                 fig.add_trace(go.Bar(
@@ -557,42 +641,59 @@ else:
                     marker_color=COLORS['salmon'],
                     hovertemplate='%{y} moderate items<extra></extra>'
                 ))
-                print(f"[TRENDS DEBUG] Added moderate bars: {df_pivot['moderate'].tolist()}")
             
             if 'unhealthy' in df_pivot.columns:
                 fig.add_trace(go.Bar(
                     x=df_pivot.index,
                     y=df_pivot['unhealthy'],
                     name='Unhealthy',
-                    marker_color=COLORS['terracotta'],
+                    marker_color=COLORS['unhealthy'],  # MVP: LIGHT PINK
                     hovertemplate='%{y} unhealthy items<extra></extra>'
                 ))
-                print(f"[TRENDS DEBUG] Added unhealthy bars: {df_pivot['unhealthy'].tolist()}")
             
-            # Update layout
+            # MVP: BLACK AXIS TEXT - READABLE ON LIGHT BACKGROUND
             fig.update_layout(
                 barmode='stack',
                 height=300,
                 margin=dict(l=20, r=20, t=20, b=40),
                 plot_bgcolor='rgba(0,0,0,0)',
                 paper_bgcolor='rgba(0,0,0,0)',
+                font=dict(
+                    family='Alegreya Sans SC, sans-serif',
+                    size=14,
+                    color='#000000'  # BLACK TEXT
+                ),
                 xaxis=dict(
                     showgrid=False,
                     showline=False,
-                    title=None
+                    title=None,
+                    tickfont=dict(
+                        color='#000000',  # BLACK AXIS NUMBERS
+                        size=13,
+                        family='Alegreya Sans SC, sans-serif'
+                    )
                 ),
                 yaxis=dict(
                     showgrid=True,
                     gridcolor='#E0E0E0',
                     showline=False,
-                    title=None
+                    title=None,
+                    tickfont=dict(
+                        color='#000000',  # BLACK AXIS NUMBERS
+                        size=13,
+                        family='Alegreya Sans SC, sans-serif'
+                    )
                 ),
                 legend=dict(
                     orientation="h",
                     yanchor="bottom",
                     y=1.02,
                     xanchor="center",
-                    x=0.5
+                    x=0.5,
+                    font=dict(
+                        color='#000000',  # BLACK LEGEND TEXT
+                        family='Alegreya Sans SC, sans-serif'
+                    )
                 ),
                 hovermode='x unified'
             )
@@ -604,7 +705,6 @@ else:
             healthy_count = int(df[df['category'] == 'healthy']['count'].sum()) if 'healthy' in df['category'].values else 0
             st.markdown(f"**Total items:** {total_items} | **Healthy choices:** {healthy_count}")
         else:
-            print("[TRENDS DEBUG] No data found - showing info message")
             if all_data and len(all_data) > 0:
                 st.warning(f"⚠️ You have {len(all_data)} logged items, but none in the last {days} day(s). Try selecting a different time range.")
             else:
