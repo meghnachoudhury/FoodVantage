@@ -7,11 +7,10 @@ from google import genai
 from dotenv import load_dotenv
 from PIL import Image
 import io
-import base64
 
 load_dotenv()
 
-# === 1. FIXED VMS ALGORITHM - PROPER FRUIT HANDLING ===
+# === 1. VMS ALGORITHM ===
 def calculate_vms_science(row):
     try:
         name, _, cal, sug, fib, prot, fat, sod, _, nova = row
@@ -20,7 +19,6 @@ def calculate_vms_science(row):
         
         n = name.lower()
         
-        # Comprehensive fruit detection
         common_fruits = ['apple', 'banana', 'orange', 'grape', 'strawberry', 'blueberry', 
                         'raspberry', 'mango', 'pineapple', 'watermelon', 'melon', 'kiwi',
                         'peach', 'pear', 'plum', 'cherry', 'lime', 'lemon', 'grapefruit',
@@ -69,25 +67,25 @@ def get_scientific_db():
 
 def search_vantage_db(product_name: str, limit=5):
     """
-    FIXED: Returns top 5 results, prioritizing exact/simple matches
+    FIXED: Returns top 5 results with FULL product names for differentiation
     """
     con = get_scientific_db()
     if not con: return None
     try:
         safe_name = product_name.replace("'", "''")
         
-        # Smart search query that prioritizes:
-        # 1. Exact matches
-        # 2. Simple/plain versions (no brand names)
-        # 3. Products with fewer words (more likely to be the base item)
+        # Smart ranking:
+        # 1. Exact match first
+        # 2. Simple/plain versions (shorter names, no brands)
+        # 3. Then by word count and sugar
         query = f"""
             SELECT * FROM products 
             WHERE product_name ILIKE '%{safe_name}%'
             ORDER BY 
                 CASE 
                     WHEN LOWER(product_name) = LOWER('{safe_name}') THEN 0
-                    WHEN LOWER(product_name) LIKE LOWER('{safe_name}') || '%' THEN 1
-                    WHEN brand IS NULL OR brand = '' THEN 2
+                    WHEN product_name NOT LIKE '%,%' AND (brand IS NULL OR brand = '') THEN 1
+                    WHEN LENGTH(product_name) - LENGTH(REPLACE(product_name, ' ', '')) <= 2 THEN 2
                     ELSE 3
                 END,
                 LENGTH(product_name),
@@ -98,14 +96,24 @@ def search_vantage_db(product_name: str, limit=5):
         results = con.execute(query).fetchall()
         if not results: return None
         
-        # Calculate scores for all results
         output = []
         for r in results:
             score = calculate_vms_science(r)
             rating = "Metabolic Green" if score < 3.0 else "Metabolic Yellow" if score < 7.0 else "Metabolic Red"
+            
+            # FIXED: Use FULL product name from database, not just the search term
+            full_name = r[0].title()  # This is the actual product name from DB
+            brand = str(r[1]).title() if r[1] and r[1].strip() else ""
+            
+            # Create display name with brand if available
+            if brand and brand not in full_name:
+                display_name = f"{brand} {full_name}"
+            else:
+                display_name = full_name
+            
             output.append({
-                "name": r[0].title(), 
-                "brand": str(r[1]).title() if r[1] else "Generic",
+                "name": display_name,  # FIXED: Full descriptive name
+                "brand": brand,
                 "vms_score": score, 
                 "rating": rating, 
                 "raw": r
@@ -115,12 +123,14 @@ def search_vantage_db(product_name: str, limit=5):
         
     except Exception as e:
         print(f"[DB ERROR] {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
-# === 3. ENHANCED VISION SCAN ===
+# === 3. FIXED VISION SCAN ===
 def vision_live_scan(image_bytes):
     """
-    Enhanced scanning with better error handling and feedback
+    FIXED: Proper bytes handling for Gemini API
     """
     api_key = get_gemini_api_key()
     if not api_key: 
@@ -128,75 +138,82 @@ def vision_live_scan(image_bytes):
         return None
     
     try:
-        # Convert bytes to PIL Image
+        # FIXED: Handle different input types
+        if isinstance(image_bytes, io.BytesIO):
+            # If it's a BytesIO object, get the bytes
+            image_bytes = image_bytes.getvalue()
+        elif hasattr(image_bytes, 'read'):
+            # If it's a file-like object
+            image_bytes = image_bytes.read()
+        # else: already bytes
+        
+        print(f"[DEBUG] Image type: {type(image_bytes)}, size: {len(image_bytes)} bytes")
+        
+        # Convert to PIL Image
         img = Image.open(io.BytesIO(image_bytes))
         w, h = img.size
+        print(f"[DEBUG] Image dimensions: {w}x{h}")
         
-        # Crop center 50% of image
+        # Crop center 50%
         left = int(w * 0.25)
         top = int(h * 0.25)
         right = int(w * 0.75)
         bottom = int(h * 0.75)
         img_cropped = img.crop((left, top, right, bottom))
         
-        # Enhance contrast for better recognition
+        # Enhance image
         from PIL import ImageEnhance
         enhancer = ImageEnhance.Contrast(img_cropped)
         img_cropped = enhancer.enhance(1.5)
-        
-        # Enhance brightness
         enhancer = ImageEnhance.Brightness(img_cropped)
         img_cropped = enhancer.enhance(1.2)
         
-        # Convert to bytes
+        # FIXED: Properly convert to bytes
         buf = io.BytesIO()
         img_cropped.save(buf, format="JPEG", quality=95)
-        img_data = buf.getvalue()
+        buf.seek(0)  # Reset pointer to beginning
+        img_data = buf.read()  # Read as bytes (not getvalue())
         
-        # ENHANCED PROMPT
-        prompt = """You are a grocery product identifier. Look at this image and identify the food product.
+        print(f"[DEBUG] Processed image size: {len(img_data)} bytes")
+        
+        # Enhanced prompt
+        prompt = """You are a precise product identifier. Look at this image and identify the food item.
 
-CRITICAL RULES:
-1. If you see a FRUIT or VEGETABLE (apple, banana, lime, carrot, etc.), return ONLY the item name
-2. If you see a PACKAGED product, return "[Brand] [Product]"
-3. Be SPECIFIC and CONCISE - maximum 3 words
-4. Return ONLY the product name, NO extra text
+RULES:
+1. For FRUITS/VEGETABLES: Return just the item name (e.g., "lime", "banana")
+2. For PACKAGED products: Return "[Brand] [Product]" (e.g., "Coca Cola", "Lay's Chips")
+3. Be SPECIFIC and CONCISE (max 4 words)
+4. Return ONLY the name, nothing else
 
-Examples:
-- Lime → "lime"
-- Banana → "banana"
-- Coca Cola can → "coca cola"
-- Lay's chips → "lays chips"
-- Tropicana juice → "tropicana juice"
-
-What product do you see?"""
+What do you see?"""
         
         # Call Gemini
         client = genai.Client(api_key=api_key)
         
-        st.info("🔍 Analyzing image...")
+        print("[DEBUG] Calling Gemini API...")
+        st.info("🔍 Analyzing image with Gemini...")
         
         response = client.models.generate_content(
             model="gemini-3-flash-preview",
-            contents=[prompt, img_data]
+            contents=[prompt, img_data]  # Now properly bytes
         )
         
         product_name = response.text.strip().replace('"', '').replace('*', '').replace('.', '')
-        print(f"🔍 [GEMINI] Identified: '{product_name}'")
-        st.info(f"👁️ Gemini detected: **{product_name}**")
+        print(f"✅ [GEMINI] Identified: '{product_name}'")
+        st.success(f"👁️ Gemini detected: **{product_name}**")
         
-        # Search database (get top 5 results)
+        # Search database
         results = search_vantage_db(product_name, limit=5)
         
         if results:
-            print(f"✅ [DATABASE] Found {len(results)} matches")
+            print(f"✅ [DATABASE] Found {len(results)} matches:")
             for i, r in enumerate(results):
                 print(f"   {i+1}. {r['name']} - Score: {r['vms_score']}")
-            st.success(f"✅ Found {len(results)} matches!")
+            st.success(f"✅ Found {len(results)} options!")
             return results
         else:
             print(f"❌ [DATABASE] No matches for: '{product_name}'")
-            st.warning(f"❌ Product '{product_name}' not found in database. Try:\n- Repositioning the camera\n- Better lighting\n- A different angle")
+            st.warning(f"❌ '{product_name}' not in database.\n\nTry:\n- Repositioning camera\n- Better lighting\n- Different angle")
             return None
         
     except Exception as e:
@@ -204,7 +221,7 @@ What product do you see?"""
         print(f"❌ [SCAN ERROR] {error_msg}")
         import traceback
         traceback.print_exc()
-        st.error(f"⚠️ Scan error: {error_msg}")
+        st.error(f"⚠️ Scan error: {error_msg[:200]}")
         return None
 
 # === 4. USER DB & TRENDS ===
@@ -221,10 +238,7 @@ def get_trend_data_db(username, days=30):
     con = get_db_connection()
     try: 
         results = con.execute("""
-            SELECT 
-                date,
-                category,
-                COUNT(*) as count
+            SELECT date, category, COUNT(*) as count
             FROM calendar 
             WHERE username = ? AND date >= current_date - INTERVAL ? DAY 
             GROUP BY date, category 
