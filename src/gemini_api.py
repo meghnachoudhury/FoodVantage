@@ -121,18 +121,24 @@ def search_vantage_db(product_name: str, limit=5):
         traceback.print_exc()
         return None
 
-# === 3. FIXED GEMINI API CALL ===
-def vision_live_scan(image_bytes):
+# === 3. SCANNER WITH DARK TEXT ===
+def vision_live_scan_dark(image_bytes):
     """
-    FIXED: Proper Gemini API format with types.Content and types.Part
+    FIXED: Shows DARK, BOLD text instead of light text
     """
     api_key = get_gemini_api_key()
     if not api_key: 
-        st.error("⚠️ No Gemini API key configured!")
+        # Dark error message
+        st.markdown("""
+            <div class="scanner-result">
+                <div class="scanner-result-title">⚠️ Configuration Error</div>
+                <div class="scanner-result-text">No Gemini API key configured</div>
+            </div>
+        """, unsafe_allow_html=True)
         return None
     
     try:
-        # Step 1: Handle different input types
+        # Handle different input types
         if isinstance(image_bytes, io.BytesIO):
             image_bytes = image_bytes.getvalue()
         elif hasattr(image_bytes, 'read'):
@@ -140,12 +146,12 @@ def vision_live_scan(image_bytes):
         
         print(f"[DEBUG] Image type: {type(image_bytes)}, size: {len(image_bytes)} bytes")
         
-        # Step 2: Convert to PIL Image
+        # Convert to PIL Image
         img = Image.open(io.BytesIO(image_bytes))
         w, h = img.size
         print(f"[DEBUG] Image dimensions: {w}x{h}, mode: {img.mode}")
         
-        # Step 3: Convert to RGB
+        # Convert to RGB
         if img.mode == 'RGBA':
             print("[DEBUG] Converting RGBA to RGB...")
             background = Image.new('RGB', img.size, (255, 255, 255))
@@ -160,36 +166,32 @@ def vision_live_scan(image_bytes):
             print(f"[DEBUG] Converting {img.mode} to RGB...")
             img = img.convert('RGB')
         
-        print(f"[DEBUG] After conversion, mode: {img.mode}")
-        
-        # Step 4: Crop center 50%
+        # Crop center 50%
         left = int(w * 0.25)
         top = int(h * 0.25)
         right = int(w * 0.75)
         bottom = int(h * 0.75)
         img_cropped = img.crop((left, top, right, bottom))
         
-        # Step 5: Enhance image
+        # Enhance image
         from PIL import ImageEnhance
         enhancer = ImageEnhance.Contrast(img_cropped)
         img_cropped = enhancer.enhance(1.5)
         enhancer = ImageEnhance.Brightness(img_cropped)
         img_cropped = enhancer.enhance(1.2)
         
-        # Step 6: Final RGB check
+        # Final RGB check
         if img_cropped.mode != 'RGB':
             img_cropped = img_cropped.convert('RGB')
         
-        # Step 7: Convert to base64 (Gemini SDK expects base64 for inline_data)
+        # Convert to base64
         buf = io.BytesIO()
         img_cropped.save(buf, format="JPEG", quality=95)
         buf.seek(0)
         img_bytes = buf.read()
         img_b64 = base64.b64encode(img_bytes).decode('utf-8')
         
-        print(f"[DEBUG] Image converted to base64, length: {len(img_b64)}")
-        
-        # Step 8: Create prompt
+        # Create prompt
         prompt = """You are a precise product identifier. Look at this image and identify the food item.
 
 RULES:
@@ -200,11 +202,18 @@ RULES:
 
 What do you see?"""
         
-        # Step 9: FIXED - Proper Gemini API call using types.Content
+        # Call Gemini with proper format
         client = genai.Client(api_key=api_key)
         
-        print("[DEBUG] Calling Gemini API with proper format...")
-        st.info("🔍 Analyzing image with Gemini...")
+        print("[DEBUG] Calling Gemini API...")
+        
+        # DARK themed analyzing message
+        st.markdown("""
+            <div class="scanner-result">
+                <div class="scanner-result-title">🔍 Analyzing Image</div>
+                <div class="scanner-result-text">Processing with Gemini AI...</div>
+            </div>
+        """, unsafe_allow_html=True)
         
         try:
             response = client.models.generate_content(
@@ -224,12 +233,18 @@ What do you see?"""
             
             product_name = response.text.strip().replace('"', '').replace('*', '').replace('.', '')
             print(f"✅ [GEMINI] Identified: '{product_name}'")
-            st.success(f"👁️ Gemini detected: **{product_name}**")
+            
+            # DARK themed detection message
+            st.markdown(f"""
+                <div class="scanner-result">
+                    <div class="scanner-result-title">👁️ Product Detected</div>
+                    <div class="scanner-result-text">{product_name}</div>
+                </div>
+            """, unsafe_allow_html=True)
             
         except Exception as gemini_error:
             print(f"[GEMINI ERROR] {gemini_error}")
-            # Try alternative format
-            print("[DEBUG] Trying alternative API format...")
+            # Fallback format
             response = client.models.generate_content(
                 model="gemini-3-flash-preview",
                 contents={
@@ -240,21 +255,47 @@ What do you see?"""
                 }
             )
             product_name = response.text.strip().replace('"', '').replace('*', '').replace('.', '')
-            print(f"✅ [GEMINI] Identified (alt format): '{product_name}'")
-            st.success(f"👁️ Gemini detected: **{product_name}**")
+            print(f"✅ [GEMINI] Identified: '{product_name}'")
+            
+            # DARK themed detection message
+            st.markdown(f"""
+                <div class="scanner-result">
+                    <div class="scanner-result-title">👁️ Product Detected</div>
+                    <div class="scanner-result-text">{product_name}</div>
+                </div>
+            """, unsafe_allow_html=True)
         
-        # Step 10: Search database
+        # Search database
         results = search_vantage_db(product_name, limit=5)
         
         if results:
             print(f"✅ [DATABASE] Found {len(results)} matches:")
             for i, r in enumerate(results):
                 print(f"   {i+1}. {r['name']} - Score: {r['vms_score']}")
-            st.success(f"✅ Found {len(results)} options!")
+            
+            # DARK themed success message
+            st.markdown(f"""
+                <div class="scanner-result">
+                    <div class="scanner-result-title">✅ Database Match</div>
+                    <div class="scanner-result-text">Found {len(results)} option(s) in database</div>
+                </div>
+            """, unsafe_allow_html=True)
+            
             return results
         else:
             print(f"❌ [DATABASE] No matches for: '{product_name}'")
-            st.warning(f"❌ '{product_name}' not in database.\n\nTry:\n- Repositioning camera\n- Better lighting\n- Different angle")
+            
+            # DARK themed warning message
+            st.markdown(f"""
+                <div class="scanner-result" style="border-left-color: #D4765E;">
+                    <div class="scanner-result-title">❌ Not Found</div>
+                    <div class="scanner-result-text">'{product_name}' not in database</div>
+                    <div style="font-size: 0.9rem; color: #666; margin-top: 8px;">
+                        Try: Repositioning • Better lighting • Different angle
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
+            
             return None
         
     except Exception as e:
@@ -262,7 +303,15 @@ What do you see?"""
         print(f"❌ [SCAN ERROR] {error_msg}")
         import traceback
         traceback.print_exc()
-        st.error(f"⚠️ Scan error: {error_msg[:300]}")
+        
+        # DARK themed error message
+        st.markdown(f"""
+            <div class="scanner-result" style="border-left-color: #D4765E;">
+                <div class="scanner-result-title">⚠️ Scan Error</div>
+                <div class="scanner-result-text">{error_msg[:150]}</div>
+            </div>
+        """, unsafe_allow_html=True)
+        
         return None
 
 # === 4. USER DB & TRENDS ===
