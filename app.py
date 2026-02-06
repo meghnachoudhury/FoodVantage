@@ -22,7 +22,7 @@ if 'camera_active' not in st.session_state: st.session_state.camera_active = Fal
 if 'transitioning' not in st.session_state: st.session_state.transitioning = False
 if 'last_scan' not in st.session_state: st.session_state.last_scan = None
 
-# --- CSS (MATH CENTERING) ---
+# --- CSS (PIXEL PERFECT CENTERING) ---
 st.markdown('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">', unsafe_allow_html=True)
 st.markdown("""
     <style>
@@ -32,13 +32,30 @@ st.markdown("""
     .card { background: white; padding: 24px; border-radius: 20px; border: 1px solid #EEE; box-shadow: 0 4px 12px rgba(0,0,0,0.04); margin-bottom: 20px; }
     .white-shelf { background: white; height: 35px; border-radius: 10px; border: 1px solid #EEE; margin-bottom: 25px; }
 
-    /* PERFECT CENTERING WRAPPER */
-    .centered-wrapper { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; text-align: center; }
+    /* LAYOUT CENTERING */
+    .center-content { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; width: 100%; }
+
+    /* GRID CENTERING FOR SCANNER */
+    .scanner-stack {
+        display: grid;
+        grid-template-areas: "stack";
+        place-items: center;
+        width: 100%;
+        max-width: 600px;
+        margin: 0 auto;
+        position: relative;
+    }
+    .scanner-stack > * { grid-area: stack; }
+    .focus-square {
+        width: 150px;
+        height: 150px;
+        border: 4px dashed #E2725B;
+        border-radius: 24px;
+        z-index: 10;
+        pointer-events: none;
+    }
     
-    .scanner-ui-container { position: relative; display: flex; justify-content: center; align-items: center; width: 100%; max-width: 500px; margin: 0 auto; border-radius: 20px; overflow: hidden; }
-    .reticle-square { position: absolute; width: 140px; height: 140px; border: 4px dashed #E2725B; border-radius: 20px; z-index: 100; pointer-events: none; }
-    
-    .hud-bubble { background: white; padding: 10px 20px; border-radius: 50px; box-shadow: 0 8px 24px rgba(0,0,0,0.1); margin-bottom: 10px; border: 2px solid #E2725B; text-align: center; font-weight: bold; }
+    .hud-bubble { background: white; padding: 10px 20px; border-radius: 50px; box-shadow: 0 8px 24px rgba(0,0,0,0.1); margin-bottom: 15px; border: 2px solid #E2725B; font-weight: bold; }
     button[data-baseweb="tab"] p { color: black !important; font-weight: bold !important; }
     .welcome-subtitle { font-size: 22px; color: #2c3e50; font-weight: 600; text-align: center; }
     </style>
@@ -85,7 +102,7 @@ if not st.session_state.logged_in:
         with t2:
             u2, p2 = st.text_input("Choose ID", key="s_u"), st.text_input("Choose PWD", type="password", key="s_p")
             if st.button("Create Account", use_container_width=True):
-                if create_user(u2, p2): st.success("Created! Sign In.")
+                if create_user(u2, p2): st.success("Created! Please Sign In.")
         st.markdown("</div>", unsafe_allow_html=True)
 
 else:
@@ -111,10 +128,10 @@ else:
         st.markdown("<h3 style='text-align: center;'>Active Focus Scanner</h3>", unsafe_allow_html=True)
         st.markdown('<div class="white-shelf"></div>', unsafe_allow_html=True)
         
-        # --- CENTERED CAMERA LAYOUT ---
-        st.markdown('<div class="centered-wrapper">', unsafe_allow_html=True)
+        # --- ORDER RESTORED: ICON -> BUTTON -> SCANNER ---
+        st.markdown('<div class="center-content">', unsafe_allow_html=True)
         if not st.session_state.camera_active:
-            st.markdown('<i class="fa fa-camera" style="font-size:150px; color:tomato; margin-bottom:20px;"></i>', unsafe_allow_html=True)
+            st.markdown('<i class="fa fa-camera" style="font-size:150px; color:tomato; margin-bottom:30px;"></i>', unsafe_allow_html=True)
             if st.button("Start Live Scan", type="primary", use_container_width=True):
                 st.session_state.camera_active = True; st.rerun()
         else:
@@ -123,12 +140,13 @@ else:
                 clr = "#2E8B57" if ls['rating']=="Metabolic Green" else "#F9A825" if ls['rating']=="Metabolic Yellow" else "#D32F2F"
                 st.markdown(f"<div class='hud-bubble'><b>{ls['name']}</b> | <span style='color:{clr};'>{ls['vms_score']} {ls['rating']}</span></div>", unsafe_allow_html=True)
             
-            # THE HUD WIDGET
-            st.markdown('<div class="scanner-ui-container">', unsafe_allow_html=True)
-            st.markdown('<div class="reticle-square"></div>', unsafe_allow_html=True)
+            # GRID STACK FOR PERFECT CENTERING
+            st.markdown('<div class="scanner-stack">', unsafe_allow_html=True)
             image = back_camera_input(key="hud_cam")
+            st.markdown('<div class="focus-square"></div>', unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
             
+            st.write("") # Spacer
             if st.button("❌ Stop Scanning", use_container_width=True):
                 st.session_state.camera_active = False; st.session_state.last_scan = None; st.rerun()
             if image:
