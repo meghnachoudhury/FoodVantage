@@ -36,7 +36,10 @@ COLORS = {
     'dark_text': '#2C2C2C',
     'green': '#6B7E54',
     'yellow': '#E8B54D',
-    'red': '#D4765E'
+    'red': '#D4765E',
+    # MVP COLORS
+    'camera_icon': '#c6d9ec',  # FIX 1: Light blue
+    'toggle_button': '#737373'  # FIX 2: Lighter grey
 }
 
 # --- CSS ---
@@ -49,7 +52,9 @@ st.markdown(f"""
     .card {{ background: white; padding: 24px; border-radius: 20px; border: 1px solid #EEE; box-shadow: 0 4px 12px rgba(0,0,0,0.04); margin-bottom: 20px; }}
     .white-shelf {{ background: white; height: 35px; border-radius: 10px; border: 1px solid #EEE; margin-bottom: 25px; }}
     .tomato-wrapper {{ width: 100%; text-align: center; padding: 30px 0; }}
-    .tomato-icon {{ font-size: 150px !important; color: {COLORS['terracotta']} !important; }}
+    
+    /* FIX 1: CAMERA ICON - LIGHT BLUE COLOR (ONLY COLOR CHANGED) */
+    .tomato-icon {{ font-size: 150px !important; color: {COLORS['camera_icon']} !important; }}
 
     /* MOBILE FIX */
     input[type="text"], input[type="password"] {{
@@ -66,6 +71,7 @@ st.markdown(f"""
         -webkit-text-fill-color: #1A1A1A !important;
     }}
     
+    /* FIX 3: ALL BUTTONS TERRACOTTA (INCLUDING STOP SCANNING) */
     .stButton > button {{
         background-color: {COLORS['terracotta']} !important;
         color: white !important;
@@ -152,7 +158,7 @@ st.markdown(f"""
         margin: 0 auto;
     }}
 
-    /* FIXED: Tap instruction instead of focus square */
+    /* TAP INSTRUCTION */
     .tap-instruction {{
         position: absolute;
         top: 10px;
@@ -240,10 +246,34 @@ st.markdown(f"""
         margin-bottom: 8px; 
     }}
     
-    /* COMPACT TABS FOR DESKTOP */
+    /* FIX 2: DAY/WEEK/MONTH TOGGLE BUTTONS - LIGHTER GREY WITH WHITE TEXT */
     .trend-tabs-container {{
         max-width: 400px;
         margin: 0 auto 20px auto;
+    }}
+    
+    .trend-tabs-container .stButton > button {{
+        background-color: {COLORS['toggle_button']} !important;
+        color: white !important;
+        border: none !important;
+    }}
+    
+    .trend-tabs-container .stButton > button[kind="primary"] {{
+        background-color: {COLORS['toggle_button']} !important;
+        color: white !important;
+        font-weight: bold !important;
+    }}
+    
+    /* FIX 5: HIDE KEYBOARD TEXT FROM SIDEBAR ARROW */
+    [data-testid="collapsedControl"] {{
+        color: transparent !important;
+        font-size: 0 !important;
+    }}
+    
+    [data-testid="collapsedControl"]::before {{
+        content: "»";
+        font-size: 1.5rem;
+        color: white;
     }}
     </style>
 """, unsafe_allow_html=True)
@@ -337,9 +367,12 @@ else:
         search_q = st.text_input("Quick check score", key="sidebar_search")
         if search_q:
             results = search_vantage_db(search_q, limit=5)
-            if results:
+            # FIX 4: Filter out vague 10.0 default scores
+            filtered_results = [r for r in results if r['vms_score'] != 10.0] if results else []
+            
+            if filtered_results:
                 st.markdown("**Top Results:**")
-                for i, d in enumerate(results):
+                for i, d in enumerate(filtered_results):
                     c = COLORS['green'] if d['vms_score'] < 3.0 else COLORS['yellow'] if d['vms_score'] < 7.0 else COLORS['red']
                     st.markdown(f"""
                         <div class='card' style='padding:12px; margin-bottom:8px;'>
@@ -365,6 +398,7 @@ else:
         st.markdown('<div class="white-shelf"></div>', unsafe_allow_html=True)
         
         if not st.session_state.camera_active:
+            # FIX 1: CAMERA ICON WITH LIGHT BLUE COLOR
             st.markdown('<div class="tomato-wrapper"><i class="fa fa-camera tomato-icon"></i></div>', unsafe_allow_html=True)
             if st.button("Start Live Scan", type="primary", use_container_width=True):
                 st.session_state.camera_active = True
@@ -389,7 +423,7 @@ else:
                     </div>
                 """, unsafe_allow_html=True)
 
-            # FIXED: Tap instruction instead of focus square
+            # TAP INSTRUCTION
             st.markdown('<div class="hud-container">', unsafe_allow_html=True)
             st.markdown("""
                 <div class="tap-instruction">
@@ -399,6 +433,7 @@ else:
             image = back_camera_input(key="hud_cam")
             st.markdown('</div>', unsafe_allow_html=True)
             
+            # FIX 3: STOP BUTTON ALREADY TERRACOTTA (DEFAULT BUTTON COLOR)
             col1, col2, col3 = st.columns([1, 2, 1])
             with col2:
                 if st.button("❌ Stop Scanning", use_container_width=True):
@@ -477,10 +512,10 @@ else:
                         st.session_state.scanning = True
                         st.rerun()
 
-        # COMPACT TRENDS TABS WITH BETTER DEBUGGING
+        # TRENDS WITH FIX 2 APPLIED
         st.markdown("### 📈 Your Health Trends")
         
-        # Compact centered tabs
+        # FIX 2: Lighter grey toggle buttons with white text
         st.markdown('<div class="trend-tabs-container">', unsafe_allow_html=True)
         col_d, col_w, col_m = st.columns(3)
         with col_d:
@@ -508,32 +543,17 @@ else:
         else:
             days = 30
         
-        # DEBUG: Check if user has ANY calendar data
-        print(f"\n[TRENDS DEBUG] ============================================")
-        print(f"[TRENDS DEBUG] User: {st.session_state.user_id}")
-        print(f"[TRENDS DEBUG] View: {st.session_state.trends_view}, Days: {days}")
-        
-        # Get ALL user data first to verify
+        # Get trend data
         all_data = get_all_calendar_data_db(st.session_state.user_id)
-        print(f"[TRENDS DEBUG] Total calendar items for user: {len(all_data) if all_data else 0}")
-        if all_data and len(all_data) > 0:
-            print(f"[TRENDS DEBUG] Sample items: {all_data[:3]}")
-        
-        # Now get trend data
         raw = get_trend_data_db(st.session_state.user_id, days=days)
-        print(f"[TRENDS DEBUG] Trend data for last {days} days: {len(raw) if raw else 0} rows")
-        print(f"[TRENDS DEBUG] Raw data: {raw}")
-        print(f"[TRENDS DEBUG] ============================================\n")
         
         if raw and len(raw) > 0:
             # Create bar chart with Plotly
             df = pd.DataFrame(raw, columns=["date", "category", "count"])
             df['date'] = pd.to_datetime(df['date'])
-            print(f"[TRENDS DEBUG] DataFrame:\n{df}")
             
             # Prepare data for bar chart
             df_pivot = df.pivot_table(index='date', columns='category', values='count', aggfunc='sum', fill_value=0)
-            print(f"[TRENDS DEBUG] Pivot table:\n{df_pivot}")
             
             # Create stacked bar chart
             fig = go.Figure()
@@ -547,7 +567,6 @@ else:
                     marker_color=COLORS['olive'],
                     hovertemplate='%{y} healthy items<extra></extra>'
                 ))
-                print(f"[TRENDS DEBUG] Added healthy bars: {df_pivot['healthy'].tolist()}")
             
             if 'moderate' in df_pivot.columns:
                 fig.add_trace(go.Bar(
@@ -557,7 +576,6 @@ else:
                     marker_color=COLORS['salmon'],
                     hovertemplate='%{y} moderate items<extra></extra>'
                 ))
-                print(f"[TRENDS DEBUG] Added moderate bars: {df_pivot['moderate'].tolist()}")
             
             if 'unhealthy' in df_pivot.columns:
                 fig.add_trace(go.Bar(
@@ -567,7 +585,6 @@ else:
                     marker_color=COLORS['terracotta'],
                     hovertemplate='%{y} unhealthy items<extra></extra>'
                 ))
-                print(f"[TRENDS DEBUG] Added unhealthy bars: {df_pivot['unhealthy'].tolist()}")
             
             # Update layout
             fig.update_layout(
@@ -604,7 +621,6 @@ else:
             healthy_count = int(df[df['category'] == 'healthy']['count'].sum()) if 'healthy' in df['category'].values else 0
             st.markdown(f"**Total items:** {total_items} | **Healthy choices:** {healthy_count}")
         else:
-            print("[TRENDS DEBUG] No data found - showing info message")
             if all_data and len(all_data) > 0:
                 st.warning(f"⚠️ You have {len(all_data)} logged items, but none in the last {days} day(s). Try selecting a different time range.")
             else:
@@ -629,8 +645,11 @@ else:
             
             if search_item:
                 search_results = search_vantage_db(search_item, limit=5)
-                if search_results:
-                    for idx, result in enumerate(search_results):
+                # FIX 4: Filter out vague 10.0 default scores
+                filtered_results = [r for r in search_results if r['vms_score'] != 10.0] if search_results else []
+                
+                if filtered_results:
+                    for idx, result in enumerate(filtered_results):
                         clr = COLORS['green'] if result['vms_score'] < 3.0 else COLORS['yellow'] if result['vms_score'] < 7.0 else COLORS['red']
                         
                         col_a, col_b, col_c = st.columns([3, 1, 0.6])
