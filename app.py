@@ -612,20 +612,17 @@ else:
                 plot_bgcolor='rgba(0,0,0,0)',
                 paper_bgcolor='rgba(0,0,0,0)',
                 xaxis=dict(
-                    color='#000000',
                     showgrid=False,
                     showline=False,
                     title=None
                 ),
                 yaxis=dict(
-                    color='#000000',
                     showgrid=True,
                     gridcolor='#E0E0E0',
                     showline=False,
                     title=None
                 ),
                 legend=dict(
-                    color='#000000',
                     orientation="h",
                     yanchor="bottom",
                     y=1.02,
