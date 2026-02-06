@@ -6,6 +6,7 @@ import hashlib
 import calendar as cal_module
 import time
 from datetime import datetime, timedelta
+import plotly.graph_objects as go
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "src"))
 from gemini_api import *
@@ -26,120 +27,130 @@ if 'scanning' not in st.session_state: st.session_state.scanning = False
 if 'scan_count' not in st.session_state: st.session_state.scan_count = 0
 if 'trends_view' not in st.session_state: st.session_state.trends_view = 'weekly'
 
+# --- COLOR PALETTE ---
+COLORS = {
+    'olive': '#6B7E54',
+    'terracotta': '#D4765E',
+    'salmon': '#E89580',
+    'beige': '#F5E6D3',
+    'dark_text': '#2C2C2C',
+    'green': '#6B7E54',
+    'yellow': '#E8B54D',
+    'red': '#D4765E'
+}
+
 # --- CSS ---
 st.markdown('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">', unsafe_allow_html=True)
-st.markdown("""
+st.markdown(f"""
     <style>
-    .stApp { background-color: #F7F5F0; color: #1A1A1A; }
-    .logo-text { font-family: 'Arial Black', sans-serif; font-size: 3rem; text-align: center; }
-    .logo-dot { color: #E2725B; }
-    .card { background: white; padding: 24px; border-radius: 20px; border: 1px solid #EEE; box-shadow: 0 4px 12px rgba(0,0,0,0.04); margin-bottom: 20px; }
-    .white-shelf { background: white; height: 35px; border-radius: 10px; border: 1px solid #EEE; margin-bottom: 25px; }
-    .tomato-wrapper { width: 100%; text-align: center; padding: 30px 0; }
-    .tomato-icon { font-size: 150px !important; color: tomato !important; }
+    .stApp {{ background-color: #F7F5F0; color: #1A1A1A; }}
+    .logo-text {{ font-family: 'Arial Black', sans-serif; font-size: 3rem; text-align: center; }}
+    .logo-dot {{ color: {COLORS['terracotta']}; }}
+    .card {{ background: white; padding: 24px; border-radius: 20px; border: 1px solid #EEE; box-shadow: 0 4px 12px rgba(0,0,0,0.04); margin-bottom: 20px; }}
+    .white-shelf {{ background: white; height: 35px; border-radius: 10px; border: 1px solid #EEE; margin-bottom: 25px; }}
+    .tomato-wrapper {{ width: 100%; text-align: center; padding: 30px 0; }}
+    .tomato-icon {{ font-size: 150px !important; color: {COLORS['terracotta']} !important; }}
 
-    /* MOBILE FIX - Force white backgrounds and dark text on inputs */
-    input[type="text"], input[type="password"] {
+    /* MOBILE FIX */
+    input[type="text"], input[type="password"] {{
         background-color: white !important;
         color: #1A1A1A !important;
         border: 1px solid #DDD !important;
         border-radius: 8px !important;
         padding: 12px !important;
-    }
+    }}
     
-    /* Fix for Streamlit's default input styling on mobile */
-    .stTextInput > div > div > input {
+    .stTextInput > div > div > input {{
         background-color: white !important;
         color: #1A1A1A !important;
         -webkit-text-fill-color: #1A1A1A !important;
-    }
+    }}
     
-    /* Fix button visibility on mobile */
-    .stButton > button {
-        background-color: #E2725B !important;
+    .stButton > button {{
+        background-color: {COLORS['terracotta']} !important;
         color: white !important;
         border: none !important;
-    }
+    }}
 
     /* WELCOME SCREEN */
-    .welcome-container {
+    .welcome-container {{
         display: flex;
         flex-direction: column;
         justify-content: center;
         align-items: center;
         min-height: 70vh;
-    }
+    }}
     
-    .welcome-text {
+    .welcome-text {{
         font-size: 2.5rem;
         font-weight: 800;
         color: #1A1A1A;
         text-align: center;
         margin-bottom: 30px;
-    }
+    }}
     
-    .dots {
+    .dots {{
         display: flex;
         gap: 12px;
         justify-content: center;
-    }
+    }}
     
-    .dot {
+    .dot {{
         width: 16px;
         height: 16px;
-        background: #E2725B;
+        background: {COLORS['terracotta']};
         border-radius: 50%;
         animation: dotPulse 1.5s ease-in-out infinite;
-    }
+    }}
     
-    .dot:nth-child(1) { animation-delay: 0s; }
-    .dot:nth-child(2) { animation-delay: 0.3s; }
-    .dot:nth-child(3) { animation-delay: 0.6s; }
+    .dot:nth-child(1) {{ animation-delay: 0s; }}
+    .dot:nth-child(2) {{ animation-delay: 0.3s; }}
+    .dot:nth-child(3) {{ animation-delay: 0.6s; }}
     
-    @keyframes dotPulse {
-        0%, 60%, 100% { 
+    @keyframes dotPulse {{
+        0%, 60%, 100% {{ 
             opacity: 0.3;
             transform: scale(0.8);
-        }
-        30% { 
+        }}
+        30% {{ 
             opacity: 1;
             transform: scale(1.3);
-        }
-    }
+        }}
+    }}
 
     /* CAMERA CENTERING */
-    [data-testid="stCameraInput"] {
+    [data-testid="stCameraInput"] {{
         display: flex !important;
         justify-content: center !important;
-    }
+    }}
     
-    .hud-container {
+    .hud-container {{
         position: relative;
         width: 100%;
         max-width: 640px;
         margin: 0 auto;
-    }
+    }}
 
-    .focus-square {
+    .focus-square {{
         position: fixed;
         top: 50%;
         left: 50%;
         transform: translate(-50%, -50%);
         width: 200px;
         height: 200px;
-        border: 4px dashed #E2725B;
+        border: 4px dashed {COLORS['terracotta']};
         border-radius: 30px;
         z-index: 999;
         pointer-events: none;
         animation: pulseFocus 2s ease-in-out infinite;
-    }
+    }}
     
-    @keyframes pulseFocus {
-        0%, 100% { opacity: 0.6; }
-        50% { opacity: 1.0; }
-    }
+    @keyframes pulseFocus {{
+        0%, 100% {{ opacity: 0.6; }}
+        50% {{ opacity: 1.0; }}
+    }}
     
-    .hud-bubble {
+    .hud-bubble {{
         position: fixed;
         top: calc(50% - 200px);
         left: 50%;
@@ -148,32 +159,55 @@ st.markdown("""
         padding: 16px 28px; 
         border-radius: 50px;
         box-shadow: 0 10px 30px rgba(0,0,0,0.15); 
-        border: 3px solid #E2725B;
+        border: 3px solid {COLORS['terracotta']};
         z-index: 1000;
         text-align: center;
         min-width: 220px;
-    }
+    }}
     
-    .scanning-indicator {
+    .scanning-indicator {{
         position: fixed;
         top: 20px;
         left: 50%;
         transform: translateX(-50%);
-        background: rgba(226, 114, 91, 0.9);
+        background: rgba(212, 118, 94, 0.95);
         color: white;
         padding: 10px 24px;
         border-radius: 25px;
         z-index: 1000;
         font-weight: bold;
         animation: blink 1.5s infinite;
-    }
+    }}
     
-    @keyframes blink {
-        0%, 100% { opacity: 0.7; }
-        50% { opacity: 1.0; }
-    }
+    @keyframes blink {{
+        0%, 100% {{ opacity: 0.7; }}
+        50% {{ opacity: 1.0; }}
+    }}
     
-    .list-row { 
+    /* FIXED: DARKER SCANNER RESULT TEXT */
+    .scanner-result {{
+        background: white;
+        padding: 16px;
+        border-radius: 12px;
+        margin: 12px 0;
+        border-left: 4px solid {COLORS['olive']};
+    }}
+    
+    .scanner-result-title {{
+        color: {COLORS['dark_text']};
+        font-weight: 800;
+        font-size: 1.1rem;
+        margin-bottom: 8px;
+    }}
+    
+    .scanner-result-text {{
+        color: {COLORS['dark_text']};
+        font-weight: 700;
+        font-size: 1.3rem;
+        line-height: 1.6;
+    }}
+    
+    .list-row {{ 
         display: flex; 
         justify-content: space-between; 
         align-items: center;
@@ -182,34 +216,45 @@ st.markdown("""
         border-radius: 12px; 
         border: 1px solid #F0F0F0; 
         margin-bottom: 8px; 
-    }
+    }}
     
-    .search-result-item {
+    /* PROFESSIONAL TABS - GOOGLE FIT STYLE */
+    .trends-tabs {{
         display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 12px;
+        gap: 0;
         background: white;
-        border: 1px solid #EEE;
-        border-radius: 8px;
-        margin-bottom: 8px;
-    }
+        border-radius: 12px;
+        padding: 4px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }}
     
-    .toggle-button {
-        padding: 8px 16px;
-        border-radius: 20px;
-        border: 2px solid #E2725B;
-        background: white;
-        color: #E2725B;
-        font-weight: bold;
+    .tab-button {{
+        flex: 1;
+        padding: 12px 20px;
+        text-align: center;
+        font-weight: 600;
+        font-size: 0.95rem;
+        color: #666;
+        background: transparent;
+        border: none;
         cursor: pointer;
         transition: all 0.3s;
-    }
+        border-radius: 8px;
+    }}
     
-    .toggle-button.active {
-        background: #E2725B;
-        color: white;
-    }
+    .tab-button.active {{
+        color: {COLORS['olive']};
+        background: {COLORS['beige']};
+    }}
+    
+    .tab-underline {{
+        height: 3px;
+        background: {COLORS['olive']};
+        border-radius: 3px;
+        margin-top: -3px;
+        transition: all 0.3s;
+    }}
     </style>
 """, unsafe_allow_html=True)
 
@@ -219,14 +264,14 @@ def render_logo(size="3rem"):
 def create_html_calendar(year, month, selected_day=None):
     cal = cal_module.monthcalendar(year, month)
     html = "<table style='width:100%; text-align:center;'><thead><tr>"
-    for day in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]: html += f"<th style='color:#E2725B;'>{day}</th>"
+    for day in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]: html += f"<th style='color:{COLORS['terracotta']};'>{day}</th>"
     html += "</tr></thead><tbody>"
     for week in cal:
         html += "<tr>"
         for day in week:
             if day == 0: html += "<td></td>"
             else:
-                style = "background:#E2725B; color:white; border-radius:50%;" if day == selected_day else ""
+                style = f"background:{COLORS['terracotta']}; color:white; border-radius:50%;" if day == selected_day else ""
                 html += f"<td style='padding:10px; {style}'>{day}</td>"
         html += "</tr>"
     return html + "</tbody></table>"
@@ -305,7 +350,7 @@ else:
             if results:
                 st.markdown("**Top Results:**")
                 for i, d in enumerate(results):
-                    c = "#2E8B57" if d['vms_score'] < 3.0 else "#F9A825" if d['vms_score'] < 7.0 else "#D32F2F"
+                    c = COLORS['green'] if d['vms_score'] < 3.0 else COLORS['yellow'] if d['vms_score'] < 7.0 else COLORS['red']
                     st.markdown(f"""
                         <div class='card' style='padding:12px; margin-bottom:8px;'>
                             <div style='font-size:0.9rem; font-weight:bold;'>{i+1}. {d['name']}</div>
@@ -345,7 +390,7 @@ else:
             
             if st.session_state.selected_result:
                 ls = st.session_state.selected_result
-                clr = "#2E8B57" if ls['vms_score'] < 3.0 else "#F9A825" if ls['vms_score'] < 7.0 else "#D32F2F"
+                clr = COLORS['green'] if ls['vms_score'] < 3.0 else COLORS['yellow'] if ls['vms_score'] < 7.0 else COLORS['red']
                 st.markdown(f"""
                     <div class="hud-bubble">
                         <div style="font-size: 0.9rem; margin-bottom: 4px;">{ls['name']}</div>
@@ -374,7 +419,7 @@ else:
                 st.session_state.scan_count += 1
                 
                 if st.session_state.scan_count % 2 == 0:
-                    results = vision_live_scan(image)
+                    results = vision_live_scan_dark(image)  # Using new dark text function
                     if results:
                         st.session_state.scan_results = results
                         st.session_state.selected_result = results[0]
@@ -387,7 +432,7 @@ else:
             st.markdown(f"Found **{len(st.session_state.scan_results)}** matches. Select one:")
             
             for i, result in enumerate(st.session_state.scan_results):
-                clr = "#2E8B57" if result['vms_score'] < 3.0 else "#F9A825" if result['vms_score'] < 7.0 else "#D32F2F"
+                clr = COLORS['green'] if result['vms_score'] < 3.0 else COLORS['yellow'] if result['vms_score'] < 7.0 else COLORS['red']
                 selected = st.session_state.selected_result == result
                 
                 col1, col2 = st.columns([4, 1])
@@ -431,43 +476,110 @@ else:
                         st.session_state.scanning = True
                         st.rerun()
 
-        # TRENDS WITH WEEKLY/MONTHLY TOGGLE
+        # PROFESSIONAL TRENDS WITH GOOGLE FIT STYLE TABS
         st.markdown("### 📈 Your Health Trends")
         
-        # Toggle buttons
-        col_w, col_m = st.columns(2)
+        # Professional tab buttons
+        col_d, col_w, col_m = st.columns(3)
+        with col_d:
+            if st.button("Day", use_container_width=True, key="day_tab",
+                        type="primary" if st.session_state.trends_view == 'daily' else "secondary"):
+                st.session_state.trends_view = 'daily'
+                st.rerun()
         with col_w:
-            if st.button("📅 Weekly", use_container_width=True, 
+            if st.button("Week", use_container_width=True, key="week_tab",
                         type="primary" if st.session_state.trends_view == 'weekly' else "secondary"):
                 st.session_state.trends_view = 'weekly'
                 st.rerun()
         with col_m:
-            if st.button("📆 Monthly", use_container_width=True,
+            if st.button("Month", use_container_width=True, key="month_tab",
                         type="primary" if st.session_state.trends_view == 'monthly' else "secondary"):
                 st.session_state.trends_view = 'monthly'
                 st.rerun()
         
         # Get data based on view
-        days = 7 if st.session_state.trends_view == 'weekly' else 30
+        if st.session_state.trends_view == 'daily':
+            days = 1
+        elif st.session_state.trends_view == 'weekly':
+            days = 7
+        else:
+            days = 30
+            
         raw = get_trend_data_db(st.session_state.user_id, days=days)
         
         if raw:
-            # Process data for cumulative chart
+            # Create bar chart with Plotly
             df = pd.DataFrame(raw, columns=["date", "category", "count"])
             df['date'] = pd.to_datetime(df['date'])
             
-            # Create cumulative sum by category
-            df = df.sort_values('date')
+            # Prepare data for bar chart
             df_pivot = df.pivot_table(index='date', columns='category', values='count', aggfunc='sum', fill_value=0)
-            df_cumulative = df_pivot.cumsum()
             
-            # Display line chart
-            st.line_chart(df_cumulative)
+            # Create stacked bar chart
+            fig = go.Figure()
             
-            # Show summary stats
+            # Add bars for each category with color palette
+            if 'healthy' in df_pivot.columns:
+                fig.add_trace(go.Bar(
+                    x=df_pivot.index,
+                    y=df_pivot['healthy'],
+                    name='Healthy',
+                    marker_color=COLORS['olive'],
+                    hovertemplate='%{y} healthy items<extra></extra>'
+                ))
+            
+            if 'moderate' in df_pivot.columns:
+                fig.add_trace(go.Bar(
+                    x=df_pivot.index,
+                    y=df_pivot['moderate'],
+                    name='Moderate',
+                    marker_color=COLORS['salmon'],
+                    hovertemplate='%{y} moderate items<extra></extra>'
+                ))
+            
+            if 'unhealthy' in df_pivot.columns:
+                fig.add_trace(go.Bar(
+                    x=df_pivot.index,
+                    y=df_pivot['unhealthy'],
+                    name='Unhealthy',
+                    marker_color=COLORS['terracotta'],
+                    hovertemplate='%{y} unhealthy items<extra></extra>'
+                ))
+            
+            # Update layout - Google Fit style
+            fig.update_layout(
+                barmode='stack',
+                height=300,
+                margin=dict(l=20, r=20, t=20, b=20),
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                xaxis=dict(
+                    showgrid=False,
+                    showline=False,
+                    title=None
+                ),
+                yaxis=dict(
+                    showgrid=True,
+                    gridcolor='#E0E0E0',
+                    showline=False,
+                    title=None
+                ),
+                legend=dict(
+                    orientation="h",
+                    yanchor="bottom",
+                    y=1.02,
+                    xanchor="center",
+                    x=0.5
+                ),
+                hovermode='x unified'
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # Summary stats
             total_items = int(df['count'].sum())
             healthy_count = int(df[df['category'] == 'healthy']['count'].sum()) if 'healthy' in df['category'].values else 0
-            st.markdown(f"**Total items logged:** {total_items} | **Healthy choices:** {healthy_count}")
+            st.markdown(f"**Total items:** {total_items} | **Healthy choices:** {healthy_count}")
         else:
             st.info("📊 No data yet. Start logging items!")
 
@@ -492,7 +604,7 @@ else:
                 search_results = search_vantage_db(search_item, limit=5)
                 if search_results:
                     for idx, result in enumerate(search_results):
-                        clr = "#2E8B57" if result['vms_score'] < 3.0 else "#F9A825" if result['vms_score'] < 7.0 else "#D32F2F"
+                        clr = COLORS['green'] if result['vms_score'] < 3.0 else COLORS['yellow'] if result['vms_score'] < 7.0 else COLORS['red']
                         
                         col_a, col_b, col_c = st.columns([3, 1, 0.6])
                         with col_a:
@@ -520,7 +632,7 @@ else:
             items = get_calendar_items_db(st.session_state.user_id, sel_date.strftime("%Y-%m-%d"))
             if items:
                 for iid, name, score, cat in items:
-                    clr = "#2E8B57" if score < 3.0 else "#F9A825" if score < 7.0 else "#D32F2F"
+                    clr = COLORS['green'] if score < 3.0 else COLORS['yellow'] if score < 7.0 else COLORS['red']
                     col_item, col_del = st.columns([5, 1])
                     with col_item:
                         st.markdown(f"<div class='list-row'><span>{name}</span><strong style='color:{clr}'>{score}</strong></div>", unsafe_allow_html=True)
@@ -536,7 +648,7 @@ else:
         history = get_log_history_db(st.session_state.user_id)
         if history:
             for d, name, score, cat in history:
-                clr = "#2E8B57" if score < 3.0 else "#F9A825" if score < 7.0 else "#D32F2F"
+                clr = COLORS['green'] if score < 3.0 else COLORS['yellow'] if score < 7.0 else COLORS['red']
                 st.markdown(f"<div class='list-row'><span><b>{d}</b>: {name}</span><strong style='color:{clr}'>{score}</strong></div>", unsafe_allow_html=True)
         else:
             st.info("📭 No history yet. Start logging items!")
