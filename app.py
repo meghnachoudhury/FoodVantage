@@ -7,7 +7,6 @@ import calendar as cal_module
 import time
 from datetime import datetime
 from collections import defaultdict
-
 # Path resolution for local development
 sys.path.append(os.path.join(os.path.dirname(__file__), "src"))
 from gemini_api import *
