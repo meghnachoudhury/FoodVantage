@@ -22,7 +22,7 @@ if 'camera_active' not in st.session_state: st.session_state.camera_active = Fal
 if 'transitioning' not in st.session_state: st.session_state.transitioning = False
 if 'last_scan' not in st.session_state: st.session_state.last_scan = None
 
-# --- CSS (RESTORED + CENTERING HUD) ---
+# --- CSS (MATH CENTERING) ---
 st.markdown('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">', unsafe_allow_html=True)
 st.markdown("""
     <style>
@@ -30,27 +30,17 @@ st.markdown("""
     .logo-text { font-family: 'Arial Black', sans-serif; font-size: 3rem; letter-spacing: -2px; line-height: 1.0; margin-bottom: 0; }
     .logo-dot { color: #E2725B; }
     .card { background: white; padding: 24px; border-radius: 20px; border: 1px solid #EEE; box-shadow: 0 4px 12px rgba(0,0,0,0.04); margin-bottom: 20px; }
-    
-    /* Shelf Design */
-    .white-shelf { background: white; height: 30px; border-radius: 10px; border: 1px solid #EEE; margin-bottom: 20px; }
+    .white-shelf { background: white; height: 35px; border-radius: 10px; border: 1px solid #EEE; margin-bottom: 25px; }
 
-    /* MATHEMATICALLY CENTERED HUD RETICLE */
-    .scanner-wrapper { position: relative; width: 100%; display: flex; justify-content: center; align-items: center; }
-    .reticle {
-        position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-        width: 180px; height: 180px; border: 4px dashed #E2725B; border-radius: 24px;
-        z-index: 100; pointer-events: none;
-    }
+    /* PERFECT CENTERING WRAPPER */
+    .centered-wrapper { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; text-align: center; }
     
-    .hud-bubble {
-        background: white; padding: 10px 20px; border-radius: 50px;
-        box-shadow: 0 8px 24px rgba(0,0,0,0.1); margin-bottom: 10px;
-        border: 2px solid #E2725B; text-align: center;
-    }
-
+    .scanner-ui-container { position: relative; display: flex; justify-content: center; align-items: center; width: 100%; max-width: 500px; margin: 0 auto; border-radius: 20px; overflow: hidden; }
+    .reticle-square { position: absolute; width: 140px; height: 140px; border: 4px dashed #E2725B; border-radius: 20px; z-index: 100; pointer-events: none; }
+    
+    .hud-bubble { background: white; padding: 10px 20px; border-radius: 50px; box-shadow: 0 8px 24px rgba(0,0,0,0.1); margin-bottom: 10px; border: 2px solid #E2725B; text-align: center; font-weight: bold; }
     button[data-baseweb="tab"] p { color: black !important; font-weight: bold !important; }
     .welcome-subtitle { font-size: 22px; color: #2c3e50; font-weight: 600; text-align: center; }
-    .transition-text { font-family: 'Arial Black', sans-serif; font-size: 2.5rem; color: #2c3e50; text-align: center; margin-top: 20vh; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -77,7 +67,7 @@ def create_html_calendar(year, month, selected_day=None):
 if st.session_state.transitioning:
     p = st.empty()
     for dots in [".", "..", "...", ".", "..", "..."]:
-        p.markdown(f"<div class='transition-text'>Let us start your health journey{dots}</div>", unsafe_allow_html=True)
+        p.markdown(f"<div style='text-align:center; font-size:2.5rem; margin-top:20vh;'>Let us start your health journey{dots}</div>", unsafe_allow_html=True)
         time.sleep(0.4)
     st.session_state.transitioning = False; st.rerun()
 
@@ -121,29 +111,30 @@ else:
         st.markdown("<h3 style='text-align: center;'>Active Focus Scanner</h3>", unsafe_allow_html=True)
         st.markdown('<div class="white-shelf"></div>', unsafe_allow_html=True)
         
-        with st.container():
-            st.markdown('<div class="card" style="text-align:center;">', unsafe_allow_html=True)
-            if not st.session_state.camera_active:
-                st.markdown('<i class="fa fa-camera" style="font-size:150px; color:tomato; margin-bottom:20px;"></i>', unsafe_allow_html=True)
-                if st.button("Start Live Scan", type="primary", use_container_width=True):
-                    st.session_state.camera_active = True; st.rerun()
-            else:
-                if st.session_state.last_scan:
-                    ls = st.session_state.last_scan
-                    clr = "#2E8B57" if ls['rating']=="Metabolic Green" else "#F9A825" if ls['rating']=="Metabolic Yellow" else "#D32F2F"
-                    st.markdown(f"<div class='hud-bubble'><b>{ls['name']}</b> | <span style='color:{clr};'>{ls['vms_score']} {ls['rating']}</span></div>", unsafe_allow_html=True)
-                
-                st.markdown('<div class="scanner-wrapper">', unsafe_allow_html=True)
-                st.markdown('<div class="reticle"></div>', unsafe_allow_html=True)
-                image = back_camera_input(key="hud_cam")
-                st.markdown('</div>', unsafe_allow_html=True)
-                
-                if st.button("❌ Stop Scanning", use_container_width=True):
-                    st.session_state.camera_active = False; st.session_state.last_scan = None; st.rerun()
-                if image:
-                    res = vision_live_scan(image)
-                    if res: st.session_state.last_scan = res[0]
+        # --- CENTERED CAMERA LAYOUT ---
+        st.markdown('<div class="centered-wrapper">', unsafe_allow_html=True)
+        if not st.session_state.camera_active:
+            st.markdown('<i class="fa fa-camera" style="font-size:150px; color:tomato; margin-bottom:20px;"></i>', unsafe_allow_html=True)
+            if st.button("Start Live Scan", type="primary", use_container_width=True):
+                st.session_state.camera_active = True; st.rerun()
+        else:
+            if st.session_state.last_scan:
+                ls = st.session_state.last_scan
+                clr = "#2E8B57" if ls['rating']=="Metabolic Green" else "#F9A825" if ls['rating']=="Metabolic Yellow" else "#D32F2F"
+                st.markdown(f"<div class='hud-bubble'><b>{ls['name']}</b> | <span style='color:{clr};'>{ls['vms_score']} {ls['rating']}</span></div>", unsafe_allow_html=True)
+            
+            # THE HUD WIDGET
+            st.markdown('<div class="scanner-ui-container">', unsafe_allow_html=True)
+            st.markdown('<div class="reticle-square"></div>', unsafe_allow_html=True)
+            image = back_camera_input(key="hud_cam")
             st.markdown('</div>', unsafe_allow_html=True)
+            
+            if st.button("❌ Stop Scanning", use_container_width=True):
+                st.session_state.camera_active = False; st.session_state.last_scan = None; st.rerun()
+            if image:
+                res = vision_live_scan(image)
+                if res: st.session_state.last_scan = res[0]
+        st.markdown('</div>', unsafe_allow_html=True)
 
         if st.session_state.last_scan:
             with st.expander("📊 Metabolic Deep Dive", expanded=True):
@@ -182,7 +173,7 @@ else:
             for iid, name, score, cat in items:
                 col_c = "#2E8B57" if score < 3.0 else "#F9A825" if score < 7.0 else "#D32F2F"
                 cr, cd = st.columns([5, 1])
-                cr.markdown(f"""<div class='list-row'><span>{name}</span><span style='color:{col_c}; font-weight:bold;'>{score}</span></div>""", unsafe_allow_html=True)
+                cr.markdown(f"""<div style='display:flex; justify-content:space-between; align-items:center; padding:10px; background:#FFF; border-radius:12px; border:1px solid #F0F0F0; margin-bottom:8px;'><span>{name}</span><span style='color:{col_c}; font-weight:bold;'>{score}</span></div>""", unsafe_allow_html=True)
                 if cd.button("🗑️", key=f"d_{iid}"): delete_item_db(iid); st.rerun()
 
     elif st.session_state.page == 'log':
