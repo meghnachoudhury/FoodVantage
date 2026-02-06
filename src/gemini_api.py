@@ -30,11 +30,25 @@ def calculate_vms_science(row):
         is_liquid = any(x in n for x in ['juice', 'soda', 'cola', 'drink', 'beverage', 'smoothie'])
         is_dried = any(x in n for x in ['dried', 'dehydrated', 'raisin'])
         
-        is_superfood = any(x in n for x in ['salmon', 'lentils', 'beans', 'broccoli', 'egg', 'avocado', 'spinach', 'kale'])
+        # FIXED: Detect heavily processed foods that can't be superfoods
+        processed_indicators = ['biscuit', 'burger', 'sandwich', 'pizza', 'nugget', 'patty', 
+                               'fried', 'breaded', 'crispy', 'wrapped', 'stuffed', 'smothered',
+                               'cheesy', 'creamy', 'buttery', 'glazed', 'frosted', 'coated',
+                               'melt', 'loaded', 'supreme', 'deluxe', 'combo', 'platter']
+        
+        is_heavily_processed = any(word in n for word in processed_indicators) or nova_val >= 3
+        
+        # Only mark as superfood if NOT heavily processed
+        if not is_heavily_processed:
+            is_superfood = any(x in n for x in ['salmon', 'lentils', 'beans', 'broccoli', 'egg', 'avocado', 'spinach', 'kale'])
+        else:
+            is_superfood = False
+        
         is_dairy_plain = ('milk' in n or 'yogurt' in n) and sug < 5.0
         
-        is_whole_fresh = ((nova_val <= 2 or is_superfood or is_dairy_plain or is_fruit) 
-                         and not (is_liquid or is_dried))
+        # Whole fresh requires NOVA <= 2 AND not heavily processed
+        is_whole_fresh = ((nova_val <= 2 and (is_superfood or is_dairy_plain or is_fruit)) 
+                         and not (is_liquid or is_dried) and not is_heavily_processed)
 
         pts_energy = min(cal / 80, 10.0)
         pts_fat = min(fat / 2.0, 10.0) 
