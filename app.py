@@ -1,5 +1,7 @@
 import streamlit as st
-
+if "preview_ok" not in st.session_state:
+    st.session_state.preview_ok = True
+    st.stop()
 st.set_page_config(page_title="FoodVantage", page_icon="🥗", layout="wide", initial_sidebar_state="expanded")
 # Initialize phase
 if "phase" not in st.session_state:
