@@ -1,20 +1,4 @@
 import streamlit as st
-if "preview_ok" not in st.session_state:
-    st.session_state.preview_ok = True
-    st.stop()
-st.set_page_config(page_title="FoodVantage", page_icon="🥗", layout="wide", initial_sidebar_state="expanded")
-# Initialize phase
-if "phase" not in st.session_state:
-    st.session_state.phase = "launch"
-if st.session_state.phase == "launch":
-    st.title("FoodVantage 🥗")
-    st.caption("Smart food & nutrition insights")
-
-    if st.button("Launch App"):
-        st.session_state.phase = "login"
-        st.rerun()
-
-    st.stop()
 import sys
 import os
 import pandas as pd
@@ -23,7 +7,7 @@ import calendar as cal_module
 import time
 from datetime import datetime, timedelta
 import plotly.graph_objects as go
-
+st.set_page_config(page_title="FoodVantage", page_icon="🥗", layout="wide", initial_sidebar_state="expanded")
 sys.path.append(os.path.join(os.path.dirname(__file__), "src"))
 from gemini_api import *
 from streamlit_back_camera_input import back_camera_input
