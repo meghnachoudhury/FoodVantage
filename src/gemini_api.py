@@ -3,8 +3,8 @@ import os
 import zipfile
 import streamlit as st
 import hashlib
-from google import genai  # CORRECT: User's SDK version
-from google.genai import types  # CORRECT: User's SDK version
+from google import genai
+from google.genai import types
 from dotenv import load_dotenv
 from PIL import Image
 import io
@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 
 load_dotenv()
 
-# === 1. VMS ALGORITHM (ENHANCED FOR FIX 5) ===
+# === VMS ALGORITHM ===
 def calculate_vms_science(row):
     try:
         name, _, cal, sug, fib, prot, fat, sod, _, nova = row
@@ -25,35 +25,23 @@ def calculate_vms_science(row):
         
         common_fruits = ['apple', 'banana', 'orange', 'grape', 'strawberry', 'blueberry', 
                         'raspberry', 'mango', 'pineapple', 'watermelon', 'melon', 'kiwi',
-                        'peach', 'pear', 'plum', 'cherry', 'lime', 'lemon', 'grapefruit',
-                        'papaya', 'guava', 'passion fruit', 'dragon fruit', 'avocado']
+                        'peach', 'pear', 'plum', 'cherry', 'lime', 'lemon', 'grapefruit']
         
         is_fruit = any(fruit in n for fruit in common_fruits)
         is_liquid = any(x in n for x in ['juice', 'soda', 'cola', 'drink', 'beverage', 'smoothie'])
         is_dried = any(x in n for x in ['dried', 'dehydrated', 'raisin'])
         
-        # FIX 5: Enhanced processing detection for cooked foods
-        processed_indicators = [
-            'biscuit', 'burger', 'sandwich', 'pizza', 'nugget', 'patty', 
-            'fried', 'breaded', 'crispy', 'wrapped', 'stuffed', 'smothered',
-            'cheesy', 'creamy', 'buttery', 'glazed', 'frosted', 'coated',
-            'melt', 'loaded', 'supreme', 'deluxe', 'combo', 'platter',
-            # FIX 5: Add cooked food keywords
-            'cooked', 'grilled', 'baked', 'roasted', 'steamed', 'boiled',
-            'sauteed', 'plate', 'meal', 'dish', 'curry', 'stew', 'soup'
-        ]
+        processed_indicators = ['biscuit', 'burger', 'sandwich', 'pizza', 'nugget', 'patty', 
+            'fried', 'breaded', 'crispy', 'wrapped', 'stuffed', 'cooked', 'grilled', 'baked']
         
         is_heavily_processed = any(word in n for word in processed_indicators) or nova_val >= 3
         
-        # Only mark as superfood if NOT heavily processed
         if not is_heavily_processed:
             is_superfood = any(x in n for x in ['salmon', 'lentils', 'beans', 'broccoli', 'egg', 'avocado', 'spinach', 'kale'])
         else:
             is_superfood = False
         
         is_dairy_plain = ('milk' in n or 'yogurt' in n) and sug < 5.0
-        
-        # Whole fresh requires NOVA <= 2 AND not heavily processed
         is_whole_fresh = ((nova_val <= 2 and (is_superfood or is_dairy_plain or is_fruit)) 
                          and not (is_liquid or is_dried) and not is_heavily_processed)
 
@@ -78,7 +66,7 @@ def calculate_vms_science(row):
         return max(-2.0, min(10.0, score))
     except: return 5.0
 
-# === 2. DATABASE ACCESS ===
+# === DATABASE ===
 @st.cache_resource
 def get_scientific_db():
     zip_path, db_path = 'data/vantage_core.zip', '/tmp/data/vantage_core.db'
@@ -88,11 +76,7 @@ def get_scientific_db():
             zip_ref.extractall('/tmp/')
     return duckdb.connect(db_path, read_only=True)
 
-def search_vantage_db(product_name: str, limit=5):
-    """
-    FIX 3: Returns up to 20 results (increased from 5)
-    Returns top results with full product names
-    """
+def search_vantage_db(product_name: str, limit=20):
     con = get_scientific_db()
     if not con: return None
     try:
@@ -105,24 +89,24 @@ def search_vantage_db(product_name: str, limit=5):
                 CASE 
                     WHEN LOWER(product_name) = LOWER('{safe_name}') THEN 0
                     WHEN product_name NOT LIKE '%,%' AND (brand IS NULL OR brand = '') THEN 1
-                    WHEN LENGTH(product_name) - LENGTH(REPLACE(product_name, ' ', '')) <= 2 THEN 2
-                    ELSE 3
+                    ELSE 2
                 END,
-                LENGTH(product_name),
-                sugar DESC
+                LENGTH(product_name)
             LIMIT {limit}
         """
         
         results = con.execute(query).fetchall()
         
-        # If no results in local DB, try Open Food Facts API
-        if not results or len(results) == 0:
-            print(f"[DB] No results in local database, trying Open Food Facts...")
+        if not results:
+            print(f"[DB] No results, trying Open Food Facts...")
             return search_open_food_facts(product_name, limit)
         
         output = []
         for r in results:
             score = calculate_vms_science(r)
+            if score == 10.0:  # Skip default scores
+                continue
+                
             rating = "Metabolic Green" if score < 3.0 else "Metabolic Yellow" if score < 7.0 else "Metabolic Red"
             
             full_name = r[0].title()
@@ -141,83 +125,43 @@ def search_vantage_db(product_name: str, limit=5):
                 "raw": r
             })
         
-        return output
+        return output if output else None
         
     except Exception as e:
         print(f"[DB ERROR] {e}")
-        import traceback
-        traceback.print_exc()
         return None
 
 def search_open_food_facts(product_name: str, limit=5):
-    """
-    FIX 7: Fallback to Open Food Facts API with better error handling
-    """
     try:
-        search_term = product_name.lower().strip()
-        search_term = search_term.replace("'", "").replace('"', '').replace("'s", "s")
+        search_term = product_name.lower().strip().replace("'", "")
         
-        print(f"\n[OPEN FOOD FACTS] ==================")
-        print(f"[OPEN FOOD FACTS] Original query: '{product_name}'")
-        print(f"[OPEN FOOD FACTS] Cleaned query: '{search_term}'")
+        url = "https://world.openfoodfacts.org/cgi/search.pl"
+        params = {
+            "search_terms": search_term,
+            "page_size": limit * 2,
+            "json": 1,
+            "fields": "product_name,brands,nutriments,nova_group"
+        }
         
-        # Try multiple search strategies
-        search_attempts = [
-            search_term,
-            " ".join(search_term.split()[:3]),
-            search_term.split()[0] if search_term.split() else search_term
-        ]
+        response = requests.get(url, params=params, timeout=10)
         
-        all_products = []
-        
-        for attempt_num, term in enumerate(search_attempts):
-            if not term or len(term) < 3:
-                continue
-                
-            print(f"[OPEN FOOD FACTS] Attempt {attempt_num + 1}: '{term}'")
-            
-            url = "https://world.openfoodfacts.org/cgi/search.pl"
-            params = {
-                "search_terms": term,
-                "page_size": limit * 3,
-                "json": 1,
-                "fields": "product_name,brands,nutriments,nova_group"
-            }
-            
-            try:
-                response = requests.get(url, params=params, timeout=10)
-                print(f"[OPEN FOOD FACTS] Status code: {response.status_code}")
-                
-                if response.status_code == 200:
-                    data = response.json()
-                    products = data.get('products', [])
-                    print(f"[OPEN FOOD FACTS] Found {len(products)} raw results")
-                    
-                    if products:
-                        all_products.extend(products)
-                        if len(all_products) >= limit:
-                            break
-                            
-            except requests.Timeout:
-                print(f"[OPEN FOOD FACTS] Timeout on attempt {attempt_num + 1}")
-                continue
-            except Exception as e:
-                print(f"[OPEN FOOD FACTS] Error on attempt {attempt_num + 1}: {e}")
-                continue
-        
-        if not all_products:
-            print(f"[OPEN FOOD FACTS] No results found after all attempts")
+        if response.status_code != 200:
             return None
         
-        # Process results
+        data = response.json()
+        products = data.get('products', [])
+        
+        if not products:
+            return None
+        
         output = []
         seen_names = set()
         
-        for p in all_products[:limit * 2]:
+        for p in products[:limit * 2]:
             try:
                 nutriments = p.get('nutriments', {})
-                
                 name = p.get('product_name', '').strip()
+                
                 if not name or name in seen_names:
                     continue
                 seen_names.add(name)
@@ -233,10 +177,12 @@ def search_open_food_facts(product_name: str, limit=5):
                 nova = int(p.get('nova_group', 3) or 3)
                 
                 row = [name, brand, calories, sugar, fiber, protein, fat, sodium, None, nova]
-                
                 score = calculate_vms_science(row)
-                rating = "Metabolic Green" if score < 3.0 else "Metabolic Yellow" if score < 7.0 else "Metabolic Red"
                 
+                if score == 10.0:
+                    continue
+                
+                rating = "Metabolic Green" if score < 3.0 else "Metabolic Yellow" if score < 7.0 else "Metabolic Red"
                 display_name = f"{brand.title()} {name.title()}" if brand else name.title()
                 
                 output.append({
@@ -247,250 +193,92 @@ def search_open_food_facts(product_name: str, limit=5):
                     "raw": row
                 })
                 
-                print(f"[OPEN FOOD FACTS] ✅ Added: {display_name} (Score: {score})")
-                
                 if len(output) >= limit:
                     break
                 
-            except Exception as e:
-                print(f"[OPEN FOOD FACTS] Error processing product: {e}")
+            except:
                 continue
         
-        if output:
-            print(f"[OPEN FOOD FACTS] Successfully processed {len(output)} products")
-            return output
-        else:
-            print(f"[OPEN FOOD FACTS] No valid products after processing")
-            return None
+        return output if output else None
         
-    except Exception as e:
-        print(f"[OPEN FOOD FACTS] Fatal error: {e}")
-        import traceback
-        traceback.print_exc()
+    except:
         return None
 
-# === 3. SCANNER WITH ENHANCED DETECTION (FIX 3, 6) ===
+# === SIMPLE SCANNER ===
 def vision_live_scan_dark(image_bytes):
-    """
-    FIX 3: Enhanced to detect ALL items in frame with accurate counting
-    FIX 6: Status tracking for in-widget display
-    """
+    """SIMPLE WORKING VERSION - No fancy features"""
     api_key = get_gemini_api_key()
     if not api_key: 
-        st.markdown("""
-            <div class="scanner-result">
-                <div class="scanner-result-title">⚠️ Configuration Error</div>
-                <div class="scanner-result-text">No Gemini API key configured</div>
-            </div>
-        """, unsafe_allow_html=True)
+        st.error("No API key configured")
         return None
     
     try:
-        # Handle different input types
+        # Convert to PIL Image
         if isinstance(image_bytes, io.BytesIO):
             image_bytes = image_bytes.getvalue()
         elif hasattr(image_bytes, 'read'):
             image_bytes = image_bytes.read()
         
-        print(f"[DEBUG] Image type: {type(image_bytes)}, size: {len(image_bytes)} bytes")
-        
-        # Convert to PIL Image
         img = Image.open(io.BytesIO(image_bytes))
-        w, h = img.size
-        print(f"[DEBUG] Image dimensions: {w}x{h}, mode: {img.mode}")
         
         # Convert to RGB
-        if img.mode == 'RGBA':
-            print("[DEBUG] Converting RGBA to RGB...")
-            background = Image.new('RGB', img.size, (255, 255, 255))
-            background.paste(img, mask=img.split()[3] if len(img.split()) == 4 else None)
-            img = background
-        elif img.mode == 'LA':
-            print("[DEBUG] Converting LA to RGB...")
-            background = Image.new('RGB', img.size, (255, 255, 255))
-            background.paste(img, mask=img.split()[1])
-            img = background
-        elif img.mode != 'RGB':
-            print(f"[DEBUG] Converting {img.mode} to RGB...")
-            img = img.convert('RGB')
-        
-        # Minimal crop (10% edges) to avoid UI elements, but scan most of frame
-        left = int(w * 0.05)
-        top = int(h * 0.05)
-        right = int(w * 0.95)
-        bottom = int(h * 0.95)
-        img_cropped = img.crop((left, top, right, bottom))
-        
-        # Enhance image
-        from PIL import ImageEnhance
-        enhancer = ImageEnhance.Contrast(img_cropped)
-        img_cropped = enhancer.enhance(1.5)
-        enhancer = ImageEnhance.Brightness(img_cropped)
-        img_cropped = enhancer.enhance(1.2)
-        
-        # Final RGB check
-        if img_cropped.mode != 'RGB':
-            img_cropped = img_cropped.convert('RGB')
+        if img.mode != 'RGB':
+            if img.mode == 'RGBA':
+                background = Image.new('RGB', img.size, (255, 255, 255))
+                background.paste(img, mask=img.split()[3])
+                img = background
+            else:
+                img = img.convert('RGB')
         
         # Convert to base64
         buf = io.BytesIO()
-        img_cropped.save(buf, format="JPEG", quality=95)
+        img.save(buf, format="JPEG", quality=90)
         buf.seek(0)
-        img_bytes = buf.read()
-        img_b64 = base64.b64encode(img_bytes).decode('utf-8')
+        img_b64 = base64.b64encode(buf.read()).decode('utf-8')
         
-        # Enhanced prompt for whole-frame detection
-        prompt = """You are a food detection AI. Identify ALL food items visible in this image.
-
-CRITICAL RULES:
-1. Count EACH item separately (1 apple, 2 bananas = 3 total items)
-2. For PACKAGED goods: Use exact product name from label
-3. For FRESH produce: Use common name, count each piece
-4. List ALL items you see in the frame
-5. Scan the ENTIRE visible area
-
-Return a JSON array like: ["Apple", "Banana", "Banana", "Orange", "Coca Cola"]
-
-If you see 2 apples, list "Apple" twice.
-Be PRECISE. Return ONLY the JSON array, no other text."""
+        # SIMPLE prompt
+        prompt = "Identify the main food item in this image. Return ONLY the product name, nothing else."
         
-        # CORRECT: Use user's SDK format
+        # Call Gemini
         client = genai.Client(api_key=api_key)
         
-        print("[DEBUG] Calling Gemini API...")
-        
-        # DARK themed analyzing message
-        st.markdown("""
-            <div class="scanner-result">
-                <div class="scanner-result-title">🔍 Analyzing Image</div>
-                <div class="scanner-result-text">Processing with Gemini AI...</div>
-            </div>
-        """, unsafe_allow_html=True)
-        
-        try:
-            response = client.models.generate_content(
-                model="gemini-3-flash-preview",
-                contents=types.Content(
-                    parts=[
-                        types.Part(text=prompt),
-                        types.Part(
-                            inline_data=types.Blob(
-                                mime_type="image/jpeg",
-                                data=img_b64
-                            )
+        response = client.models.generate_content(
+            model="gemini-3-flash-preview",
+            contents=types.Content(
+                parts=[
+                    types.Part(text=prompt),
+                    types.Part(
+                        inline_data=types.Blob(
+                            mime_type="image/jpeg",
+                            data=img_b64
                         )
-                    ]
-                )
+                    )
+                ]
             )
-            
-            response_text = response.text.strip()
-            print(f"[GEMINI] Raw response: {response_text}")
-            
-            # FIX 3: Parse JSON array of items
-            import re
-            json_match = re.search(r'\[.*?\]', response_text, re.DOTALL)
-            if json_match:
-                items_json = json_match.group(0)
-                # Safe eval since we control the format
-                detected_items = eval(items_json)
-                print(f"✅ [GEMINI] Detected {len(detected_items)} items: {detected_items}")
-            else:
-                # Fallback to single item
-                product_name = response_text.replace('"', '').replace('*', '').replace('.', '')
-                detected_items = [product_name]
-                print(f"✅ [GEMINI] Single item detected: {product_name}")
-            
-            # DARK themed detection message
-            items_display = ", ".join(detected_items[:3])
-            if len(detected_items) > 3:
-                items_display += f" +{len(detected_items) - 3} more"
-                
-            st.markdown(f"""
-                <div class="scanner-result">
-                    <div class="scanner-result-title">👁️ Items Detected</div>
-                    <div class="scanner-result-text">{items_display}</div>
-                </div>
-            """, unsafe_allow_html=True)
-            
-        except Exception as gemini_error:
-            print(f"[GEMINI ERROR] {gemini_error}")
-            # Fallback: treat as single item
-            response = client.models.generate_content(
-                model="gemini-3-flash-preview",
-                contents={
-                    "parts": [
-                        {"text": prompt},
-                        {"inline_data": {"mime_type": "image/jpeg", "data": img_b64}}
-                    ]
-                }
-            )
-            product_name = response.text.strip().replace('"', '').replace('*', '').replace('.', '')
-            detected_items = [product_name]
-            print(f"✅ [GEMINI] Fallback single item: {product_name}")
+        )
         
-        # FIX 3: Search for ALL detected items
-        all_results = []
-        for item in detected_items:
-            results = search_vantage_db(item, limit=1)
-            if results and len(results) > 0:
-                # FIX: Filter 10.0 default scores
-                for r in results:
-                    if r['vms_score'] != 10.0:
-                        all_results.append(r)
+        product_name = response.text.strip().replace('"', '').replace('*', '').replace('.', '')
+        print(f"[GEMINI] Detected: {product_name}")
         
-        if all_results:
-            print(f"✅ [DATABASE] Found {len(all_results)} total matches")
-            
-            # DARK themed success message
-            st.markdown(f"""
-                <div class="scanner-result">
-                    <div class="scanner-result-title">✅ Database Match</div>
-                    <div class="scanner-result-text">Found {len(all_results)} item(s)</div>
-                </div>
-            """, unsafe_allow_html=True)
-            
-            return all_results
+        # Search database
+        results = search_vantage_db(product_name, limit=5)
+        
+        if results:
+            print(f"[DATABASE] Found {len(results)} matches")
+            return results
         else:
-            print(f"❌ [DATABASE] No matches found")
-            
-            # FIX 7: Friendly error message
-            st.markdown(f"""
-                <div class="scanner-result" style="border-left-color: #D4765E;">
-                    <div class="scanner-result-title">🔍 Item Not Found Yet</div>
-                    <div class="scanner-result-text">We're constantly expanding our database with new products.</div>
-                    <div style="font-size: 0.9rem; color: #666; margin-top: 8px;">
-                        Try: Repositioning • Better lighting • Different angle
-                    </div>
-                </div>
-            """, unsafe_allow_html=True)
-            
+            print(f"[DATABASE] No matches found")
+            st.warning(f"🔍 Item not found yet. Our database is expanding daily!")
             return None
         
     except Exception as e:
-        error_msg = str(e)
-        print(f"❌ [SCAN ERROR] {error_msg}")
+        print(f"[SCAN ERROR] {e}")
         import traceback
         traceback.print_exc()
-        
-        # Better error handling for API quota
-        if "429" in error_msg or "quota" in error_msg.lower() or "RESOURCE_EXHAUSTED" in error_msg:
-            st.markdown(f"""
-                <div class="scanner-result" style="border-left-color: #D4765E;">
-                    <div class="scanner-result-title">⚠️ API Limit Reached</div>
-                    <div class="scanner-result-text">High demand detected. Please try again in a few moments.</div>
-                </div>
-            """, unsafe_allow_html=True)
-        else:
-            st.markdown(f"""
-                <div class="scanner-result" style="border-left-color: #D4765E;">
-                    <div class="scanner-result-title">⚠️ Scan Error</div>
-                    <div class="scanner-result-text">{error_msg[:150]}</div>
-                </div>
-            """, unsafe_allow_html=True)
-        
+        st.error(f"Scan error: {str(e)[:100]}")
         return None
 
-# === 4. USER DB & TRENDS ===
+# === USER DB ===
 @st.cache_resource
 def get_db_connection():
     con = duckdb.connect('/tmp/user_data.db', read_only=False)
@@ -501,16 +289,10 @@ def get_db_connection():
     return con
 
 def get_trend_data_db(username, days=30):
-    """Use DuckDB-compatible date math"""
     con = get_db_connection()
     try:
         threshold_date = datetime.now().date() - timedelta(days=days - 1)
         threshold_str = threshold_date.strftime('%Y-%m-%d')
-        
-        print(f"\n[TRENDS] ==================")
-        print(f"[TRENDS] Username: {username}")
-        print(f"[TRENDS] Looking for items since: {threshold_str}")
-        print(f"[TRENDS] Days requested: {days}")
         
         results = con.execute("""
             SELECT date, category, COUNT(*) as count
@@ -520,33 +302,10 @@ def get_trend_data_db(username, days=30):
             ORDER BY date ASC
         """, [username, threshold_str]).fetchall()
         
-        print(f"[TRENDS] Found {len(results)} result rows")
-        print(f"[TRENDS] ==================\n")
-        
         return results
-        
-    except Exception as e:
-        print(f"[TRENDS ERROR] {e}")
-        import traceback
-        traceback.print_exc()
+    except:
         return []
 
-def get_all_calendar_data_db(username):
-    """Get ALL calendar items for debugging"""
-    con = get_db_connection()
-    try:
-        results = con.execute("""
-            SELECT date, item_name, score, category 
-            FROM calendar 
-            WHERE username = ? 
-            ORDER BY date DESC
-        """, [username]).fetchall()
-        return results
-    except Exception as e:
-        print(f"[ALL CALENDAR ERROR] {e}")
-        return []
-
-# === 5. AUTH HELPERS ===
 def get_gemini_api_key():
     if hasattr(st, 'secrets') and "GEMINI_API_KEY" in st.secrets: 
         return st.secrets["GEMINI_API_KEY"]
@@ -557,11 +316,8 @@ def authenticate_user(username, password):
         con = get_db_connection()
         pwd_hash = hashlib.sha256(password.encode()).hexdigest()
         result = con.execute("SELECT * FROM users WHERE username = ? AND password_hash = ?", [username, pwd_hash]).fetchone()
-        is_valid = result is not None
-        print(f"[AUTH] Login attempt for '{username}': {'SUCCESS' if is_valid else 'FAILED'}")
-        return is_valid
-    except Exception as e:
-        print(f"[AUTH ERROR] {e}")
+        return result is not None
+    except:
         return False
 
 def add_calendar_item_db(username, date_str, item_name, score):
@@ -570,7 +326,6 @@ def add_calendar_item_db(username, date_str, item_name, score):
         category = 'healthy' if score < 3.0 else 'moderate' if score < 7.0 else 'unhealthy'
         con.execute("INSERT INTO calendar (username, date, item_name, score, category) VALUES (?, ?, ?, ?, ?)", 
                    [username, date_str, item_name, score, category])
-        print(f"[CALENDAR] Added: {item_name} ({score}) for {username} on {date_str}")
     except Exception as e:
         print(f"[CALENDAR ERROR] {e}")
 
@@ -579,25 +334,22 @@ def get_calendar_items_db(username, date_str):
         con = get_db_connection()
         return con.execute("SELECT id, item_name, score, category FROM calendar WHERE username = ? AND date = ?", 
                           [username, date_str]).fetchall()
-    except Exception as e:
-        print(f"[CALENDAR ERROR] {e}")
+    except:
         return []
 
 def delete_item_db(item_id):
     try:
         con = get_db_connection()
         con.execute("DELETE FROM calendar WHERE id = ?", [item_id])
-        print(f"[CALENDAR] Deleted item ID: {item_id}")
     except Exception as e:
-        print(f"[CALENDAR ERROR] {e}")
+        print(f"[DELETE ERROR] {e}")
 
 def get_log_history_db(username):
     try:
         con = get_db_connection()
         return con.execute("SELECT date, item_name, score, category FROM calendar WHERE username = ? ORDER BY date DESC", 
                           [username]).fetchall()
-    except Exception as e:
-        print(f"[LOG ERROR] {e}")
+    except:
         return []
 
 def create_user(username, password):
@@ -605,12 +357,9 @@ def create_user(username, password):
         con = get_db_connection()
         exists = con.execute("SELECT * FROM users WHERE username = ?", [username]).fetchone()
         if exists: 
-            print(f"[AUTH] User '{username}' already exists")
             return False
         pwd_hash = hashlib.sha256(password.encode()).hexdigest()
         con.execute("INSERT INTO users VALUES (?, ?)", [username, pwd_hash])
-        print(f"[AUTH] Created new user: '{username}'")
         return True
-    except Exception as e:
-        print(f"[AUTH ERROR] Failed to create user '{username}': {e}")
+    except:
         return False
