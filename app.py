@@ -137,69 +137,6 @@ st.markdown(f"""
         color: #1A1A1A !important;
     }}
 
-    /* FIX 4: FOCUS SQUARE - JavaScript positioned to overlay video */
-    .focus-square {{
-        position: fixed;
-        width: 200px;
-        height: 200px;
-        border: 3px solid {COLORS['terracotta']};
-        border-radius: 20px;
-        pointer-events: none;
-        z-index: 100;
-        display: none; /* Hidden until JS positions it */
-        box-shadow: 0 0 0 9999px rgba(0,0,0,0.3);
-    }}
-    
-    .focus-square::before,
-    .focus-square::after {{
-        content: '';
-        position: absolute;
-        background: {COLORS['terracotta']};
-    }}
-    
-    .focus-square::before {{
-        top: -3px;
-        left: 50%;
-        transform: translateX(-50%);
-        width: 30px;
-        height: 3px;
-    }}
-    
-    .focus-square::after {{
-        left: -3px;
-        top: 50%;
-        transform: translateY(-50%);
-        height: 30px;
-        width: 3px;
-    }}
-
-    /* FIX 6: Status messages overlaying camera - will be positioned by JavaScript */
-    .scan-status-overlay {{
-        position: fixed;
-        background: rgba(107, 126, 84, 0.95);
-        color: white;
-        padding: 12px 24px;
-        border-radius: 25px;
-        font-weight: 600;
-        z-index: 200;
-        animation: fadeIn 0.3s ease-in;
-    }}
-    
-    .product-detected-overlay {{
-        position: fixed;
-        background: rgba(212, 118, 94, 0.95);
-        color: white;
-        padding: 10px 20px;
-        border-radius: 20px;
-        font-weight: 600;
-        z-index: 200;
-        animation: fadeIn 0.3s ease-in;
-    }}
-    
-    @keyframes fadeIn {{
-        from {{ opacity: 0; transform: translateX(-50%) translateY(-10px); }}
-        to {{ opacity: 1; transform: translateX(-50%) translateY(0); }}
-    }}
     
     .hud-bubble {{
         position: fixed;
@@ -216,7 +153,7 @@ st.markdown(f"""
         min-width: 220px;
     }}
     
-    /* FIX 3: Scrollable results container */
+    /* Scrollable results container */
     .results-scroll-container {{
         max-height: 400px;
         overflow-y: auto;
@@ -415,81 +352,69 @@ if st.session_state.page == 'dashboard':
                 </div>
             """, unsafe_allow_html=True)
 
-        # FIX 4 & 6: Camera with focus square and status overlays using JavaScript
+            # Camera widget
+        image = back_camera_input(key="hud_cam")
+        
+        # Status messages
+        if st.session_state.get('scan_status') == "analyzing":
+            st.info("🔍 Analyzing Image...")
+        
+        if st.session_state.get('detected_items'):
+            items_text = ", ".join(st.session_state.detected_items[:3])
+            st.success(f"👁️ Detected: {items_text}")
+        
+        # SIMPLE FOCUS SQUARE - appears after camera loads
         st.markdown("""
-            <div id="camera-wrapper" style="position: relative; width: 100%; max-width: 640px; margin: 0 auto;">
-                <div class="focus-square" id="focus-square"></div>
-            </div>
-            <script>
-                // Position focus square and overlays relative to video element
-                function positionElements() {
-                    const video = document.querySelector('video');
-                    const square = document.getElementById('focus-square');
-                    
-                    if (video && square) {
-                        const rect = video.getBoundingClientRect();
-                        const squareSize = 200;
-                        
-                        // Position focus square at 70% from top of video
-                        const topPosition = rect.top + (rect.height * 0.7) - (squareSize / 2);
-                        const leftPosition = rect.left + (rect.width / 2) - (squareSize / 2);
-                        
-                        square.style.position = 'fixed';
-                        square.style.top = topPosition + 'px';
-                        square.style.left = leftPosition + 'px';
-                        square.style.width = squareSize + 'px';
-                        square.style.height = squareSize + 'px';
-                        square.style.display = 'block';
-                        
-                        // Position status overlays if they exist
-                        const scanStatus = document.querySelector('.scan-status-overlay');
-                        if (scanStatus) {
-                            scanStatus.style.top = (rect.top + 20) + 'px';
-                            scanStatus.style.left = (rect.left + rect.width / 2) + 'px';
-                            scanStatus.style.transform = 'translateX(-50%)';
-                        }
-                        
-                        const productDetected = document.querySelector('.product-detected-overlay');
-                        if (productDetected) {
-                            productDetected.style.top = (rect.top + 70) + 'px';
-                            productDetected.style.left = (rect.left + rect.width / 2) + 'px';
-                            productDetected.style.transform = 'translateX(-50%)';
-                        }
-                    }
+            <style>
+                [data-testid="stCameraInput"] {
+                    position: relative !important;
                 }
-                
-                // Run positioning multiple times as page loads
-                setTimeout(positionElements, 100);
-                setTimeout(positionElements, 500);
-                setTimeout(positionElements, 1000);
-                setTimeout(positionElements, 2000);
-                
-                // Update on resize and scroll
-                window.addEventListener('resize', positionElements);
-                window.addEventListener('scroll', positionElements);
-                
-                // Continuous positioning for dynamic updates
-                setInterval(positionElements, 500);
+                .simple-focus-square {
+                    position: absolute;
+                    top: 70%;
+                    left: 50%;
+                    transform: translate(-50%, -50%);
+                    width: 200px;
+                    height: 200px;
+                    border: 3px solid #D4765E;
+                    border-radius: 20px;
+                    pointer-events: none;
+                    z-index: 1000;
+                    box-shadow: 0 0 0 9999px rgba(0,0,0,0.3);
+                }
+                .simple-focus-square::before {
+                    content: '';
+                    position: absolute;
+                    top: -3px;
+                    left: 50%;
+                    transform: translateX(-50%);
+                    width: 30px;
+                    height: 3px;
+                    background: #D4765E;
+                }
+                .simple-focus-square::after {
+                    content: '';
+                    position: absolute;
+                    left: -3px;
+                    top: 50%;
+                    transform: translateY(-50%);
+                    height: 30px;
+                    width: 3px;
+                    background: #D4765E;
+                }
+            </style>
+            <script>
+                setTimeout(function() {
+                    const camera = document.querySelector('[data-testid="stCameraInput"]');
+                    if (camera && !document.getElementById('focus-overlay')) {
+                        const overlay = document.createElement('div');
+                        overlay.id = 'focus-overlay';
+                        overlay.className = 'simple-focus-square';
+                        camera.appendChild(overlay);
+                    }
+                }, 500);
             </script>
         """, unsafe_allow_html=True)
-        
-        # FIX 6: Status overlays INSIDE camera view
-        if st.session_state.scan_status == "analyzing":
-            st.markdown("""
-                <div class="scan-status-overlay">
-                    🔍 Analyzing Image...
-                </div>
-            """, unsafe_allow_html=True)
-        
-        if st.session_state.detected_items:
-            items_text = ", ".join(st.session_state.detected_items[:3])
-            st.markdown(f"""
-                <div class="product-detected-overlay">
-                    👁️ Detected: {items_text}
-                </div>
-            """, unsafe_allow_html=True)
-        
-        image = back_camera_input(key="hud_cam")
         
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
@@ -761,29 +686,3 @@ elif st.session_state.page == 'log':
             st.markdown(f"<div class='list-row'><span><b>{d}</b>: {name}</span><strong style='color:{clr}'>{score}</strong></div>", unsafe_allow_html=True)
     else:
         st.info("📭 No history yet. Start logging items!")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
