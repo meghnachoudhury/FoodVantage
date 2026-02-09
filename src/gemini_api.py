@@ -626,7 +626,7 @@ Return ONLY valid JSON array, no other text:
         print(f"❌ [INSIGHTS ERROR] {e}")
         import traceback
         traceback.print_exc()
-        return None
+        raise  # Re-raise so the UI can display the actual error
 
 
 # === 3C. AI MEAL PLANNING AGENT ===
@@ -733,7 +733,7 @@ Return ONLY valid JSON, no other text:
         print(f"❌ [MEAL PLAN ERROR] {e}")
         import traceback
         traceback.print_exc()
-        return None
+        raise  # Re-raise so the UI can display the actual error
 
 
 # === 4. USER DB & TRENDS ===
