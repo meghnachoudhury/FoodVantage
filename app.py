@@ -147,12 +147,12 @@ st.markdown(f"""
     
     .focus-square {{
         position: absolute;
-        top: 50%;
+        top: 70%;
         left: 50%;
         transform: translate(-50%, -50%);
         width: 200px;
         height: 200px;
-        border: 3px solid {COLORS['terracotta']};
+        border: 3px solid {COLORS['red']};
         border-radius: 20px;
         pointer-events: none;
         z-index: 100;
