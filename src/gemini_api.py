@@ -369,7 +369,7 @@ Be PRECISE. Return ONLY the JSON array, no other text."""
         
         try:
             response = client.models.generate_content(
-                model="gemini-3-flash-preview",
+                model="gemini-2.0-flash-exp",
                 contents=types.Content(
                     parts=[
                         types.Part(text=prompt),
