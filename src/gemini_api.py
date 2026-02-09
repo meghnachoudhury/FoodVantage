@@ -10,6 +10,7 @@ from PIL import Image
 import io
 import base64
 import requests
+import time
 from datetime import datetime, timedelta
 
 load_dotenv()
@@ -204,12 +205,14 @@ def search_open_food_facts(product_name: str, limit=5):
     except:
         return None
 
-# === SIMPLE SCANNER ===
+# === FIXED SCANNER WITH TIMEOUT ===
 def vision_live_scan_dark(image_bytes):
-    """SIMPLE WORKING VERSION - No fancy features"""
+    """FIXED VERSION - Added timeout and better error handling"""
+    import time
+    
     api_key = get_gemini_api_key()
     if not api_key: 
-        st.error("No API key configured")
+        st.error("⚠️ No API key configured")
         return None
     
     try:
@@ -219,7 +222,10 @@ def vision_live_scan_dark(image_bytes):
         elif hasattr(image_bytes, 'read'):
             image_bytes = image_bytes.read()
         
+        print(f"[DEBUG] Image size: {len(image_bytes)} bytes")
+        
         img = Image.open(io.BytesIO(image_bytes))
+        print(f"[DEBUG] Image dimensions: {img.size}, mode: {img.mode}")
         
         # Convert to RGB
         if img.mode != 'RGB':
@@ -230,37 +236,70 @@ def vision_live_scan_dark(image_bytes):
             else:
                 img = img.convert('RGB')
         
+        # Resize if too large (helps with speed)
+        max_size = 1024
+        if img.width > max_size or img.height > max_size:
+            img.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
+            print(f"[DEBUG] Resized to: {img.size}")
+        
         # Convert to base64
         buf = io.BytesIO()
-        img.save(buf, format="JPEG", quality=90)
+        img.save(buf, format="JPEG", quality=85)
         buf.seek(0)
         img_b64 = base64.b64encode(buf.read()).decode('utf-8')
+        print(f"[DEBUG] Base64 size: {len(img_b64)} chars")
         
         # SIMPLE prompt
-        prompt = "Identify the main food item in this image. Return ONLY the product name, nothing else."
+        prompt = "What food item is in this image? Reply with just the name."
         
-        # Call Gemini
+        # Call Gemini with timeout handling
         client = genai.Client(api_key=api_key)
         
-        response = client.models.generate_content(
-            model="gemini-3-flash-preview",
-            contents=types.Content(
-                parts=[
-                    types.Part(text=prompt),
-                    types.Part(
-                        inline_data=types.Blob(
-                            mime_type="image/jpeg",
-                            data=img_b64
+        print("[DEBUG] Calling Gemini API...")
+        start_time = time.time()
+        
+        try:
+            response = client.models.generate_content(
+                model="gemini-3-flash-preview",
+                contents=types.Content(
+                    parts=[
+                        types.Part(text=prompt),
+                        types.Part(
+                            inline_data=types.Blob(
+                                mime_type="image/jpeg",
+                                data=img_b64
+                            )
                         )
-                    )
-                ]
+                    ]
+                ),
+                config=types.GenerateContentConfig(
+                    temperature=0.1,
+                    max_output_tokens=50
+                )
             )
-        )
+            
+            elapsed = time.time() - start_time
+            print(f"[DEBUG] Gemini responded in {elapsed:.2f}s")
+            
+        except Exception as api_error:
+            print(f"[API ERROR] {api_error}")
+            st.error(f"⚠️ API Error: {str(api_error)[:100]}")
+            
+            # Check for quota errors
+            if "429" in str(api_error) or "quota" in str(api_error).lower():
+                st.warning("🔥 API quota limit reached. Please wait a moment and try again.")
+            
+            return None
         
         product_name = response.text.strip().replace('"', '').replace('*', '').replace('.', '')
         print(f"[GEMINI] Detected: {product_name}")
         
+        if not product_name or len(product_name) < 2:
+            st.warning("⚠️ Could not identify item. Try repositioning.")
+            return None
+        
         # Search database
+        print(f"[DATABASE] Searching for: {product_name}")
         results = search_vantage_db(product_name, limit=5)
         
         if results:
@@ -268,14 +307,23 @@ def vision_live_scan_dark(image_bytes):
             return results
         else:
             print(f"[DATABASE] No matches found")
-            st.warning(f"🔍 Item not found yet. Our database is expanding daily!")
+            st.warning(f"🔍 '{product_name}' not in database yet. Try a different item!")
             return None
         
     except Exception as e:
-        print(f"[SCAN ERROR] {e}")
+        error_msg = str(e)
+        print(f"[SCAN ERROR] {error_msg}")
         import traceback
         traceback.print_exc()
-        st.error(f"Scan error: {str(e)[:100]}")
+        
+        # Show helpful error to user
+        if "connection" in error_msg.lower() or "timeout" in error_msg.lower():
+            st.error("⚠️ Network error. Check your internet connection.")
+        elif "invalid" in error_msg.lower() or "format" in error_msg.lower():
+            st.error("⚠️ Image format error. Try taking a new photo.")
+        else:
+            st.error(f"⚠️ Error: {error_msg[:150]}")
+        
         return None
 
 # === USER DB ===
@@ -304,6 +352,21 @@ def get_trend_data_db(username, days=30):
         
         return results
     except:
+        return []
+
+def get_all_calendar_data_db(username):
+    """Get ALL calendar items for debugging"""
+    con = get_db_connection()
+    try:
+        results = con.execute("""
+            SELECT date, item_name, score, category 
+            FROM calendar 
+            WHERE username = ? 
+            ORDER BY date DESC
+        """, [username]).fetchall()
+        return results
+    except Exception as e:
+        print(f"[ALL CALENDAR ERROR] {e}")
         return []
 
 def get_gemini_api_key():
