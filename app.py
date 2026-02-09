@@ -387,21 +387,22 @@ if st.session_state.page == 'dashboard':
             st.session_state.scan_count += 1
             
             if st.session_state.scan_count % 2 == 0:
-                # FIX 6: Set analyzing status
+                # Set analyzing status (displayed on next rerun after processing)
                 st.session_state.scan_status = "analyzing"
-                st.rerun()
-                
-                # FIX 3: Get ALL items in frame (no limit)
+
+                # Run the scan (no st.rerun() before this - it would kill execution)
                 results = vision_live_scan_dark(image)
-                
+
                 if results:
                     st.session_state.scan_results = results
                     st.session_state.selected_result = results[0]
-                    # FIX 6: Update detected items
                     st.session_state.detected_items = [r['name'] for r in results[:5]]
                     st.session_state.scanning = False
                     st.session_state.scan_status = None
-                    st.rerun()
+                else:
+                    # Clear analyzing status so it doesn't stick on failure
+                    st.session_state.scan_status = None
+                st.rerun()
 
     # FIX 3: Show ALL results with scroll
     if st.session_state.scan_results:
