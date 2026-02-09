@@ -137,25 +137,16 @@ st.markdown(f"""
         color: #1A1A1A !important;
     }}
 
-    /* FIX 4: FOCUS SQUARE - Centered and follows camera */
-    .camera-container {{
-        position: relative;
-        width: 100%;
-        max-width: 640px;
-        margin: 0 auto;
-    }}
-    
+    /* FIX 4: FOCUS SQUARE - JavaScript positioned to overlay video */
     .focus-square {{
-        position: absolute;
-        top: 90%;
-        left: 50%;
-        transform: translate(-50%, -50%);
+        position: fixed;
         width: 200px;
         height: 200px;
         border: 3px solid {COLORS['terracotta']};
         border-radius: 20px;
         pointer-events: none;
         z-index: 100;
+        display: none; /* Hidden until JS positions it */
         box-shadow: 0 0 0 9999px rgba(0,0,0,0.3);
     }}
     
@@ -182,12 +173,9 @@ st.markdown(f"""
         width: 3px;
     }}
 
-    /* FIX 6: Status messages INSIDE camera view */
+    /* FIX 6: Status messages overlaying camera - will be positioned by JavaScript */
     .scan-status-overlay {{
-        position: absolute;
-        top: 20px;
-        left: 50%;
-        transform: translateX(-50%);
+        position: fixed;
         background: rgba(107, 126, 84, 0.95);
         color: white;
         padding: 12px 24px;
@@ -198,10 +186,7 @@ st.markdown(f"""
     }}
     
     .product-detected-overlay {{
-        position: absolute;
-        top: 70px;
-        left: 50%;
-        transform: translateX(-50%);
+        position: fixed;
         background: rgba(212, 118, 94, 0.95);
         color: white;
         padding: 10px 20px;
@@ -430,11 +415,63 @@ if st.session_state.page == 'dashboard':
                 </div>
             """, unsafe_allow_html=True)
 
-        # FIX 4: Camera with focus square
-        st.markdown('<div class="camera-container">', unsafe_allow_html=True)
-        
-        # FIX 3 & 4: Focus square centered
-        st.markdown('<div class="focus-square"></div>', unsafe_allow_html=True)
+        # FIX 4 & 6: Camera with focus square and status overlays using JavaScript
+        st.markdown("""
+            <div id="camera-wrapper" style="position: relative; width: 100%; max-width: 640px; margin: 0 auto;">
+                <div class="focus-square" id="focus-square"></div>
+            </div>
+            <script>
+                // Position focus square and overlays relative to video element
+                function positionElements() {
+                    const video = document.querySelector('video');
+                    const square = document.getElementById('focus-square');
+                    
+                    if (video && square) {
+                        const rect = video.getBoundingClientRect();
+                        const squareSize = 200;
+                        
+                        // Position focus square at 70% from top of video
+                        const topPosition = rect.top + (rect.height * 0.7) - (squareSize / 2);
+                        const leftPosition = rect.left + (rect.width / 2) - (squareSize / 2);
+                        
+                        square.style.position = 'fixed';
+                        square.style.top = topPosition + 'px';
+                        square.style.left = leftPosition + 'px';
+                        square.style.width = squareSize + 'px';
+                        square.style.height = squareSize + 'px';
+                        square.style.display = 'block';
+                        
+                        // Position status overlays if they exist
+                        const scanStatus = document.querySelector('.scan-status-overlay');
+                        if (scanStatus) {
+                            scanStatus.style.top = (rect.top + 20) + 'px';
+                            scanStatus.style.left = (rect.left + rect.width / 2) + 'px';
+                            scanStatus.style.transform = 'translateX(-50%)';
+                        }
+                        
+                        const productDetected = document.querySelector('.product-detected-overlay');
+                        if (productDetected) {
+                            productDetected.style.top = (rect.top + 70) + 'px';
+                            productDetected.style.left = (rect.left + rect.width / 2) + 'px';
+                            productDetected.style.transform = 'translateX(-50%)';
+                        }
+                    }
+                }
+                
+                // Run positioning multiple times as page loads
+                setTimeout(positionElements, 100);
+                setTimeout(positionElements, 500);
+                setTimeout(positionElements, 1000);
+                setTimeout(positionElements, 2000);
+                
+                // Update on resize and scroll
+                window.addEventListener('resize', positionElements);
+                window.addEventListener('scroll', positionElements);
+                
+                // Continuous positioning for dynamic updates
+                setInterval(positionElements, 500);
+            </script>
+        """, unsafe_allow_html=True)
         
         # FIX 6: Status overlays INSIDE camera view
         if st.session_state.scan_status == "analyzing":
@@ -453,7 +490,6 @@ if st.session_state.page == 'dashboard':
             """, unsafe_allow_html=True)
         
         image = back_camera_input(key="hud_cam")
-        st.markdown('</div>', unsafe_allow_html=True)
         
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
