@@ -641,29 +641,3 @@ elif st.session_state.page == 'log':
             st.markdown(f"<div class='list-row'><span><b>{d}</b>: {name}</span><strong style='color:{clr}'>{score}</strong></div>", unsafe_allow_html=True)
     else:
         st.info("📭 No history yet. Start logging items!")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
