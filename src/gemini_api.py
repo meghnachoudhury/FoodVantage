@@ -15,12 +15,55 @@ from datetime import datetime, timedelta
 load_dotenv()
 
 # === 1. VMS ALGORITHM (ENHANCED FOR FIX 5) ===
+# Serving size ratios (fraction of 100g that represents one serving)
+# Used to scale per-100g nutrition data to realistic portions
+SERVING_SCALE = {
+    # Oils & fats (~1 tbsp = 13-15g)
+    'oil': 0.14, 'olive oil': 0.14, 'coconut oil': 0.14, 'vegetable oil': 0.14,
+    'canola oil': 0.14, 'sesame oil': 0.14, 'avocado oil': 0.14,
+    'butter': 0.14, 'margarine': 0.14, 'ghee': 0.14, 'lard': 0.14,
+    # Condiments & sauces (~1 tbsp = 15-20g)
+    'ketchup': 0.17, 'mustard': 0.10, 'mayonnaise': 0.15, 'mayo': 0.15,
+    'soy sauce': 0.15, 'hot sauce': 0.05, 'vinegar': 0.15,
+    'dressing': 0.30, 'salad dressing': 0.30,
+    'bbq sauce': 0.17, 'barbecue sauce': 0.17, 'teriyaki': 0.17,
+    'sriracha': 0.10, 'tabasco': 0.05, 'worcestershire': 0.10,
+    'pesto': 0.15, 'hummus': 0.30, 'guacamole': 0.30, 'salsa': 0.30,
+    # Spreads (~1 tbsp = 15-20g)
+    'jam': 0.20, 'jelly': 0.20, 'marmalade': 0.20,
+    'peanut butter': 0.32, 'almond butter': 0.32, 'nutella': 0.20,
+    'honey': 0.21, 'maple syrup': 0.20, 'syrup': 0.20,
+    'cream cheese': 0.30,
+    # Spices & seasonings (~1 tsp = 2-5g)
+    'salt': 0.02, 'pepper': 0.02, 'sugar': 0.04, 'cinnamon': 0.03,
+    'paprika': 0.02, 'cumin': 0.02, 'turmeric': 0.03,
+    # Cheese (1 slice/portion ~30g)
+    'cheese': 0.30, 'parmesan': 0.10, 'mozzarella': 0.30, 'cheddar': 0.30,
+    # Nuts & seeds (~30g serving)
+    'nuts': 0.30, 'almonds': 0.30, 'walnuts': 0.30, 'cashews': 0.30,
+    'peanuts': 0.30, 'seeds': 0.30, 'chia': 0.15, 'flax': 0.10,
+}
+
+def get_serving_scale(name):
+    """Find the best matching serving scale for a product name"""
+    n = name.lower()
+    # Try longest matches first (e.g., 'olive oil' before 'oil')
+    for keyword in sorted(SERVING_SCALE.keys(), key=len, reverse=True):
+        if keyword in n:
+            return SERVING_SCALE[keyword]
+    return 1.0  # Default: use full per-100g values
+
 def calculate_vms_science(row):
     try:
         name, _, cal, sug, fib, prot, fat, sod, _, nova = row
         cal, sug, fib, prot, fat, sod = [float(x or 0) for x in [cal, sug, fib, prot, fat, sod]]
         nova_val = int(nova or 1)
-        
+
+        # Scale nutrition to serving size for condiments/oils/etc.
+        scale = get_serving_scale(name)
+        if scale < 1.0:
+            cal, sug, fib, prot, fat, sod = [v * scale for v in [cal, sug, fib, prot, fat, sod]]
+
         n = name.lower()
         
         common_fruits = ['apple', 'banana', 'orange', 'grape', 'strawberry', 'blueberry', 
@@ -369,7 +412,7 @@ Be PRECISE. Return ONLY the JSON array, no other text."""
         
         try:
             response = client.models.generate_content(
-                model="gemini-2.0-flash-exp",
+                model="gemini-3-flash-preview",
                 contents=types.Content(
                     parts=[
                         types.Part(text=prompt),

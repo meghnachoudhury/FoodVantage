@@ -336,19 +336,34 @@ if st.session_state.page == 'dashboard':
             st.rerun()
     else:
         # SCANNER ACTIVE
-        # FIX 6: Show status INSIDE camera view
+        # Show status ABOVE camera as overlay bubble (same style as metabolic score)
         if st.session_state.selected_result:
             ls = st.session_state.selected_result
             clr = COLORS['green'] if ls['vms_score'] < 3.0 else COLORS['yellow'] if ls['vms_score'] < 7.0 else COLORS['red']
-            
+
             # FIX 2: Add portion size label
             portion_label = " /serving" if needs_portion_size(ls['name']) else ""
-            
+
             st.markdown(f"""
                 <div class="hud-bubble">
                     <div style="font-size: 0.9rem; margin-bottom: 4px;">{ls['name']}</div>
                     <div style="color:{clr}; font-size:2.2rem; font-weight:900;">{ls['vms_score']}{portion_label}</div>
                     <div style="font-size: 0.8rem; color: {clr};">{ls['rating']}</div>
+                </div>
+            """, unsafe_allow_html=True)
+        elif st.session_state.get('scan_status') == "analyzing":
+            st.markdown(f"""
+                <div class="hud-bubble">
+                    <div style="font-size: 1.2rem; font-weight: 700;">🔍 Analyzing Image...</div>
+                    <div style="font-size: 0.85rem; color: #666; margin-top: 4px;">Processing with Gemini AI</div>
+                </div>
+            """, unsafe_allow_html=True)
+        elif st.session_state.get('detected_items'):
+            items_text = ", ".join(st.session_state.detected_items[:3])
+            st.markdown(f"""
+                <div class="hud-bubble">
+                    <div style="font-size: 1.2rem; font-weight: 700;">👁️ Items Detected</div>
+                    <div style="font-size: 0.95rem; color: {COLORS['olive']}; margin-top: 4px;">{items_text}</div>
                 </div>
             """, unsafe_allow_html=True)
 
@@ -360,16 +375,8 @@ if st.session_state.page == 'dashboard':
                 </div>
             </div>
         """, unsafe_allow_html=True)
-        
+
         image = back_camera_input(key="hud_cam")
-        
-        # Status messages
-        if st.session_state.get('scan_status') == "analyzing":
-            st.info("🔍 Analyzing Image...")
-        
-        if st.session_state.get('detected_items'):
-            items_text = ", ".join(st.session_state.detected_items[:3])
-            st.success(f"👁️ Detected: {items_text}")
         
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
