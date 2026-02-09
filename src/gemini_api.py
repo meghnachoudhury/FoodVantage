@@ -314,11 +314,11 @@ def vision_live_scan_dark(image_bytes):
             print(f"[DEBUG] Converting {img.mode} to RGB...")
             img = img.convert('RGB')
         
-        # Crop center 50%
-        left = int(w * 0.25)
-        top = int(h * 0.25)
-        right = int(w * 0.75)
-        bottom = int(h * 0.75)
+        # Minimal crop (10% edges) to avoid UI elements, but scan most of frame
+        left = int(w * 0.05)
+        top = int(h * 0.05)
+        right = int(w * 0.95)
+        bottom = int(h * 0.95)
         img_cropped = img.crop((left, top, right, bottom))
         
         # Enhance image
@@ -339,15 +339,15 @@ def vision_live_scan_dark(image_bytes):
         img_bytes = buf.read()
         img_b64 = base64.b64encode(img_bytes).decode('utf-8')
         
-        # FIX 3: Enhanced prompt for multiple item detection
-        prompt = """You are a food detection AI. Identify ALL food items in this image.
+        # Enhanced prompt for whole-frame detection
+        prompt = """You are a food detection AI. Identify ALL food items visible in this image.
 
 CRITICAL RULES:
 1. Count EACH item separately (1 apple, 2 bananas = 3 total items)
 2. For PACKAGED goods: Use exact product name from label
 3. For FRESH produce: Use common name, count each piece
-4. List ALL items you see, even if many
-5. Focus on items in the CENTER area
+4. List ALL items you see in the frame
+5. Scan the ENTIRE visible area
 
 Return a JSON array like: ["Apple", "Banana", "Banana", "Orange", "Coca Cola"]
 
