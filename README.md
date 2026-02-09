@@ -1,1 +1,1 @@
-# vatange-grocery-guide
+FoodVantage is an AI-powered metabolic health platform that turns “what should I eat?” into an instant, data-backed decision. Built on Google Gemini 3, it unifies three autonomous AI agents inside a single mobile-first interface.
