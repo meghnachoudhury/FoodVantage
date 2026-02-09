@@ -1,643 +1,265 @@
 import streamlit as st
 import sys
 import os
-import pandas as pd
-import hashlib
-import calendar as cal_module
-import time
-from datetime import datetime, timedelta
-import plotly.graph_objects as go
+from datetime import datetime
+from streamlit_back_camera_input import back_camera_input
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "src"))
 from gemini_api import *
-from streamlit_back_camera_input import back_camera_input
 
-st.set_page_config(page_title="FoodVantage", page_icon="🥗", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="FoodVantage", page_icon="🥗", layout="wide")
 
-# --- SESSION STATE ---
-# FIX 1: NO LOGIN PAGE - Direct to main app
+# SESSION STATE
 if 'logged_in' not in st.session_state: st.session_state.logged_in = True
 if 'user_id' not in st.session_state: st.session_state.user_id = "demo_user"
 if 'page' not in st.session_state: st.session_state.page = 'dashboard'
 if 'camera_active' not in st.session_state: st.session_state.camera_active = False
-if 'scan_results' not in st.session_state: st.session_state.scan_results = None
-if 'selected_result' not in st.session_state: st.session_state.selected_result = None
 if 'scanning' not in st.session_state: st.session_state.scanning = False
-if 'scan_count' not in st.session_state: st.session_state.scan_count = 0
-if 'trends_view' not in st.session_state: st.session_state.trends_view = 'weekly'
-# FIX 6: Status tracking for in-widget display
-if 'scan_status' not in st.session_state: st.session_state.scan_status = None
-if 'detected_items' not in st.session_state: st.session_state.detected_items = []
 
-# --- COLOR PALETTE ---
+# COLORS
 COLORS = {
     'olive': '#6B7E54',
     'terracotta': '#D4765E',
-    'salmon': '#E89580',
     'beige': '#F5E6D3',
-    'dark_text': '#2C2C2C',
-    'green': '#6B7E54',
-    'yellow': '#E8B54D',
-    'red': '#D4765E',
-    'camera_icon': '#c6d9ec',
-    'toggle_button': '#737373',
-    'unhealthy_bar': '#ffb3b3'
 }
 
-# FIX 2 & 5: Helper function to determine if item needs portion size
-def needs_portion_size(item_name):
-    """
-    Returns True if item should show 'per serving' label.
-    
-    SHOW portion size for: Packaged goods (oils, chips, cereals, etc.)
-    DON'T show for: Fresh produce, cooked meals, superfoods
-    """
-    item_lower = item_name.lower()
-    
-    # Cooked food keywords - NO portion size
-    cooked_keywords = [
-        'cooked', 'grilled', 'fried', 'baked', 'roasted', 'steamed', 
-        'boiled', 'sauteed', 'plate', 'meal', 'dish', 'curry', 'stew',
-        'soup', 'salad', 'pasta', 'rice', 'noodle', 'stir fry', 'pizza',
-        'burger', 'sandwich', 'wrap', 'taco', 'burrito', 'bowl'
-    ]
-    
-    # Fresh produce - NO portion size (whole items)
-    fresh_keywords = [
-        'apple', 'banana', 'orange', 'grape', 'strawberry', 'avocado',
-        'tomato', 'cucumber', 'carrot', 'lettuce', 'spinach', 'kale',
-        'berry', 'peach', 'pear', 'plum', 'mango', 'melon', 'lemon',
-        'lime', 'onion', 'garlic', 'pepper', 'broccoli', 'cauliflower',
-        'fresh', 'whole', 'raw', 'fruit', 'vegetable'
-    ]
-    
-    # Superfoods - NO portion size
-    superfood_keywords = [
-        'superfood', 'chia', 'flax', 'hemp', 'spirulina', 'acai',
-        'goji', 'matcha', 'turmeric', 'ginger'
-    ]
-    
-    # Check exclusions first
-    for keyword in cooked_keywords + fresh_keywords + superfood_keywords:
-        if keyword in item_lower:
-            return False
-    
-    # Everything else (packaged goods) = show portion size
-    return True
-
-# --- CSS ---
-st.markdown('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">', unsafe_allow_html=True)
+# CSS
 st.markdown(f"""
-    <style>
-    .stApp {{ background-color: #F7F5F0; color: #1A1A1A; }}
-    .logo-text {{ font-family: 'Arial Black', sans-serif; font-size: 3rem; text-align: center; }}
-    .logo-dot {{ color: {COLORS['terracotta']}; }}
-    .card {{ background: white; padding: 24px; border-radius: 20px; border: 1px solid #EEE; box-shadow: 0 4px 12px rgba(0,0,0,0.04); margin-bottom: 20px; }}
-    .white-shelf {{ background: white; height: 35px; border-radius: 10px; border: 1px solid #EEE; margin-bottom: 25px; }}
-    .tomato-wrapper {{ width: 100%; text-align: center; padding: 30px 0; }}
-    .tomato-icon {{ font-size: 150px !important; color: {COLORS['camera_icon']} !important; }}
-
-    input[type="text"], input[type="password"] {{
-        background-color: white !important;
-        color: #1A1A1A !important;
-        border: 1px solid #DDD !important;
-        border-radius: 8px !important;
-        padding: 12px !important;
-    }}
-    
-    .stTextInput > div > div > input {{
-        background-color: white !important;
-        color: #1A1A1A !important;
-        -webkit-text-fill-color: #1A1A1A !important;
-    }}
-    
-    .stButton > button {{
-        background-color: {COLORS['terracotta']} !important;
-        color: white !important;
-        border: none !important;
-    }}
-
-    [data-testid="stMetricValue"] {{
-        color: #1A1A1A !important;
-        font-weight: 700 !important;
-        font-size: 1.5rem !important;
-    }}
-    
-    [data-testid="stMetricLabel"] {{
-        color: #2C2C2C !important;
-        font-weight: 600 !important;
-    }}
-    
-    .stExpander {{
-        background: white !important;
-        color: #1A1A1A !important;
-    }}
-    
-    .stExpander p, .stExpander div, .stExpander span {{
-        color: #1A1A1A !important;
-    }}
-
-    
-    .hud-bubble {{
-        position: fixed;
-        top: calc(50% - 200px);
-        left: 50%;
-        transform: translateX(-50%);
-        background: white; 
-        padding: 16px 28px; 
-        border-radius: 50px;
-        box-shadow: 0 10px 30px rgba(0,0,0,0.15); 
-        border: 3px solid {COLORS['terracotta']};
-        z-index: 1000;
-        text-align: center;
-        min-width: 220px;
-    }}
-    
-    /* Scrollable results container */
-    .results-scroll-container {{
-        max-height: 400px;
-        overflow-y: auto;
-        padding-right: 10px;
-    }}
-    
-    .results-scroll-container::-webkit-scrollbar {{
-        width: 8px;
-    }}
-    
-    .results-scroll-container::-webkit-scrollbar-track {{
-        background: #f1f1f1;
-        border-radius: 10px;
-    }}
-    
-    .results-scroll-container::-webkit-scrollbar-thumb {{
-        background: {COLORS['terracotta']};
-        border-radius: 10px;
-    }}
-    
-    .scanner-result {{
-        background: white;
-        padding: 16px;
-        border-radius: 12px;
-        margin: 12px 0;
-        border-left: 4px solid {COLORS['olive']};
-    }}
-    
-    .scanner-result-title {{
-        color: {COLORS['dark_text']};
-        font-weight: 800;
-        font-size: 1.1rem;
-        margin-bottom: 8px;
-    }}
-    
-    .scanner-result-text {{
-        color: {COLORS['dark_text']};
-        font-weight: 700;
-        font-size: 1.3rem;
-        line-height: 1.6;
-    }}
-    
-    .list-row {{ 
-        display: flex; 
-        justify-content: space-between; 
-        align-items: center;
-        padding: 12px; 
-        background: #FFF; 
-        border-radius: 12px; 
-        border: 1px solid #F0F0F0; 
-        margin-bottom: 8px; 
-    }}
-    
-    .trend-tabs-container {{
-        max-width: 400px;
-        margin: 0 auto 20px auto;
-    }}
-    
-    .trend-tabs-container .stButton > button {{
-        background-color: {COLORS['toggle_button']} !important;
-        color: white !important;
-        border: none !important;
-    }}
-    
-    .trend-tabs-container .stButton > button[kind="primary"] {{
-        background-color: {COLORS['toggle_button']} !important;
-        color: white !important;
-        font-weight: bold !important;
-    }}
-    
-    [data-testid="collapsedControl"] {{
-        color: transparent !important;
-        font-size: 0 !important;
-    }}
-    
-    [data-testid="collapsedControl"]::before {{
-        content: "»";
-        font-size: 1.5rem;
-        color: white;
-    }}
-    
-    /* FIX 7: Better error messaging */
-    .friendly-error {{
-        background: #FFF3CD;
-        border-left: 4px solid #FFC107;
-        padding: 16px;
-        border-radius: 8px;
-        margin: 12px 0;
-    }}
-    
-    .friendly-error-title {{
-        font-weight: 700;
-        color: #856404;
-        margin-bottom: 8px;
-    }}
-    
-    .friendly-error-text {{
-        color: #856404;
-        font-size: 0.9rem;
-    }}
-    </style>
+<style>
+.stApp {{ background-color: #F5E6D3; }}
+.card {{
+    background: white;
+    padding: 20px;
+    border-radius: 15px;
+    margin: 10px 0;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}}
+.score-card {{
+    background: white;
+    padding: 15px;
+    border-radius: 12px;
+    border-left: 4px solid {COLORS['olive']};
+    margin: 10px 0;
+}}
+.score-card.red {{ border-left-color: {COLORS['terracotta']}; }}
+.score-card.yellow {{ border-left-color: #E8B54D; }}
+.big-button {{
+    background: {COLORS['terracotta']};
+    color: white;
+    padding: 15px 30px;
+    border-radius: 10px;
+    border: none;
+    font-size: 18px;
+    font-weight: bold;
+    cursor: pointer;
+    width: 100%;
+    margin: 10px 0;
+}}
+</style>
 """, unsafe_allow_html=True)
 
-def render_logo(size="3rem"):
-    st.markdown(f"<div style='text-align: center; margin-bottom: 10px;'><div class='logo-text' style='font-size: {size};'>foodvantage<span class='logo-dot'>.</span></div></div>", unsafe_allow_html=True)
+# HEADER
+st.markdown("<h1 style='text-align: center;'>🥗 FoodVantage</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #666;'>Scan food, get health scores instantly</p>", unsafe_allow_html=True)
 
-def create_html_calendar(year, month, selected_day=None):
-    cal = cal_module.monthcalendar(year, month)
-    html = "<table style='width:100%; text-align:center;'><thead><tr>"
-    for day in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]: html += f"<th style='color:{COLORS['terracotta']};'>{day}</th>"
-    html += "</tr></thead><tbody>"
-    for week in cal:
-        html += "<tr>"
-        for day in week:
-            if day == 0: html += "<td></td>"
-            else:
-                style = f"background:{COLORS['terracotta']}; color:white; border-radius:50%;" if day == selected_day else ""
-                html += f"<td style='padding:10px; {style}'>{day}</td>"
-        html += "</tr>"
-    return html + "</tbody></table>"
+# Helper function
+def needs_portion_size(item_name):
+    n = item_name.lower()
+    
+    # Cooked food - NO portion label
+    cooked = ['cooked', 'grilled', 'fried', 'baked', 'roasted', 'steamed', 'boiled', 
+              'plate', 'meal', 'dish', 'curry', 'stew', 'soup', 'salad']
+    if any(word in n for word in cooked):
+        return False
+    
+    # Fresh produce - NO portion label
+    fresh = ['apple', 'banana', 'orange', 'carrot', 'tomato', 'lettuce', 'spinach', 'broccoli']
+    if any(word in n for word in fresh):
+        return False
+    
+    # Superfoods - NO portion label
+    superfoods = ['salmon', 'lentils', 'beans', 'egg', 'avocado', 'kale']
+    if any(word in n for word in superfoods):
+        return False
+    
+    # Everything else (packaged) - YES portion label
+    return True
 
-# === MAIN APP (NO LOGIN PAGE) ===
-with st.sidebar:
-    st.write("")
-    st.markdown("##### 🔍 Search")
-    search_q = st.text_input("Quick check score", key="sidebar_search")
-    if search_q:
-        results = search_vantage_db(search_q, limit=20)  # FIX 3: Increased from 5 to 20
-        filtered_results = [r for r in results if r['vms_score'] != 10.0] if results else []
-        
-        if filtered_results:
-            st.markdown("**Top Results:**")
-            # FIX 3: Add scrollable container
-            st.markdown('<div class="results-scroll-container">', unsafe_allow_html=True)
-            for i, d in enumerate(filtered_results):
-                c = COLORS['green'] if d['vms_score'] < 3.0 else COLORS['yellow'] if d['vms_score'] < 7.0 else COLORS['red']
-                
-                # FIX 2: Add portion size label if needed
-                portion_label = " per serving" if needs_portion_size(d['name']) else ""
-                
-                st.markdown(f"""
-                    <div class='card' style='padding:12px; margin-bottom:8px;'>
-                        <div style='font-size:0.9rem; font-weight:bold;'>{i+1}. {d['name']}</div>
-                        <div style='color:{c}; font-weight:bold; font-size:1.3rem;'>{d['vms_score']}{portion_label}</div>
-                        <div style='font-size:0.8rem; color:{c};'>{d['rating']}</div>
-                    </div>
-                """, unsafe_allow_html=True)
-            st.markdown('</div>', unsafe_allow_html=True)
-        else:
-            # FIX 7: Friendly error message
-            st.markdown("""
-                <div class='friendly-error'>
-                    <div class='friendly-error-title'>🔍 Item Not Found Yet</div>
-                    <div class='friendly-error-text'>
-                        We're constantly expanding our database with new products.<br>
-                        Try searching for similar items or check back soon!
-                    </div>
-                </div>
-            """, unsafe_allow_html=True)
-    st.markdown("---")
-    if st.button("🏠 Dashboard", use_container_width=True): st.session_state.page = 'dashboard'; st.rerun()
-    if st.button("📅 Calendar", use_container_width=True): st.session_state.page = 'calendar'; st.rerun()
-    if st.button("📝 Log History", use_container_width=True): st.session_state.page = 'log'; st.rerun()
+# NAVIGATION
+col1, col2, col3 = st.columns(3)
+with col1:
+    if st.button("📸 Scanner", use_container_width=True):
+        st.session_state.page = 'dashboard'
+with col2:
+    if st.button("📊 Trends", use_container_width=True):
+        st.session_state.page = 'trends'
+with col3:
+    if st.button("📅 Calendar", use_container_width=True):
+        st.session_state.page = 'calendar'
 
+st.markdown("---")
+
+# === SCANNER PAGE ===
 if st.session_state.page == 'dashboard':
-    render_logo(size="3.5rem")
-    st.markdown("<h3 style='text-align: center;'>Active Focus Scanner</h3>", unsafe_allow_html=True)
-    st.markdown('<div class="white-shelf"></div>', unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align: center;'>Food Scanner</h2>", unsafe_allow_html=True)
     
     if not st.session_state.camera_active:
-        st.markdown('<div class="tomato-wrapper"><i class="fa fa-camera tomato-icon"></i></div>', unsafe_allow_html=True)
-        if st.button("Start Live Scan", type="primary", use_container_width=True):
+        if st.button("🎥 Start Camera", key="start_cam", use_container_width=True):
             st.session_state.camera_active = True
+            st.rerun()
+    else:
+        st.info("📸 Point camera at food item and tap to scan")
+        
+        image = back_camera_input(key="scanner_cam")
+        
+        if st.button("⏹️ Stop Camera", key="stop_cam", use_container_width=True):
+            st.session_state.camera_active = False
+            st.rerun()
+        
+        if image and not st.session_state.scanning:
             st.session_state.scanning = True
-            st.session_state.scan_count = 0
-            st.session_state.scan_results = None
-            st.session_state.selected_result = None
-            st.session_state.scan_status = None
-            st.session_state.detected_items = []
-            st.rerun()
-    else:
-        # SCANNER ACTIVE
-        # FIX 6: Show status INSIDE camera view
-        if st.session_state.selected_result:
-            ls = st.session_state.selected_result
-            clr = COLORS['green'] if ls['vms_score'] < 3.0 else COLORS['yellow'] if ls['vms_score'] < 7.0 else COLORS['red']
             
-            # FIX 2: Add portion size label
-            portion_label = " /serving" if needs_portion_size(ls['name']) else ""
-            
-            st.markdown(f"""
-                <div class="hud-bubble">
-                    <div style="font-size: 0.9rem; margin-bottom: 4px;">{ls['name']}</div>
-                    <div style="color:{clr}; font-size:2.2rem; font-weight:900;">{ls['vms_score']}{portion_label}</div>
-                    <div style="font-size: 0.8rem; color: {clr};">{ls['rating']}</div>
-                </div>
-            """, unsafe_allow_html=True)
-
-            # Simple camera - NO focus square needed
-        st.markdown("""
-            <div style="text-align: center; margin: 20px 0;">
-                <div style="background: rgba(212, 118, 94, 0.1); padding: 12px; border-radius: 10px; display: inline-block;">
-                    📸 <strong>Point camera at item and tap to scan</strong>
-                </div>
-            </div>
-        """, unsafe_allow_html=True)
-        
-        image = back_camera_input(key="hud_cam")
-        
-        # Status messages
-        if st.session_state.get('scan_status') == "analyzing":
-            st.info("🔍 Analyzing Image...")
-        
-        if st.session_state.get('detected_items'):
-            items_text = ", ".join(st.session_state.detected_items[:3])
-            st.success(f"👁️ Detected: {items_text}")
-        
-        col1, col2, col3 = st.columns([1, 2, 1])
-        with col2:
-            if st.button("❌ Stop Scanning", use_container_width=True):
-                st.session_state.camera_active = False
-                st.session_state.scan_results = None
-                st.session_state.selected_result = None
-                st.session_state.scanning = False
-                st.session_state.scan_status = None
-                st.session_state.detected_items = []
-                st.rerun()
-        
-        # SCANNING LOGIC
-        if image and st.session_state.scanning:
-            st.session_state.scan_count += 1
-            
-            if st.session_state.scan_count % 2 == 0:
-                # FIX 6: Set analyzing status
-                st.session_state.scan_status = "analyzing"
-                st.rerun()
-                
-                # FIX 3: Get ALL items in frame (no limit)
+            with st.spinner("🔍 Analyzing..."):
                 results = vision_live_scan_dark(image)
+            
+            st.session_state.scanning = False
+            
+            if results:
+                st.success(f"✅ Found {len(results)} item(s)!")
                 
-                if results:
-                    st.session_state.scan_results = results
-                    st.session_state.selected_result = results[0]
-                    # FIX 6: Update detected items
-                    st.session_state.detected_items = [r['name'] for r in results[:5]]
-                    st.session_state.scanning = False
-                    st.session_state.scan_status = None
-                    st.rerun()
+                for result in results[:5]:
+                    score = result['vms_score']
+                    name = result['name']
+                    
+                    # Score color
+                    if score < 3.0:
+                        card_class = "score-card"
+                        color = COLORS['olive']
+                    elif score < 7.0:
+                        card_class = "score-card yellow"
+                        color = "#E8B54D"
+                    else:
+                        card_class = "score-card red"
+                        color = COLORS['terracotta']
+                    
+                    # Portion size label
+                    portion_label = " /serving" if needs_portion_size(name) else ""
+                    
+                    st.markdown(f"""
+                    <div class="{card_class}">
+                        <h3 style='margin: 0; color: {color};'>{name}</h3>
+                        <p style='font-size: 24px; font-weight: bold; margin: 10px 0; color: {color};'>
+                            Score: {score:.1f}{portion_label}
+                        </p>
+                        <p style='margin: 0; color: #666;'>{result['rating']}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # Log button
+                    if st.button(f"📝 Log {name}", key=f"log_{name}_{score}"):
+                        today = datetime.now().strftime('%Y-%m-%d')
+                        add_calendar_item_db(st.session_state.user_id, today, name, score)
+                        st.success(f"✅ Logged {name}!")
+            else:
+                st.warning("🔍 Item not found. Try repositioning or better lighting.")
 
-    # FIX 3: Show ALL results with scroll
-    if st.session_state.scan_results:
-        st.markdown("### 📋 Select Your Item")
-        st.markdown(f"Found **{len(st.session_state.scan_results)}** items in frame:")
+    # SIDEBAR SEARCH
+    with st.sidebar:
+        st.markdown("### 🔍 Search Database")
+        search_query = st.text_input("Enter food name:", key="search_input")
         
-        # FIX 7: Verification reminder
-        st.info("💡 Always verify your selection matches what you scanned!")
+        if search_query:
+            with st.spinner("Searching..."):
+                results = search_vantage_db(search_query, limit=5)
+            
+            if results:
+                st.success(f"Found {len(results)} results")
+                for r in results:
+                    score = r['vms_score']
+                    portion = " /serving" if needs_portion_size(r['name']) else ""
+                    
+                    if score < 3.0:
+                        emoji = "🟢"
+                    elif score < 7.0:
+                        emoji = "🟡"
+                    else:
+                        emoji = "🔴"
+                    
+                    st.markdown(f"{emoji} **{r['name']}**")
+                    st.markdown(f"Score: **{score:.1f}{portion}**")
+                    st.markdown("---")
+            else:
+                st.info("No results found")
+
+# === TRENDS PAGE ===
+elif st.session_state.page == 'trends':
+    st.markdown("<h2 style='text-align: center;'>Health Trends</h2>", unsafe_allow_html=True)
+    
+    period = st.radio("View:", ["Week", "Month"], horizontal=True)
+    days = 7 if period == "Week" else 30
+    
+    data = get_trend_data_db(st.session_state.user_id, days)
+    
+    if data:
+        from collections import defaultdict
+        daily = defaultdict(lambda: {'healthy': 0, 'moderate': 0, 'unhealthy': 0})
         
-        # FIX 3: Scrollable results (NO 5-item cap)
-        st.markdown('<div class="results-scroll-container">', unsafe_allow_html=True)
-        for i, result in enumerate(st.session_state.scan_results):
-            clr = COLORS['green'] if result['vms_score'] < 3.0 else COLORS['yellow'] if result['vms_score'] < 7.0 else COLORS['red']
-            selected = st.session_state.selected_result == result
-            
-            # FIX 2: Add portion size label
-            portion_label = " /serving" if needs_portion_size(result['name']) else ""
-            
-            col1, col2 = st.columns([4, 1])
-            with col1:
-                if st.button(
-                    f"{i+1}. {result['name']}", 
-                    key=f"select_{i}",
-                    type="primary" if selected else "secondary",
-                    use_container_width=True
-                ):
-                    st.session_state.selected_result = result
-                    st.rerun()
-            with col2:
-                st.markdown(f"<div style='text-align:center; color:{clr}; font-size:1.5rem; font-weight:bold;'>{result['vms_score']}{portion_label}</div>", unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    # DEEP DIVE
-    if st.session_state.selected_result:
-        with st.expander("📊 Metabolic Nutrient Deep Dive", expanded=True):
-            ls_raw = st.session_state.selected_result['raw']
-            st.markdown("#### Clinical Data")
-            
-            c1, c2, c3 = st.columns(3)
-            c1.metric("Calories", f"{ls_raw[2]}")
-            c2.metric("Sugar", f"{ls_raw[3]}g")
-            c3.metric("Fiber", f"{ls_raw[4]}g")
-            
-            c4, c5, c6 = st.columns(3)
-            c4.metric("Protein", f"{ls_raw[5]}g")
-            c5.metric("Fat", f"{ls_raw[6]}g")
-            c6.metric("Sodium", f"{ls_raw[7]}mg")
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.button("➕ Log to My Journey", use_container_width=True):
-                    add_calendar_item_db(
-                        st.session_state.user_id, 
-                        datetime.now().strftime("%Y-%m-%d"), 
-                        st.session_state.selected_result['name'], 
-                        st.session_state.selected_result['vms_score']
-                    )
-                    st.success("✅ Added!")
-            with col2:
-                if st.button("🔄 Scan Again", use_container_width=True):
-                    st.session_state.scan_results = None
-                    st.session_state.selected_result = None
-                    st.session_state.scanning = True
-                    st.session_state.detected_items = []
-                    st.rerun()
-
-    # TRENDS
-    st.markdown("### 📈 Your Health Trends")
-    
-    st.markdown('<div class="trend-tabs-container">', unsafe_allow_html=True)
-    col_d, col_w, col_m = st.columns(3)
-    with col_d:
-        if st.button("Day", use_container_width=True, key="day_tab",
-                    type="primary" if st.session_state.trends_view == 'daily' else "secondary"):
-            st.session_state.trends_view = 'daily'
-            st.rerun()
-    with col_w:
-        if st.button("Week", use_container_width=True, key="week_tab",
-                    type="primary" if st.session_state.trends_view == 'weekly' else "secondary"):
-            st.session_state.trends_view = 'weekly'
-            st.rerun()
-    with col_m:
-        if st.button("Month", use_container_width=True, key="month_tab",
-                    type="primary" if st.session_state.trends_view == 'monthly' else "secondary"):
-            st.session_state.trends_view = 'monthly'
-            st.rerun()
-    st.markdown('</div>', unsafe_allow_html=True)
-    
-    if st.session_state.trends_view == 'daily':
-        days = 1
-    elif st.session_state.trends_view == 'weekly':
-        days = 7
-    else:
-        days = 30
-    
-    all_data = get_all_calendar_data_db(st.session_state.user_id)
-    raw = get_trend_data_db(st.session_state.user_id, days=days)
-    
-    if raw and len(raw) > 0:
-        df = pd.DataFrame(raw, columns=["date", "category", "count"])
-        df['date'] = pd.to_datetime(df['date'])
-        df_pivot = df.pivot_table(index='date', columns='category', values='count', aggfunc='sum', fill_value=0)
+        for date, category, count in data:
+            daily[str(date)][category] = count
+        
+        dates = sorted(daily.keys())
+        healthy = [daily[d]['healthy'] for d in dates]
+        moderate = [daily[d]['moderate'] for d in dates]
+        unhealthy = [daily[d]['unhealthy'] for d in dates]
+        
+        import plotly.graph_objects as go
         
         fig = go.Figure()
-        
-        if 'healthy' in df_pivot.columns:
-            fig.add_trace(go.Bar(
-                x=df_pivot.index,
-                y=df_pivot['healthy'],
-                name='Healthy',
-                marker_color=COLORS['olive'],
-                hovertemplate='%{y} healthy items<extra></extra>'
-            ))
-        
-        if 'moderate' in df_pivot.columns:
-            fig.add_trace(go.Bar(
-                x=df_pivot.index,
-                y=df_pivot['moderate'],
-                name='Moderate',
-                marker_color=COLORS['salmon'],
-                hovertemplate='%{y} moderate items<extra></extra>'
-            ))
-        
-        if 'unhealthy' in df_pivot.columns:
-            fig.add_trace(go.Bar(
-                x=df_pivot.index,
-                y=df_pivot['unhealthy'],
-                name='Unhealthy',
-                marker_color=COLORS['unhealthy_bar'],
-                hovertemplate='%{y} unhealthy items<extra></extra>'
-            ))
+        fig.add_trace(go.Bar(name='Healthy', x=dates, y=healthy, marker_color=COLORS['olive']))
+        fig.add_trace(go.Bar(name='Moderate', x=dates, y=moderate, marker_color='#E8B54D'))
+        fig.add_trace(go.Bar(name='Unhealthy', x=dates, y=unhealthy, marker_color=COLORS['terracotta']))
         
         fig.update_layout(
             barmode='stack',
-            height=300,
-            margin=dict(l=20, r=20, t=20, b=40),
-            plot_bgcolor='rgba(0,0,0,0)',
-            paper_bgcolor='rgba(0,0,0,0)',
-            xaxis=dict(showgrid=False, showline=False, title=None),
-            yaxis=dict(showgrid=True, gridcolor='#E0E0E0', showline=False, title=None),
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
-            hovermode='x unified'
+            title=f"Items Logged - Past {period}",
+            xaxis_title="Date",
+            yaxis_title="Items",
+            height=400
         )
         
         st.plotly_chart(fig, use_container_width=True)
-        
-        total_items = int(df['count'].sum())
-        healthy_count = int(df[df['category'] == 'healthy']['count'].sum()) if 'healthy' in df['category'].values else 0
-        st.markdown(f"**Total items:** {total_items} | **Healthy choices:** {healthy_count}")
     else:
-        if all_data and len(all_data) > 0:
-            st.warning(f"⚠️ You have {len(all_data)} logged items, but none in the last {days} day(s). Try selecting a different time range.")
-        else:
-            st.info("📊 No data yet. Start logging items!")
+        st.info("No data yet. Start scanning foods!")
 
+# === CALENDAR PAGE ===
 elif st.session_state.page == 'calendar':
-    st.markdown("## 📅 Grocery Calendar")
-    c1, c2 = st.columns([1, 1.5])
+    st.markdown("<h2 style='text-align: center;'>Food Calendar</h2>", unsafe_allow_html=True)
     
-    with c1:
-        st.markdown('<div class="card">', unsafe_allow_html=True)
-        sel_date = st.date_input("Select Date", datetime.now(), label_visibility="collapsed")
-        st.markdown(create_html_calendar(sel_date.year, sel_date.month, sel_date.day), unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
+    selected_date = st.date_input("Select date:", datetime.now())
+    date_str = selected_date.strftime('%Y-%m-%d')
     
-    with c2:
-        st.markdown(f"### 🗓️ {sel_date.strftime('%b %d, %Y')}")
+    items = get_calendar_items_db(st.session_state.user_id, date_str)
+    
+    if items:
+        st.success(f"📅 {len(items)} items logged on {selected_date.strftime('%b %d, %Y')}")
         
-        st.markdown("#### ➕ Add Item to This Day")
-        search_item = st.text_input("Search for an item", key="calendar_search", placeholder="e.g., banana, coca cola, avocado...")
-        
-        if search_item:
-            search_results = search_vantage_db(search_item, limit=20)  # FIX 3: Increased limit
-            filtered_results = [r for r in search_results if r['vms_score'] != 10.0] if search_results else []
-            
-            if filtered_results:
-                # FIX 3: Scrollable container
-                st.markdown('<div class="results-scroll-container">', unsafe_allow_html=True)
-                for idx, result in enumerate(filtered_results):
-                    clr = COLORS['green'] if result['vms_score'] < 3.0 else COLORS['yellow'] if result['vms_score'] < 7.0 else COLORS['red']
-                    
-                    # FIX 2: Add portion size label
-                    portion_label = " /serving" if needs_portion_size(result['name']) else ""
-                    
-                    col_a, col_b, col_c = st.columns([3, 1, 0.6])
-                    with col_a:
-                        st.markdown(f"**{result['name']}**")
-                    with col_b:
-                        st.markdown(f"<div style='text-align:center; color:{clr}; font-weight:bold; font-size:1.2rem;'>{result['vms_score']}{portion_label}</div>", unsafe_allow_html=True)
-                    with col_c:
-                        if st.button("➕", key=f"add_cal_{idx}_{sel_date}", help=f"Add {result['name']}"):
-                            add_calendar_item_db(
-                                st.session_state.user_id,
-                                sel_date.strftime("%Y-%m-%d"),
-                                result['name'],
-                                result['vms_score']
-                            )
-                            st.success(f"✅ Added!")
-                            time.sleep(0.5)
-                            st.rerun()
-                st.markdown('</div>', unsafe_allow_html=True)
+        for item_id, name, score, category in items:
+            if score < 3.0:
+                color = COLORS['olive']
+            elif score < 7.0:
+                color = "#E8B54D"
             else:
-                # FIX 7: Friendly error
-                st.markdown("""
-                    <div class='friendly-error'>
-                        <div class='friendly-error-title'>🔍 Item Not Found Yet</div>
-                        <div class='friendly-error-text'>
-                            Our database is growing every day!<br>
-                            Try a different search term or check back soon.
-                        </div>
-                    </div>
-                """, unsafe_allow_html=True)
-        
-        st.markdown("---")
-        st.markdown("#### 📝 Items for This Day")
-        
-        items = get_calendar_items_db(st.session_state.user_id, sel_date.strftime("%Y-%m-%d"))
-        if items:
-            for iid, name, score, cat in items:
-                clr = COLORS['green'] if score < 3.0 else COLORS['yellow'] if score < 7.0 else COLORS['red']
-                col_item, col_del = st.columns([5, 1])
-                with col_item:
-                    st.markdown(f"<div class='list-row'><span>{name}</span><strong style='color:{clr}'>{score}</strong></div>", unsafe_allow_html=True)
-                with col_del:
-                    if st.button("🗑️", key=f"del_{iid}", help="Delete this item"):
-                        delete_item_db(iid)
-                        st.rerun()
-        else:
-            st.info("📭 No items for this date. Add items above!")
-
-elif st.session_state.page == 'log':
-    st.markdown("## 📝 Log History")
-    history = get_log_history_db(st.session_state.user_id)
-    if history:
-        for d, name, score, cat in history:
-            clr = COLORS['green'] if score < 3.0 else COLORS['yellow'] if score < 7.0 else COLORS['red']
-            st.markdown(f"<div class='list-row'><span><b>{d}</b>: {name}</span><strong style='color:{clr}'>{score}</strong></div>", unsafe_allow_html=True)
+                color = COLORS['terracotta']
+            
+            portion = " /serving" if needs_portion_size(name) else ""
+            
+            col1, col2 = st.columns([4, 1])
+            with col1:
+                st.markdown(f"**{name}** - Score: {score:.1f}{portion}")
+            with col2:
+                if st.button("🗑️", key=f"del_{item_id}"):
+                    delete_item_db(item_id)
+                    st.rerun()
     else:
-        st.info("📭 No history yet. Start logging items!")
+        st.info("No items logged for this date")
+
