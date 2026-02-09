@@ -642,4 +642,3 @@ elif st.session_state.page == 'log':
     else:
         st.info("📭 No history yet. Start logging items!")
 
-
