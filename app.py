@@ -9,7 +9,15 @@ from datetime import datetime, timedelta
 import plotly.graph_objects as go
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "src"))
-from gemini_api import *
+from gemini_api import (
+    calculate_vms_science, get_serving_scale, get_scientific_db,
+    search_vantage_db, search_open_food_facts, vision_live_scan_dark,
+    generate_health_insights, generate_meal_plan,
+    get_db_connection, get_trend_data_db, get_all_calendar_data_db,
+    get_gemini_api_key, authenticate_user,
+    add_calendar_item_db, get_calendar_items_db, delete_item_db,
+    get_log_history_db, create_user
+)
 from streamlit_back_camera_input import back_camera_input
 
 st.set_page_config(page_title="FoodVantage", page_icon="🥗", layout="wide", initial_sidebar_state="expanded")
