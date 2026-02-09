@@ -533,6 +533,209 @@ Be PRECISE. Return ONLY the JSON array, no other text."""
         
         return None
 
+# === 3B. AI HEALTH COACH AGENT ===
+def generate_health_insights(trend_data, history_data, days_range):
+    """
+    Smart Health Coach: Analyzes user's eating trends and generates
+    3 personalized, actionable recommendations using Gemini AI.
+
+    Args:
+        trend_data: list of (date, category, count) tuples from get_trend_data_db
+        history_data: list of (date, item_name, score, category) tuples from get_all_calendar_data_db
+        days_range: int, number of days being analyzed
+    Returns:
+        list of insight dicts or None on error
+    """
+    api_key = get_gemini_api_key()
+    if not api_key:
+        print("[INSIGHTS] No Gemini API key configured")
+        return None
+
+    try:
+        # Build summary statistics
+        total_items = sum(count for _, _, count in trend_data) if trend_data else 0
+        healthy_count = sum(count for _, cat, count in trend_data if cat == 'healthy') if trend_data else 0
+        moderate_count = sum(count for _, cat, count in trend_data if cat == 'moderate') if trend_data else 0
+        unhealthy_count = sum(count for _, cat, count in trend_data if cat == 'unhealthy') if trend_data else 0
+
+        # Build recent items list (last 20 items max)
+        recent_items = []
+        if history_data:
+            for date, item_name, score, category in history_data[:20]:
+                recent_items.append(f"- {date}: {item_name} (score: {score}, {category})")
+
+        items_str = "\n".join(recent_items) if recent_items else "No items logged yet."
+
+        prompt = f"""You are a friendly, expert nutritionist AI health coach. Analyze this user's eating data and provide exactly 3 personalized, specific, actionable insights.
+
+USER'S EATING DATA (last {days_range} days):
+- Total items logged: {total_items}
+- Healthy items (score < 3.0): {healthy_count}
+- Moderate items (score 3.0-7.0): {moderate_count}
+- Unhealthy items (score > 7.0): {unhealthy_count}
+
+RECENT ITEMS:
+{items_str}
+
+SCORING SYSTEM:
+- Score < 3.0 = Metabolic Green (healthy)
+- Score 3.0-7.0 = Metabolic Yellow (moderate)
+- Score > 7.0 = Metabolic Red (unhealthy)
+- Lower scores are better
+
+RULES:
+1. Be encouraging and positive, not judgmental
+2. Reference SPECIFIC items from their history
+3. Give ACTIONABLE swaps or suggestions
+4. Keep each insight to 2-3 sentences max
+5. If they have few items logged, encourage them to log more
+
+Return ONLY valid JSON array, no other text:
+[
+  {{"emoji": "🥗", "title": "Short Title", "insight": "Your personalized observation...", "action": "Specific action step..."}},
+  {{"emoji": "💪", "title": "Short Title", "insight": "Your personalized observation...", "action": "Specific action step..."}},
+  {{"emoji": "🎯", "title": "Short Title", "insight": "Your personalized observation...", "action": "Specific action step..."}}
+]"""
+
+        client = genai.Client(api_key=api_key)
+        print(f"[INSIGHTS] Calling Gemini API with {total_items} items over {days_range} days...")
+
+        response = client.models.generate_content(
+            model="gemini-2.0-flash-exp",
+            contents=types.Content(
+                parts=[types.Part(text=prompt)]
+            )
+        )
+
+        response_text = response.text.strip()
+        print(f"[INSIGHTS] Raw response: {response_text[:200]}...")
+
+        # Parse JSON response
+        import json
+        import re
+        json_match = re.search(r'\[.*\]', response_text, re.DOTALL)
+        if json_match:
+            insights = json.loads(json_match.group(0))
+            print(f"✅ [INSIGHTS] Generated {len(insights)} insights")
+            return insights
+        else:
+            print(f"❌ [INSIGHTS] Could not parse JSON from response")
+            return None
+
+    except Exception as e:
+        print(f"❌ [INSIGHTS ERROR] {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+
+# === 3C. AI MEAL PLANNING AGENT ===
+def generate_meal_plan(user_history, user_id):
+    """
+    AI Meal Planning Agent: Generates a personalized 7-day meal plan
+    based on user's eating history and preferences using Gemini AI.
+
+    Args:
+        user_history: list of (date, item_name, score, category) tuples
+        user_id: string, the current user identifier
+    Returns:
+        dict with day names as keys, list of meal dicts as values, or None on error
+    """
+    api_key = get_gemini_api_key()
+    if not api_key:
+        print("[MEAL PLAN] No Gemini API key configured")
+        return None
+
+    try:
+        # Analyze user's history for patterns
+        total = len(user_history) if user_history else 0
+        healthy_items = [h for h in user_history if h[3] == 'healthy'] if user_history else []
+        unhealthy_items = [h for h in user_history if h[3] == 'unhealthy'] if user_history else []
+
+        # Get unique items the user has consumed
+        liked_items = []
+        if user_history:
+            for _, item_name, score, category in user_history[:30]:
+                liked_items.append(f"- {item_name} (score: {score}, {category})")
+
+        items_str = "\n".join(liked_items) if liked_items else "No items logged yet - create a general healthy plan."
+
+        healthy_pct = round((len(healthy_items) / total * 100), 1) if total > 0 else 0
+        unhealthy_pct = round((len(unhealthy_items) / total * 100), 1) if total > 0 else 0
+
+        prompt = f"""You are an expert nutritionist AI. Generate a personalized 7-day meal plan for this user.
+
+USER PROFILE:
+- Total items logged: {total}
+- Healthy choices: {healthy_pct}%
+- Unhealthy choices: {unhealthy_pct}%
+
+ITEMS THEY'VE CONSUMED RECENTLY:
+{items_str}
+
+SCORING SYSTEM (Vantage Metabolic Score):
+- Score < 3.0 = Metabolic Green (healthy)
+- Score 3.0-7.0 = Metabolic Yellow (moderate)
+- Score > 7.0 = Metabolic Red (unhealthy)
+- Lower scores are better
+
+RULES:
+1. Generate 3 meals per day (Breakfast, Lunch, Dinner) for 7 days
+2. Incorporate foods they already enjoy (when healthy)
+3. Suggest healthier alternatives to their unhealthy choices
+4. Keep estimated scores realistic (don't make everything 0)
+5. Include variety - don't repeat the same meal
+6. Make meals practical and easy to prepare
+7. Use common grocery items
+
+Return ONLY valid JSON, no other text:
+{{
+  "Monday": [
+    {{"meal": "Breakfast", "name": "Meal description", "estimated_score": 1.5}},
+    {{"meal": "Lunch", "name": "Meal description", "estimated_score": 2.0}},
+    {{"meal": "Dinner", "name": "Meal description", "estimated_score": 2.5}}
+  ],
+  "Tuesday": [...],
+  "Wednesday": [...],
+  "Thursday": [...],
+  "Friday": [...],
+  "Saturday": [...],
+  "Sunday": [...]
+}}"""
+
+        client = genai.Client(api_key=api_key)
+        print(f"[MEAL PLAN] Calling Gemini API for user {user_id}...")
+
+        response = client.models.generate_content(
+            model="gemini-2.0-flash-exp",
+            contents=types.Content(
+                parts=[types.Part(text=prompt)]
+            )
+        )
+
+        response_text = response.text.strip()
+        print(f"[MEAL PLAN] Raw response: {response_text[:200]}...")
+
+        # Parse JSON response
+        import json
+        import re
+        json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+        if json_match:
+            meal_plan = json.loads(json_match.group(0))
+            total_meals = sum(len(v) for v in meal_plan.values())
+            print(f"✅ [MEAL PLAN] Generated plan with {total_meals} meals across {len(meal_plan)} days")
+            return meal_plan
+        else:
+            print(f"❌ [MEAL PLAN] Could not parse JSON from response")
+            return None
+
+    except Exception as e:
+        print(f"❌ [MEAL PLAN ERROR] {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+
 # === 4. USER DB & TRENDS ===
 @st.cache_resource
 def get_db_connection():

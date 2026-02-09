@@ -28,6 +28,9 @@ if 'trends_view' not in st.session_state: st.session_state.trends_view = 'weekly
 # FIX 6: Status tracking for in-widget display
 if 'scan_status' not in st.session_state: st.session_state.scan_status = None
 if 'detected_items' not in st.session_state: st.session_state.detected_items = []
+# AI Agent state
+if 'ai_insights' not in st.session_state: st.session_state.ai_insights = None
+if 'meal_plan' not in st.session_state: st.session_state.meal_plan = None
 
 # --- COLOR PALETTE ---
 COLORS = {
@@ -446,17 +449,24 @@ if st.session_state.page == 'dashboard':
     if st.session_state.selected_result:
         with st.expander("📊 Metabolic Nutrient Deep Dive", expanded=True):
             ls_raw = st.session_state.selected_result['raw']
-            st.markdown("#### Clinical Data")
-            
+            item_name = st.session_state.selected_result['name']
+            scale = get_serving_scale(item_name)
+
+            if scale < 1.0:
+                serving_g = int(scale * 100)
+                st.markdown(f"#### Clinical Data *(per serving ~{serving_g}g)*")
+            else:
+                st.markdown("#### Clinical Data *(per 100g)*")
+
             c1, c2, c3 = st.columns(3)
-            c1.metric("Calories", f"{ls_raw[2]}")
-            c2.metric("Sugar", f"{ls_raw[3]}g")
-            c3.metric("Fiber", f"{ls_raw[4]}g")
-            
+            c1.metric("Calories", f"{round(float(ls_raw[2] or 0) * scale, 1)}")
+            c2.metric("Sugar", f"{round(float(ls_raw[3] or 0) * scale, 1)}g")
+            c3.metric("Fiber", f"{round(float(ls_raw[4] or 0) * scale, 1)}g")
+
             c4, c5, c6 = st.columns(3)
-            c4.metric("Protein", f"{ls_raw[5]}g")
-            c5.metric("Fat", f"{ls_raw[6]}g")
-            c6.metric("Sodium", f"{ls_raw[7]}mg")
+            c4.metric("Protein", f"{round(float(ls_raw[5] or 0) * scale, 1)}g")
+            c5.metric("Fat", f"{round(float(ls_raw[6] or 0) * scale, 1)}g")
+            c6.metric("Sodium", f"{round(float(ls_raw[7] or 0) * scale, 1)}mg")
             
             col1, col2 = st.columns(2)
             with col1:
@@ -559,6 +569,44 @@ if st.session_state.page == 'dashboard':
         total_items = int(df['count'].sum())
         healthy_count = int(df[df['category'] == 'healthy']['count'].sum()) if 'healthy' in df['category'].values else 0
         st.markdown(f"**Total items:** {total_items} | **Healthy choices:** {healthy_count}")
+
+        # === AI HEALTH COACH ===
+        st.markdown("---")
+        col_ins1, col_ins2 = st.columns([3, 1])
+        with col_ins1:
+            st.markdown("#### 🧠 AI Health Coach")
+        with col_ins2:
+            if st.session_state.ai_insights:
+                if st.button("🔄 Refresh", key="refresh_insights", use_container_width=True):
+                    st.session_state.ai_insights = None
+                    st.rerun()
+
+        if not st.session_state.ai_insights:
+            if st.button("🧠 Get AI Insights", use_container_width=True, type="primary"):
+                with st.spinner("🧠 Your AI Health Coach is analyzing your patterns..."):
+                    insights = generate_health_insights(raw, all_data, days)
+                    if insights:
+                        st.session_state.ai_insights = insights
+                        st.rerun()
+                    else:
+                        st.warning("Could not generate insights. Please try again.")
+
+        if st.session_state.ai_insights:
+            for i, insight in enumerate(st.session_state.ai_insights):
+                emoji = insight.get('emoji', '💡')
+                title = insight.get('title', 'Insight')
+                body = insight.get('insight', '')
+                action = insight.get('action', '')
+                border_colors = [COLORS['olive'], COLORS['yellow'], COLORS['terracotta']]
+                bc = border_colors[i % len(border_colors)]
+                st.markdown(f"""
+                    <div class='card' style='border-left: 4px solid {bc}; padding: 16px;'>
+                        <div style='font-size: 1.1rem; font-weight: 800; margin-bottom: 6px;'>{emoji} {title}</div>
+                        <div style='color: #444; font-size: 0.95rem; margin-bottom: 8px;'>{body}</div>
+                        <div style='color: {COLORS["olive"]}; font-weight: 600; font-size: 0.9rem;'>→ {action}</div>
+                    </div>
+                """, unsafe_allow_html=True)
+
     else:
         if all_data and len(all_data) > 0:
             st.warning(f"⚠️ You have {len(all_data)} logged items, but none in the last {days} day(s). Try selecting a different time range.")
@@ -639,6 +687,65 @@ elif st.session_state.page == 'calendar':
                         st.rerun()
         else:
             st.info("📭 No items for this date. Add items above!")
+
+    # === AI MEAL PLANNING AGENT ===
+    st.markdown("---")
+    col_mp1, col_mp2 = st.columns([3, 1])
+    with col_mp1:
+        st.markdown("#### 🤖 AI Meal Planning")
+    with col_mp2:
+        if st.session_state.meal_plan:
+            if st.button("🗑️ Clear", key="clear_meal_plan", use_container_width=True):
+                st.session_state.meal_plan = None
+                st.rerun()
+
+    if not st.session_state.meal_plan:
+        st.markdown("Get a personalized 7-day meal plan based on your eating history.")
+        if st.button("🤖 Generate AI Meal Plan", use_container_width=True, type="primary"):
+            with st.spinner("🤖 Your AI nutritionist is crafting your personalized meal plan..."):
+                history = get_log_history_db(st.session_state.user_id)
+                plan = generate_meal_plan(history, st.session_state.user_id)
+                if plan:
+                    st.session_state.meal_plan = plan
+                    st.rerun()
+                else:
+                    st.warning("Could not generate meal plan. Please try again.")
+
+    if st.session_state.meal_plan:
+        day_order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+        plan = st.session_state.meal_plan
+
+        for day_name in day_order:
+            meals = plan.get(day_name, [])
+            if not meals:
+                continue
+
+            with st.expander(f"📅 {day_name}", expanded=False):
+                for midx, meal in enumerate(meals):
+                    meal_type = meal.get('meal', 'Meal')
+                    meal_name = meal.get('name', 'Unknown')
+                    est_score = meal.get('estimated_score', 5.0)
+
+                    clr = COLORS['green'] if est_score < 3.0 else COLORS['yellow'] if est_score < 7.0 else COLORS['red']
+                    rating = "Metabolic Green" if est_score < 3.0 else "Metabolic Yellow" if est_score < 7.0 else "Metabolic Red"
+
+                    col_meal, col_score, col_add = st.columns([3, 1, 0.6])
+                    with col_meal:
+                        st.markdown(f"**{meal_type}:** {meal_name}")
+                    with col_score:
+                        st.markdown(f"<div style='text-align:center; color:{clr}; font-weight:bold;'>{est_score}</div>", unsafe_allow_html=True)
+                    with col_add:
+                        # Add to the selected calendar date
+                        if st.button("➕", key=f"mp_{day_name}_{midx}", help=f"Add {meal_name} to {sel_date}"):
+                            add_calendar_item_db(
+                                st.session_state.user_id,
+                                sel_date.strftime("%Y-%m-%d"),
+                                meal_name,
+                                est_score
+                            )
+                            st.success(f"✅ Added!")
+                            time.sleep(0.5)
+                            st.rerun()
 
 elif st.session_state.page == 'log':
     st.markdown("## 📝 Log History")
