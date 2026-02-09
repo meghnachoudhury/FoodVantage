@@ -548,9 +548,9 @@ if st.session_state.page == 'dashboard':
             margin=dict(l=20, r=20, t=20, b=40),
             plot_bgcolor='rgba(0,0,0,0)',
             paper_bgcolor='rgba(0,0,0,0)',
-            xaxis=dict(showgrid=False, showline=False, title=None),
-            yaxis=dict(showgrid=True, gridcolor='#E0E0E0', showline=False, title=None),
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
+            xaxis=dict(showgrid=False, showline=False, title=None, tickfont=dict(color='#1A1A1A'), color='#1A1A1A'),
+            yaxis=dict(showgrid=True, gridcolor='#E0E0E0', showline=False, title=None, tickfont=dict(color='#1A1A1A'), color='#1A1A1A'),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5, font=dict(color='#1A1A1A')),
             hovermode='x unified'
         )
         
