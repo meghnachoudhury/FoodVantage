@@ -592,12 +592,15 @@ if st.session_state.page == 'dashboard':
         if not st.session_state.ai_insights:
             if st.button("🧠 Get AI Insights", use_container_width=True, type="primary"):
                 with st.spinner("🧠 Your AI Health Coach is analyzing your patterns..."):
-                    insights = generate_health_insights(raw, all_data, days)
-                    if insights:
-                        st.session_state.ai_insights = insights
-                        st.rerun()
-                    else:
-                        st.warning("Could not generate insights. Please try again.")
+                    try:
+                        insights = generate_health_insights(raw, all_data, days)
+                        if insights:
+                            st.session_state.ai_insights = insights
+                            st.rerun()
+                        else:
+                            st.warning("Could not generate insights. Please try again.")
+                    except Exception as e:
+                        st.error(f"AI Insights error: {e}")
 
         if st.session_state.ai_insights:
             for i, insight in enumerate(st.session_state.ai_insights):
@@ -711,13 +714,16 @@ elif st.session_state.page == 'calendar':
         st.markdown("Get a personalized 7-day meal plan based on your eating history.")
         if st.button("🤖 Generate AI Meal Plan", use_container_width=True, type="primary"):
             with st.spinner("🤖 Your AI nutritionist is crafting your personalized meal plan..."):
-                history = get_log_history_db(st.session_state.user_id)
-                plan = generate_meal_plan(history, st.session_state.user_id)
-                if plan:
-                    st.session_state.meal_plan = plan
-                    st.rerun()
-                else:
-                    st.warning("Could not generate meal plan. Please try again.")
+                try:
+                    history = get_log_history_db(st.session_state.user_id)
+                    plan = generate_meal_plan(history, st.session_state.user_id)
+                    if plan:
+                        st.session_state.meal_plan = plan
+                        st.rerun()
+                    else:
+                        st.warning("Could not generate meal plan. Please try again.")
+                except Exception as e:
+                    st.error(f"Meal Plan error: {e}")
 
     if st.session_state.meal_plan:
         day_order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]

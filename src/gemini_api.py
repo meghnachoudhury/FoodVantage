@@ -601,7 +601,7 @@ Return ONLY valid JSON array, no other text:
         print(f"[INSIGHTS] Calling Gemini API with {total_items} items over {days_range} days...")
 
         response = client.models.generate_content(
-            model="gemini-2.0-flash-exp",
+            model="gemini-3-flash-preview",
             contents=types.Content(
                 parts=[types.Part(text=prompt)]
             )
@@ -707,7 +707,7 @@ Return ONLY valid JSON, no other text:
         print(f"[MEAL PLAN] Calling Gemini API for user {user_id}...")
 
         response = client.models.generate_content(
-            model="gemini-2.0-flash-exp",
+            model="gemini-3-flash-preview",
             contents=types.Content(
                 parts=[types.Part(text=prompt)]
             )
