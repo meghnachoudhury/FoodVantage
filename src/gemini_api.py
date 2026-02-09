@@ -11,6 +11,7 @@ import io
 import base64
 import requests
 import time
+import threading
 from datetime import datetime, timedelta
 
 load_dotenv()
@@ -105,7 +106,7 @@ def search_vantage_db(product_name: str, limit=20):
         output = []
         for r in results:
             score = calculate_vms_science(r)
-            if score == 10.0:  # Skip default scores
+            if score == 10.0:
                 continue
                 
             rating = "Metabolic Green" if score < 3.0 else "Metabolic Yellow" if score < 7.0 else "Metabolic Red"
@@ -205,10 +206,9 @@ def search_open_food_facts(product_name: str, limit=5):
     except:
         return None
 
-# === FIXED SCANNER WITH TIMEOUT ===
+# === SCANNER WITH HARD 15-SECOND TIMEOUT ===
 def vision_live_scan_dark(image_bytes):
-    """FIXED VERSION - Added timeout and better error handling"""
-    import time
+    """FINAL VERSION - Threading timeout prevents hanging"""
     
     api_key = get_gemini_api_key()
     if not api_key: 
@@ -236,7 +236,7 @@ def vision_live_scan_dark(image_bytes):
             else:
                 img = img.convert('RGB')
         
-        # Resize if too large (helps with speed)
+        # Resize if too large
         max_size = 1024
         if img.width > max_size or img.height > max_size:
             img.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
@@ -252,50 +252,88 @@ def vision_live_scan_dark(image_bytes):
         # SIMPLE prompt
         prompt = "What food item is in this image? Reply with just the name."
         
-        # Call Gemini with timeout handling
+        # Call Gemini with THREADING TIMEOUT
         client = genai.Client(api_key=api_key)
         
-        print("[DEBUG] Calling Gemini API...")
+        print("[DEBUG] Calling Gemini API with 15s timeout...")
         start_time = time.time()
         
-        try:
-            response = client.models.generate_content(
-                model="gemini-3-flash-preview",
-                contents=types.Content(
-                    parts=[
-                        types.Part(text=prompt),
-                        types.Part(
-                            inline_data=types.Blob(
-                                mime_type="image/jpeg",
-                                data=img_b64
+        # Containers for thread communication
+        response_container = [None]
+        error_container = [None]
+        
+        def call_gemini_api():
+            """Thread target function"""
+            try:
+                response_container[0] = client.models.generate_content(
+                    model="gemini-3-flash-preview",
+                    contents=types.Content(
+                        parts=[
+                            types.Part(text=prompt),
+                            types.Part(
+                                inline_data=types.Blob(
+                                    mime_type="image/jpeg",
+                                    data=img_b64
+                                )
                             )
-                        )
-                    ]
-                ),
-                config=types.GenerateContentConfig(
-                    temperature=0.1,
-                    max_output_tokens=50
+                        ]
+                    ),
+                    config=types.GenerateContentConfig(
+                        temperature=0.1,
+                        max_output_tokens=50
+                    )
                 )
-            )
-            
-            elapsed = time.time() - start_time
-            print(f"[DEBUG] Gemini responded in {elapsed:.2f}s")
-            
-        except Exception as api_error:
-            print(f"[API ERROR] {api_error}")
-            st.error(f"⚠️ API Error: {str(api_error)[:100]}")
-            
-            # Check for quota errors
-            if "429" in str(api_error) or "quota" in str(api_error).lower():
-                st.warning("🔥 API quota limit reached. Please wait a moment and try again.")
-            
+            except Exception as e:
+                error_container[0] = e
+        
+        # Start thread with timeout
+        api_thread = threading.Thread(target=call_gemini_api)
+        api_thread.daemon = True
+        api_thread.start()
+        
+        # Wait maximum 15 seconds
+        api_thread.join(timeout=15.0)
+        
+        elapsed = time.time() - start_time
+        
+        # Check if thread is still alive (timeout occurred)
+        if api_thread.is_alive():
+            print(f"[TIMEOUT] API call exceeded 15 seconds")
+            st.error("⏱️ API timeout (>15s). The service is slow or overloaded.")
+            st.info("💡 Try again in a few moments, or check your internet connection.")
             return None
         
+        # Check for errors
+        if error_container[0]:
+            api_error = error_container[0]
+            error_str = str(api_error)
+            print(f"[API ERROR] {error_str}")
+            
+            # Quota/rate limit errors
+            if "429" in error_str or "quota" in error_str.lower() or "rate" in error_str.lower():
+                st.error("🔥 API Rate Limit Exceeded")
+                st.warning("You've hit Gemini's usage limit. Wait 60 seconds and try again.")
+                return None
+            
+            # Generic API error
+            st.error(f"⚠️ API Error: {error_str[:100]}")
+            return None
+        
+        # Check if we got a response
+        if not response_container[0]:
+            print("[ERROR] No response from API (unknown)")
+            st.error("⚠️ No response from Gemini API. Try again.")
+            return None
+        
+        response = response_container[0]
+        print(f"[DEBUG] API responded in {elapsed:.2f}s")
+        
+        # Extract product name
         product_name = response.text.strip().replace('"', '').replace('*', '').replace('.', '')
-        print(f"[GEMINI] Detected: {product_name}")
+        print(f"[GEMINI] Detected: '{product_name}'")
         
         if not product_name or len(product_name) < 2:
-            st.warning("⚠️ Could not identify item. Try repositioning.")
+            st.warning("⚠️ Could not identify item clearly. Try repositioning or better lighting.")
             return None
         
         # Search database
@@ -306,8 +344,9 @@ def vision_live_scan_dark(image_bytes):
             print(f"[DATABASE] Found {len(results)} matches")
             return results
         else:
-            print(f"[DATABASE] No matches found")
-            st.warning(f"🔍 '{product_name}' not in database yet. Try a different item!")
+            print(f"[DATABASE] No matches for '{product_name}'")
+            st.warning(f"🔍 Gemini detected '{product_name}' but it's not in our database yet.")
+            st.info("💡 Try searching manually in the sidebar, or scan a different item.")
             return None
         
     except Exception as e:
@@ -316,7 +355,7 @@ def vision_live_scan_dark(image_bytes):
         import traceback
         traceback.print_exc()
         
-        # Show helpful error to user
+        # User-friendly errors
         if "connection" in error_msg.lower() or "timeout" in error_msg.lower():
             st.error("⚠️ Network error. Check your internet connection.")
         elif "invalid" in error_msg.lower() or "format" in error_msg.lower():
@@ -331,8 +370,10 @@ def vision_live_scan_dark(image_bytes):
 def get_db_connection():
     con = duckdb.connect('/tmp/user_data.db', read_only=False)
     con.execute("CREATE TABLE IF NOT EXISTS users (username VARCHAR PRIMARY KEY, password_hash VARCHAR)")
-    try: con.execute("CREATE SEQUENCE IF NOT EXISTS seq_cal_id START 1")
-    except: pass
+    try: 
+        con.execute("CREATE SEQUENCE IF NOT EXISTS seq_cal_id START 1")
+    except: 
+        pass
     con.execute("CREATE TABLE IF NOT EXISTS calendar (id INTEGER DEFAULT nextval('seq_cal_id'), username VARCHAR, date DATE, item_name VARCHAR, score FLOAT, category VARCHAR)")
     return con
 
