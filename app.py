@@ -352,7 +352,15 @@ if st.session_state.page == 'dashboard':
                 </div>
             """, unsafe_allow_html=True)
 
-            # Camera widget
+            # Simple camera - NO focus square needed
+        st.markdown("""
+            <div style="text-align: center; margin: 20px 0;">
+                <div style="background: rgba(212, 118, 94, 0.1); padding: 12px; border-radius: 10px; display: inline-block;">
+                    📸 <strong>Point camera at item and tap to scan</strong>
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+        
         image = back_camera_input(key="hud_cam")
         
         # Status messages
@@ -362,59 +370,6 @@ if st.session_state.page == 'dashboard':
         if st.session_state.get('detected_items'):
             items_text = ", ".join(st.session_state.detected_items[:3])
             st.success(f"👁️ Detected: {items_text}")
-        
-        # SIMPLE FOCUS SQUARE - appears after camera loads
-        st.markdown("""
-            <style>
-                [data-testid="stCameraInput"] {
-                    position: relative !important;
-                }
-                .simple-focus-square {
-                    position: absolute;
-                    top: 70%;
-                    left: 50%;
-                    transform: translate(-50%, -50%);
-                    width: 200px;
-                    height: 200px;
-                    border: 3px solid #D4765E;
-                    border-radius: 20px;
-                    pointer-events: none;
-                    z-index: 1000;
-                    box-shadow: 0 0 0 9999px rgba(0,0,0,0.3);
-                }
-                .simple-focus-square::before {
-                    content: '';
-                    position: absolute;
-                    top: -3px;
-                    left: 50%;
-                    transform: translateX(-50%);
-                    width: 30px;
-                    height: 3px;
-                    background: #D4765E;
-                }
-                .simple-focus-square::after {
-                    content: '';
-                    position: absolute;
-                    left: -3px;
-                    top: 50%;
-                    transform: translateY(-50%);
-                    height: 30px;
-                    width: 3px;
-                    background: #D4765E;
-                }
-            </style>
-            <script>
-                setTimeout(function() {
-                    const camera = document.querySelector('[data-testid="stCameraInput"]');
-                    if (camera && !document.getElementById('focus-overlay')) {
-                        const overlay = document.createElement('div');
-                        overlay.id = 'focus-overlay';
-                        overlay.className = 'simple-focus-square';
-                        camera.appendChild(overlay);
-                    }
-                }, 500);
-            </script>
-        """, unsafe_allow_html=True)
         
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
@@ -686,3 +641,29 @@ elif st.session_state.page == 'log':
             st.markdown(f"<div class='list-row'><span><b>{d}</b>: {name}</span><strong style='color:{clr}'>{score}</strong></div>", unsafe_allow_html=True)
     else:
         st.info("📭 No history yet. Start logging items!")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
