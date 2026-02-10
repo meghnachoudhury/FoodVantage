@@ -110,6 +110,7 @@ def needs_portion_size(item_name):
 # --- CSS (Grocery Template Theme) ---
 st.markdown('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">', unsafe_allow_html=True)
 st.markdown('<link href="https://fonts.googleapis.com/css2?family=Josefin+Sans:wght@300;400;600;700&display=swap" rel="stylesheet">', unsafe_allow_html=True)
+st.markdown('<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded" rel="stylesheet">', unsafe_allow_html=True)
 st.markdown(f"""
     <style>
     /* === GLOBAL === */
@@ -321,41 +322,15 @@ st.markdown(f"""
         font-weight: bold !important;
     }}
 
-    /* === SIDEBAR === */
+    /* === SIDEBAR COLLAPSED CONTROL === */
     [data-testid="collapsedControl"] {{
-        color: transparent !important;
-        font-size: 0 !important;
-        width: 32px !important;
-        height: 32px !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
+        color: {COLORS['olive']} !important;
     }}
 
-    [data-testid="collapsedControl"] svg {{
-        display: none !important;
-    }}
-
-    [data-testid="collapsedControl"]::after {{
-        content: "";
-        display: block;
-        width: 18px;
-        height: 14px;
-        border-top: 3px solid {COLORS['olive']};
-        border-bottom: 3px solid {COLORS['olive']};
-        border-image: none;
-        position: relative;
-    }}
-
-    [data-testid="collapsedControl"]::before {{
-        content: "";
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        width: 18px;
-        height: 3px;
-        background: {COLORS['olive']};
+    [data-testid="collapsedControl"] span {{
+        font-family: 'Material Symbols Rounded' !important;
+        -webkit-font-feature-settings: 'liga' !important;
+        font-feature-settings: 'liga' !important;
     }}
 
     section[data-testid="stSidebar"] {{
