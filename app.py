@@ -130,7 +130,7 @@ st.markdown(f"""
         background-size: cover;
         background-position: center;
         background-repeat: no-repeat;
-        opacity: 0.07;
+        opacity: 0.30;
         pointer-events: none;
         z-index: 0;
     }}
