@@ -724,6 +724,77 @@ Return ONLY valid JSON, no other text:
         raise  # Re-raise so the UI can display the actual error
 
 
+# === 3D. DAILY HEALTHY RECIPES AGENT ===
+def generate_daily_recipes():
+    """
+    Generates 5 unique healthy recipe tiles for the day.
+    Uses OpenAI to pick random healthy recipes inspired by BBC Food.
+    Caches per day so recipes rotate daily but stay consistent within a day.
+    Returns list of 5 recipe dicts or None on error.
+    """
+    api_key = get_gemini_api_key()
+    if not api_key:
+        print("[RECIPES] No OpenAI API key configured")
+        return None
+
+    try:
+        today = datetime.now()
+        day_of_week = today.strftime("%A")
+        day_of_year = today.timetuple().tm_yday
+        week_number = today.isocalendar()[1]
+
+        prompt = f"""You are a healthy recipe curator inspired by BBC Food recipes. Today is {day_of_week}, day {day_of_year} of the year, week {week_number}.
+
+Generate exactly 5 unique, healthy food recipes for today. These should be real, practical recipes that someone could actually make.
+
+RULES:
+1. Each recipe must be DIFFERENT - no repeating ingredients or themes
+2. Mix cuisines: include at least 3 different cuisine types (Mediterranean, Asian, Mexican, Indian, etc.)
+3. Mix meal types: include breakfast, lunch, dinner, snack, and dessert options
+4. All recipes should be genuinely healthy (low sugar, high fiber/protein, whole ingredients)
+5. Use the day number ({day_of_year}) as a seed - generate DIFFERENT recipes than you would for day {day_of_year - 1} or {day_of_year + 1}
+6. Include estimated prep time
+7. Keep recipe names concise (max 6 words)
+
+Return ONLY valid JSON array, no other text:
+[
+  {{"name": "Recipe Name", "cuisine": "Cuisine Type", "meal_type": "Breakfast", "prep_time": "15 min", "description": "One sentence description of the dish", "key_ingredients": "3-4 main ingredients"}},
+  {{"name": "Recipe Name", "cuisine": "Cuisine Type", "meal_type": "Lunch", "prep_time": "20 min", "description": "One sentence description", "key_ingredients": "3-4 main ingredients"}},
+  {{"name": "Recipe Name", "cuisine": "Cuisine Type", "meal_type": "Dinner", "prep_time": "30 min", "description": "One sentence description", "key_ingredients": "3-4 main ingredients"}},
+  {{"name": "Recipe Name", "cuisine": "Cuisine Type", "meal_type": "Snack", "prep_time": "10 min", "description": "One sentence description", "key_ingredients": "3-4 main ingredients"}},
+  {{"name": "Recipe Name", "cuisine": "Cuisine Type", "meal_type": "Dessert", "prep_time": "15 min", "description": "One sentence description", "key_ingredients": "3-4 main ingredients"}}
+]"""
+
+        client = OpenAI(api_key=api_key)
+        print(f"[RECIPES] Calling OpenAI GPT-4o for daily recipes (day {day_of_year})...")
+
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=1000
+        )
+
+        response_text = response.choices[0].message.content.strip()
+        print(f"[RECIPES] Raw response: {response_text[:200]}...")
+
+        import json
+        import re
+        json_match = re.search(r'\[.*\]', response_text, re.DOTALL)
+        if json_match:
+            recipes = json.loads(json_match.group(0))
+            print(f"✅ [RECIPES] Generated {len(recipes)} recipes")
+            return recipes[:5]
+        else:
+            print(f"❌ [RECIPES] Could not parse JSON from response")
+            return None
+
+    except Exception as e:
+        print(f"❌ [RECIPES ERROR] {e}")
+        import traceback
+        traceback.print_exc()
+        raise
+
+
 # === 4. USER DB & TRENDS ===
 @st.cache_resource
 def get_db_connection():

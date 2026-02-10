@@ -13,7 +13,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), "src"))
 from gemini_api import (
     calculate_vms_science, get_serving_scale, get_scientific_db,
     search_vantage_db, search_open_food_facts, vision_live_scan_dark,
-    generate_health_insights, generate_meal_plan,
+    generate_health_insights, generate_meal_plan, generate_daily_recipes,
     get_db_connection, get_trend_data_db, get_all_calendar_data_db,
     get_gemini_api_key, authenticate_user,
     add_calendar_item_db, get_calendar_items_db, delete_item_db,
@@ -40,6 +40,8 @@ if 'detected_items' not in st.session_state: st.session_state.detected_items = [
 # AI Agent state
 if 'ai_insights' not in st.session_state: st.session_state.ai_insights = None
 if 'meal_plan' not in st.session_state: st.session_state.meal_plan = None
+if 'daily_recipes' not in st.session_state: st.session_state.daily_recipes = None
+if 'recipes_date' not in st.session_state: st.session_state.recipes_date = None
 
 # --- BACKGROUND IMAGE ---
 _bg_path = os.path.join(os.path.dirname(__file__), "assets", "image_1010.png")
@@ -60,7 +62,7 @@ COLORS = {
     'yellow': '#F9A825',         # Moderate score amber
     'red': '#E53935',            # Unhealthy score red
     'camera_icon': '#444444',    # Dark grey camera icon
-    'toggle_button': '#5B8C3E',  # Green toggle buttons
+    'toggle_button': '#E8967A',  # Salmon pink toggle buttons
     'unhealthy_bar': '#EF9A9A',  # Softer red for chart bars
     'card_bg': '#FFFFFF',
     'border': '#E8E0D4',         # Warm border tone
@@ -718,6 +720,67 @@ if st.session_state.page == 'dashboard':
             st.warning(f"⚠️ You have {len(all_data)} logged items, but none in the last {days} day(s). Try selecting a different time range.")
         else:
             st.info("📊 No data yet. Start logging items!")
+
+    # === DAILY HEALTHY RECIPES ===
+    st.markdown("---")
+    st.markdown("### 🥗 Healthy Recipes for the Day")
+
+    today_str = datetime.now().strftime("%Y-%m-%d")
+
+    # Auto-refresh recipes if it's a new day
+    if st.session_state.recipes_date != today_str:
+        st.session_state.daily_recipes = None
+        st.session_state.recipes_date = today_str
+
+    if not st.session_state.daily_recipes:
+        if st.button("🍳 Discover Today's Recipes", use_container_width=True, type="primary"):
+            with st.spinner("🍳 Finding healthy recipes for you..."):
+                try:
+                    recipes = generate_daily_recipes()
+                    if recipes:
+                        st.session_state.daily_recipes = recipes
+                        st.session_state.recipes_date = today_str
+                        st.rerun()
+                    else:
+                        st.warning("Could not load recipes. Please try again.")
+                except Exception as e:
+                    st.error(f"Recipe error: {e}")
+
+    if st.session_state.daily_recipes:
+        meal_emojis = {
+            'Breakfast': '🌅', 'Lunch': '☀️', 'Dinner': '🌙',
+            'Snack': '🍎', 'Dessert': '🍨'
+        }
+        cuisine_colors = ['#E8967A', '#5B8C3E', '#F9A825', '#4CAF50', '#8BC34A']
+
+        cols = st.columns(5)
+        for idx, recipe in enumerate(st.session_state.daily_recipes[:5]):
+            with cols[idx % 5]:
+                r_name = recipe.get('name', 'Recipe')
+                r_type = recipe.get('meal_type', 'Meal')
+                r_cuisine = recipe.get('cuisine', '')
+                r_time = recipe.get('prep_time', '?')
+                r_desc = recipe.get('description', '')
+                r_ingredients = recipe.get('key_ingredients', '')
+                r_emoji = meal_emojis.get(r_type, '🍽️')
+                r_color = cuisine_colors[idx % len(cuisine_colors)]
+
+                st.markdown(f"""
+                    <div class='card' style='text-align: center; padding: 16px; border-top: 4px solid {r_color}; min-height: 240px;'>
+                        <div style='font-size: 2rem; margin-bottom: 6px;'>{r_emoji}</div>
+                        <div style='font-size: 0.75rem; color: {r_color}; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;'>{r_type}</div>
+                        <div style='font-size: 0.95rem; font-weight: 800; margin: 8px 0 4px 0; line-height: 1.2;'>{r_name}</div>
+                        <div style='font-size: 0.75rem; color: #888; margin-bottom: 6px;'>{r_cuisine} · {r_time}</div>
+                        <div style='font-size: 0.8rem; color: #555; margin-bottom: 6px;'>{r_desc}</div>
+                        <div style='font-size: 0.7rem; color: #999; font-style: italic;'>{r_ingredients}</div>
+                    </div>
+                """, unsafe_allow_html=True)
+
+        col_refresh = st.columns([3, 1])[1]
+        with col_refresh:
+            if st.button("🔄 New Recipes", key="refresh_recipes", use_container_width=True):
+                st.session_state.daily_recipes = None
+                st.rerun()
 
 elif st.session_state.page == 'calendar':
     st.markdown("## 📅 Grocery Calendar")
