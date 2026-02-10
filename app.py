@@ -1,6 +1,7 @@
 import streamlit as st
 import sys
 import os
+import base64
 import pandas as pd
 import hashlib
 import calendar as cal_module
@@ -39,6 +40,14 @@ if 'detected_items' not in st.session_state: st.session_state.detected_items = [
 # AI Agent state
 if 'ai_insights' not in st.session_state: st.session_state.ai_insights = None
 if 'meal_plan' not in st.session_state: st.session_state.meal_plan = None
+
+# --- BACKGROUND IMAGE ---
+_bg_path = os.path.join(os.path.dirname(__file__), "assets", "grocery_bg_small.jpg")
+if os.path.exists(_bg_path):
+    with open(_bg_path, "rb") as _f:
+        _bg_b64 = base64.b64encode(_f.read()).decode()
+else:
+    _bg_b64 = ""
 
 # --- COLOR PALETTE (Grocery Template) ---
 COLORS = {
@@ -108,6 +117,22 @@ st.markdown(f"""
         background-color: {COLORS['beige']};
         color: #1A1A1A;
         font-family: 'Josefin Sans', sans-serif;
+    }}
+
+    .stApp::before {{
+        content: "";
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-image: url("data:image/jpeg;base64,{_bg_b64}");
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+        opacity: 0.07;
+        pointer-events: none;
+        z-index: 0;
     }}
 
     h1, h2, h3, h4, h5, h6, p, span, div, label {{
@@ -298,14 +323,7 @@ st.markdown(f"""
 
     /* === SIDEBAR === */
     [data-testid="collapsedControl"] {{
-        color: transparent !important;
-        font-size: 0 !important;
-    }}
-
-    [data-testid="collapsedControl"]::before {{
-        content: "»";
-        font-size: 1.5rem;
-        color: white;
+        color: {COLORS['olive']} !important;
     }}
 
     section[data-testid="stSidebar"] {{
@@ -776,6 +794,16 @@ elif st.session_state.page == 'calendar':
         else:
             st.info("📭 No items for this date. Add items above!")
 
+elif st.session_state.page == 'log':
+    st.markdown("## 📝 Log History")
+    history = get_log_history_db(st.session_state.user_id)
+    if history:
+        for d, name, score, cat in history:
+            clr = COLORS['green'] if score < 3.0 else COLORS['yellow'] if score < 7.0 else COLORS['red']
+            st.markdown(f"<div class='list-row'><span><b>{d}</b>: {name}</span><strong style='color:{clr}'>{score}</strong></div>", unsafe_allow_html=True)
+    else:
+        st.info("📭 No history yet. Start logging items!")
+
     # === AI MEAL PLANNING AGENT ===
     st.markdown("---")
     col_mp1, col_mp2 = st.columns([3, 1])
@@ -805,6 +833,7 @@ elif st.session_state.page == 'calendar':
     if st.session_state.meal_plan:
         day_order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
         plan = st.session_state.meal_plan
+        today_str = datetime.now().strftime("%Y-%m-%d")
 
         for day_name in day_order:
             meals = plan.get(day_name, [])
@@ -818,7 +847,6 @@ elif st.session_state.page == 'calendar':
                     est_score = meal.get('estimated_score', 5.0)
 
                     clr = COLORS['green'] if est_score < 3.0 else COLORS['yellow'] if est_score < 7.0 else COLORS['red']
-                    rating = "Metabolic Green" if est_score < 3.0 else "Metabolic Yellow" if est_score < 7.0 else "Metabolic Red"
 
                     col_meal, col_score, col_add = st.columns([3, 1, 0.6])
                     with col_meal:
@@ -826,25 +854,14 @@ elif st.session_state.page == 'calendar':
                     with col_score:
                         st.markdown(f"<div style='text-align:center; color:{clr}; font-weight:bold;'>{est_score}</div>", unsafe_allow_html=True)
                     with col_add:
-                        # Add to the selected calendar date
-                        if st.button("➕", key=f"mp_{day_name}_{midx}", help=f"Add {meal_name} to {sel_date}"):
+                        if st.button("➕", key=f"mp_{day_name}_{midx}", help=f"Add {meal_name} to today"):
                             add_calendar_item_db(
                                 st.session_state.user_id,
-                                sel_date.strftime("%Y-%m-%d"),
+                                today_str,
                                 meal_name,
                                 est_score
                             )
                             st.success(f"✅ Added!")
                             time.sleep(0.5)
                             st.rerun()
-
-elif st.session_state.page == 'log':
-    st.markdown("## 📝 Log History")
-    history = get_log_history_db(st.session_state.user_id)
-    if history:
-        for d, name, score, cat in history:
-            clr = COLORS['green'] if score < 3.0 else COLORS['yellow'] if score < 7.0 else COLORS['red']
-            st.markdown(f"<div class='list-row'><span><b>{d}</b>: {name}</span><strong style='color:{clr}'>{score}</strong></div>", unsafe_allow_html=True)
-    else:
-        st.info("📭 No history yet. Start logging items!")
 
