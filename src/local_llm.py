@@ -15,12 +15,14 @@ Uses Ollama's OpenAI-compatible API, so the same code works with:
 
 Setup:
     1. Install Ollama: https://ollama.com
-    2. Pull models:
-        ollama pull llama3.2-vision:11b   # For vision tasks
-        ollama pull llama3.2:3b            # For text tasks (lightweight)
-        OR
-        ollama pull mistral:7b             # For text tasks (more capable)
+    2. Pull models (~3GB total):
+        ollama pull moondream              # Vision (~1.7GB) - smallest vision model
+        ollama pull llama3.2:1b            # Text (~1.3GB) - lightweight instruct
     3. Ollama runs automatically on http://localhost:11434
+
+    For more capable (but larger) models:
+        ollama pull llama3.2-vision:11b    # Vision (~7GB) - best quality
+        ollama pull llama3.2:3b            # Text (~2GB) - better JSON output
 """
 
 import os
@@ -34,8 +36,8 @@ from typing import Optional
 # --- Configuration ---
 # Override with environment variables or .env
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-OLLAMA_VISION_MODEL = os.getenv("OLLAMA_VISION_MODEL", "llama3.2-vision:11b")
-OLLAMA_TEXT_MODEL = os.getenv("OLLAMA_TEXT_MODEL", "llama3.2:3b")
+OLLAMA_VISION_MODEL = os.getenv("OLLAMA_VISION_MODEL", "moondream")
+OLLAMA_TEXT_MODEL = os.getenv("OLLAMA_TEXT_MODEL", "llama3.2:1b")
 OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "120"))
 
 
