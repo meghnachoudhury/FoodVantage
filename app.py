@@ -15,10 +15,11 @@ from gemini_api import (
     search_vantage_db, search_open_food_facts, vision_live_scan_dark,
     generate_health_insights, generate_meal_plan, generate_daily_recipes,
     get_db_connection, get_trend_data_db, get_all_calendar_data_db,
-    get_gemini_api_key, authenticate_user,
+    authenticate_user,
     add_calendar_item_db, get_calendar_items_db, delete_item_db,
     get_log_history_db, create_user
 )
+from local_llm import get_local_llm
 from streamlit_back_camera_input import back_camera_input
 
 st.set_page_config(page_title="FoodVantage", page_icon="🥗", layout="wide", initial_sidebar_state="expanded")
@@ -463,7 +464,7 @@ if st.session_state.page == 'dashboard':
             st.markdown(f"""
                 <div class="hud-bubble">
                     <div style="font-size: 1.2rem; font-weight: 700;">🔍 Analyzing Image...</div>
-                    <div style="font-size: 0.85rem; color: #666; margin-top: 4px;">Processing with Gemini AI</div>
+                    <div style="font-size: 0.85rem; color: #666; margin-top: 4px;">Processing with Local AI</div>
                 </div>
             """, unsafe_allow_html=True)
         elif st.session_state.get('detected_items'):

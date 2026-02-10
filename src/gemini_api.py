@@ -3,15 +3,13 @@ import os
 import zipfile
 import streamlit as st
 import hashlib
-from openai import OpenAI
-from dotenv import load_dotenv
 from PIL import Image
 import io
 import base64
 import requests
 from datetime import datetime, timedelta
 
-load_dotenv()
+from local_llm import get_local_llm
 
 # === 1. VMS ALGORITHM (ENHANCED FOR FIX 5) ===
 # Serving size ratios (fraction of 100g that represents one serving)
@@ -64,19 +62,19 @@ def calculate_vms_science(row):
             cal, sug, fib, prot, fat, sod = [v * scale for v in [cal, sug, fib, prot, fat, sod]]
 
         n = name.lower()
-        
-        common_fruits = ['apple', 'banana', 'orange', 'grape', 'strawberry', 'blueberry', 
+
+        common_fruits = ['apple', 'banana', 'orange', 'grape', 'strawberry', 'blueberry',
                         'raspberry', 'mango', 'pineapple', 'watermelon', 'melon', 'kiwi',
                         'peach', 'pear', 'plum', 'cherry', 'lime', 'lemon', 'grapefruit',
                         'papaya', 'guava', 'passion fruit', 'dragon fruit', 'avocado']
-        
+
         is_fruit = any(fruit in n for fruit in common_fruits)
         is_liquid = any(x in n for x in ['juice', 'soda', 'cola', 'drink', 'beverage', 'smoothie'])
         is_dried = any(x in n for x in ['dried', 'dehydrated', 'raisin'])
-        
+
         # FIX 5: Enhanced processing detection for cooked foods
         processed_indicators = [
-            'biscuit', 'burger', 'sandwich', 'pizza', 'nugget', 'patty', 
+            'biscuit', 'burger', 'sandwich', 'pizza', 'nugget', 'patty',
             'fried', 'breaded', 'crispy', 'wrapped', 'stuffed', 'smothered',
             'cheesy', 'creamy', 'buttery', 'glazed', 'frosted', 'coated',
             'melt', 'loaded', 'supreme', 'deluxe', 'combo', 'platter',
@@ -84,25 +82,25 @@ def calculate_vms_science(row):
             'cooked', 'grilled', 'baked', 'roasted', 'steamed', 'boiled',
             'sauteed', 'plate', 'meal', 'dish', 'curry', 'stew', 'soup'
         ]
-        
+
         is_heavily_processed = any(word in n for word in processed_indicators) or nova_val >= 3
-        
+
         # Only mark as superfood if NOT heavily processed
         if not is_heavily_processed:
             is_superfood = any(x in n for x in ['salmon', 'lentils', 'beans', 'broccoli', 'egg', 'avocado', 'spinach', 'kale'])
         else:
             is_superfood = False
-        
+
         is_dairy_plain = ('milk' in n or 'yogurt' in n) and sug < 5.0
-        
+
         # Whole fresh requires NOVA <= 2 AND not heavily processed
-        is_whole_fresh = ((nova_val <= 2 and (is_superfood or is_dairy_plain or is_fruit)) 
+        is_whole_fresh = ((nova_val <= 2 and (is_superfood or is_dairy_plain or is_fruit))
                          and not (is_liquid or is_dried) and not is_heavily_processed)
 
         pts_energy = min(cal / 80, 10.0)
-        pts_fat = min(fat / 2.0, 10.0) 
+        pts_fat = min(fat / 2.0, 10.0)
         pts_sodium = min(sod / 150, 10.0)
-        
+
         if is_liquid:
             pts_sugar = min(sug / 1.5, 10.0)
         elif is_whole_fresh:
@@ -112,11 +110,11 @@ def calculate_vms_science(row):
 
         c_total = 0.0 if is_liquid else (min(fib / 0.5, 7.0) + min(prot / 1.2, 7.0))
         score = round((pts_energy + pts_fat + pts_sodium + pts_sugar) - c_total, 2)
-        
+
         if is_whole_fresh: return min(score, -1.0)
         if is_liquid and sug > 4.0: return max(score, 7.5)
         if is_dried and sug > 15.0: return max(score, 7.0)
-        
+
         return max(-2.0, min(10.0, score))
     except: return 5.0
 
@@ -126,7 +124,7 @@ def get_scientific_db():
     zip_path, db_path = 'data/vantage_core.zip', '/tmp/data/vantage_core.db'
     if not os.path.exists(db_path) and os.path.exists(zip_path):
         os.makedirs('/tmp/data', exist_ok=True)
-        with zipfile.ZipFile(zip_path, 'r') as zip_ref: 
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
             zip_ref.extractall('/tmp/')
     return duckdb.connect(db_path, read_only=True)
 
@@ -139,12 +137,12 @@ def search_vantage_db(product_name: str, limit=5):
     if not con: return None
     try:
         safe_name = product_name.replace("'", "''")
-        
+
         query = f"""
-            SELECT * FROM products 
+            SELECT * FROM products
             WHERE product_name ILIKE '%{safe_name}%'
-            ORDER BY 
-                CASE 
+            ORDER BY
+                CASE
                     WHEN LOWER(product_name) = LOWER('{safe_name}') THEN 0
                     WHEN product_name NOT LIKE '%,%' AND (brand IS NULL OR brand = '') THEN 1
                     WHEN LENGTH(product_name) - LENGTH(REPLACE(product_name, ' ', '')) <= 2 THEN 2
@@ -154,37 +152,37 @@ def search_vantage_db(product_name: str, limit=5):
                 sugar DESC
             LIMIT {limit}
         """
-        
+
         results = con.execute(query).fetchall()
-        
+
         # If no results in local DB, try Open Food Facts API
         if not results or len(results) == 0:
             print(f"[DB] No results in local database, trying Open Food Facts...")
             return search_open_food_facts(product_name, limit)
-        
+
         output = []
         for r in results:
             score = calculate_vms_science(r)
             rating = "Metabolic Green" if score < 3.0 else "Metabolic Yellow" if score < 7.0 else "Metabolic Red"
-            
+
             full_name = r[0].title()
             brand = str(r[1]).title() if r[1] and r[1].strip() else ""
-            
+
             if brand and brand not in full_name:
                 display_name = f"{brand} {full_name}"
             else:
                 display_name = full_name
-            
+
             output.append({
                 "name": display_name,
                 "brand": brand,
-                "vms_score": score, 
-                "rating": rating, 
+                "vms_score": score,
+                "rating": rating,
                 "raw": r
             })
-        
+
         return output
-        
+
     except Exception as e:
         print(f"[DB ERROR] {e}")
         import traceback
@@ -198,26 +196,26 @@ def search_open_food_facts(product_name: str, limit=5):
     try:
         search_term = product_name.lower().strip()
         search_term = search_term.replace("'", "").replace('"', '').replace("'s", "s")
-        
+
         print(f"\n[OPEN FOOD FACTS] ==================")
         print(f"[OPEN FOOD FACTS] Original query: '{product_name}'")
         print(f"[OPEN FOOD FACTS] Cleaned query: '{search_term}'")
-        
+
         # Try multiple search strategies
         search_attempts = [
             search_term,
             " ".join(search_term.split()[:3]),
             search_term.split()[0] if search_term.split() else search_term
         ]
-        
+
         all_products = []
-        
+
         for attempt_num, term in enumerate(search_attempts):
             if not term or len(term) < 3:
                 continue
-                
+
             print(f"[OPEN FOOD FACTS] Attempt {attempt_num + 1}: '{term}'")
-            
+
             url = "https://world.openfoodfacts.org/cgi/search.pl"
             params = {
                 "search_terms": term,
@@ -225,47 +223,47 @@ def search_open_food_facts(product_name: str, limit=5):
                 "json": 1,
                 "fields": "product_name,brands,nutriments,nova_group"
             }
-            
+
             try:
                 response = requests.get(url, params=params, timeout=10)
                 print(f"[OPEN FOOD FACTS] Status code: {response.status_code}")
-                
+
                 if response.status_code == 200:
                     data = response.json()
                     products = data.get('products', [])
                     print(f"[OPEN FOOD FACTS] Found {len(products)} raw results")
-                    
+
                     if products:
                         all_products.extend(products)
                         if len(all_products) >= limit:
                             break
-                            
+
             except requests.Timeout:
                 print(f"[OPEN FOOD FACTS] Timeout on attempt {attempt_num + 1}")
                 continue
             except Exception as e:
                 print(f"[OPEN FOOD FACTS] Error on attempt {attempt_num + 1}: {e}")
                 continue
-        
+
         if not all_products:
             print(f"[OPEN FOOD FACTS] No results found after all attempts")
             return None
-        
+
         # Process results
         output = []
         seen_names = set()
-        
+
         for p in all_products[:limit * 2]:
             try:
                 nutriments = p.get('nutriments', {})
-                
+
                 name = p.get('product_name', '').strip()
                 if not name or name in seen_names:
                     continue
                 seen_names.add(name)
-                
+
                 brand = p.get('brands', '').split(',')[0].strip() if p.get('brands') else ''
-                
+
                 calories = float(nutriments.get('energy-kcal_100g', 0) or 0)
                 sugar = float(nutriments.get('sugars_100g', 0) or 0)
                 fiber = float(nutriments.get('fiber_100g', 0) or 0)
@@ -273,14 +271,14 @@ def search_open_food_facts(product_name: str, limit=5):
                 fat = float(nutriments.get('fat_100g', 0) or 0)
                 sodium = float(nutriments.get('sodium_100g', 0) or 0) * 1000
                 nova = int(p.get('nova_group', 3) or 3)
-                
+
                 row = [name, brand, calories, sugar, fiber, protein, fat, sodium, None, nova]
-                
+
                 score = calculate_vms_science(row)
                 rating = "Metabolic Green" if score < 3.0 else "Metabolic Yellow" if score < 7.0 else "Metabolic Red"
-                
+
                 display_name = f"{brand.title()} {name.title()}" if brand else name.title()
-                
+
                 output.append({
                     "name": display_name,
                     "brand": brand.title() if brand else "",
@@ -288,44 +286,36 @@ def search_open_food_facts(product_name: str, limit=5):
                     "rating": rating,
                     "raw": row
                 })
-                
-                print(f"[OPEN FOOD FACTS] ✅ Added: {display_name} (Score: {score})")
-                
+
+                print(f"[OPEN FOOD FACTS] Added: {display_name} (Score: {score})")
+
                 if len(output) >= limit:
                     break
-                
+
             except Exception as e:
                 print(f"[OPEN FOOD FACTS] Error processing product: {e}")
                 continue
-        
+
         if output:
             print(f"[OPEN FOOD FACTS] Successfully processed {len(output)} products")
             return output
         else:
             print(f"[OPEN FOOD FACTS] No valid products after processing")
             return None
-        
+
     except Exception as e:
         print(f"[OPEN FOOD FACTS] Fatal error: {e}")
         import traceback
         traceback.print_exc()
         return None
 
-# === 3. SCANNER WITH ENHANCED DETECTION (FIX 3, 6) ===
+# === 3. SCANNER WITH LOCAL LLM VISION ===
 def vision_live_scan_dark(image_bytes):
     """
-    FIX 3: Enhanced to detect ALL items in frame with accurate counting
-    FIX 6: Status tracking for in-widget display
+    Uses local Ollama LLM with vision model (llama3.2-vision) to detect food items.
+    Falls back to database-only search if LLM is unavailable.
     """
-    api_key = get_gemini_api_key()
-    if not api_key:
-        st.markdown("""
-            <div class="scanner-result">
-                <div class="scanner-result-title">⚠️ Configuration Error</div>
-                <div class="scanner-result-text">No OpenAI API key configured</div>
-            </div>
-        """, unsafe_allow_html=True)
-        return None
+    llm = get_local_llm()
 
     try:
         # Handle different input types
@@ -343,20 +333,17 @@ def vision_live_scan_dark(image_bytes):
 
         # Convert to RGB
         if img.mode == 'RGBA':
-            print("[DEBUG] Converting RGBA to RGB...")
             background = Image.new('RGB', img.size, (255, 255, 255))
             background.paste(img, mask=img.split()[3] if len(img.split()) == 4 else None)
             img = background
         elif img.mode == 'LA':
-            print("[DEBUG] Converting LA to RGB...")
             background = Image.new('RGB', img.size, (255, 255, 255))
             background.paste(img, mask=img.split()[1])
             img = background
         elif img.mode != 'RGB':
-            print(f"[DEBUG] Converting {img.mode} to RGB...")
             img = img.convert('RGB')
 
-        # Minimal crop (10% edges) to avoid UI elements, but scan most of frame
+        # Minimal crop (5% edges) to avoid UI elements
         left = int(w * 0.05)
         top = int(h * 0.05)
         right = int(w * 0.95)
@@ -381,164 +368,112 @@ def vision_live_scan_dark(image_bytes):
         img_bytes = buf.read()
         img_b64 = base64.b64encode(img_bytes).decode('utf-8')
 
-        # Enhanced prompt for whole-frame detection
-        prompt = """You are a food detection AI. Identify ALL food items visible in this image.
-
-CRITICAL RULES:
-1. Count EACH item separately (1 apple, 2 bananas = 3 total items)
-2. For PACKAGED goods: Use exact product name from label
-3. For FRESH produce: Use common name, count each piece
-4. List ALL items you see in the frame
-5. Scan the ENTIRE visible area
-
-Return a JSON array like: ["Apple", "Banana", "Banana", "Orange", "Coca Cola"]
-
-If you see 2 apples, list "Apple" twice.
-Be PRECISE. Return ONLY the JSON array, no other text."""
-
-        client = OpenAI(api_key=api_key)
-
-        print("[DEBUG] Calling OpenAI GPT-4o API...")
-
         # Analyzing message
         st.markdown("""
             <div class="scanner-result">
                 <div class="scanner-result-title">🔍 Analyzing Image</div>
-                <div class="scanner-result-text">Processing with GPT-4o Vision...</div>
+                <div class="scanner-result-text">Processing with Local AI Vision...</div>
             </div>
         """, unsafe_allow_html=True)
 
-        try:
-            response = client.chat.completions.create(
-                model="gpt-4o",
-                messages=[
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": prompt},
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:image/jpeg;base64,{img_b64}",
-                                    "detail": "high"
-                                }
-                            }
-                        ]
-                    }
-                ],
-                max_tokens=500
-            )
-
-            response_text = response.choices[0].message.content.strip()
-            print(f"[GPT-4o] Raw response: {response_text}")
-
-            # Parse JSON array of items
-            import re
-            json_match = re.search(r'\[.*?\]', response_text, re.DOTALL)
-            if json_match:
-                import json
-                detected_items = json.loads(json_match.group(0))
-                print(f"✅ [GPT-4o] Detected {len(detected_items)} items: {detected_items}")
-            else:
-                # Fallback to single item
-                product_name = response_text.replace('"', '').replace('*', '').replace('.', '')
-                detected_items = [product_name]
-                print(f"✅ [GPT-4o] Single item detected: {product_name}")
-
-            # Detection message
-            items_display = ", ".join(detected_items[:3])
-            if len(detected_items) > 3:
-                items_display += f" +{len(detected_items) - 3} more"
-
-            st.markdown(f"""
-                <div class="scanner-result">
-                    <div class="scanner-result-title">👁️ Items Detected</div>
-                    <div class="scanner-result-text">{items_display}</div>
+        if not llm.is_available():
+            st.markdown("""
+                <div class="scanner-result" style="border-left-color: #D4765E;">
+                    <div class="scanner-result-title">⚠️ Local LLM Not Available</div>
+                    <div class="scanner-result-text">
+                        Ollama is not running. Start it with: <code>ollama serve</code><br>
+                        Then pull a vision model: <code>ollama pull llama3.2-vision:11b</code>
+                    </div>
                 </div>
             """, unsafe_allow_html=True)
+            return None
 
-        except Exception as api_error:
-            print(f"[GPT-4o ERROR] {api_error}")
-            raise api_error
-        
-        # FIX 3: Search for ALL detected items
+        print("[DEBUG] Calling local LLM vision model...")
+
+        detected_items = llm.detect_food_items(img_b64)
+
+        if not detected_items:
+            st.markdown("""
+                <div class="scanner-result" style="border-left-color: #D4765E;">
+                    <div class="scanner-result-title">🔍 No Items Detected</div>
+                    <div class="scanner-result-text">Try better lighting or a different angle.</div>
+                </div>
+            """, unsafe_allow_html=True)
+            return None
+
+        print(f"[LOCAL LLM] Detected {len(detected_items)} items: {detected_items}")
+
+        # Detection message
+        items_display = ", ".join(detected_items[:3])
+        if len(detected_items) > 3:
+            items_display += f" +{len(detected_items) - 3} more"
+
+        st.markdown(f"""
+            <div class="scanner-result">
+                <div class="scanner-result-title">👁️ Items Detected</div>
+                <div class="scanner-result-text">{items_display}</div>
+            </div>
+        """, unsafe_allow_html=True)
+
+        # Search for ALL detected items
         all_results = []
         for item in detected_items:
             results = search_vantage_db(item, limit=1)
             if results and len(results) > 0:
-                # FIX: Filter 10.0 default scores
                 for r in results:
                     if r['vms_score'] != 10.0:
                         all_results.append(r)
-        
+
         if all_results:
-            print(f"✅ [DATABASE] Found {len(all_results)} total matches")
-            
-            # DARK themed success message
+            print(f"[DATABASE] Found {len(all_results)} total matches")
+
             st.markdown(f"""
                 <div class="scanner-result">
-                    <div class="scanner-result-title">✅ Database Match</div>
+                    <div class="scanner-result-title">Database Match</div>
                     <div class="scanner-result-text">Found {len(all_results)} item(s)</div>
                 </div>
             """, unsafe_allow_html=True)
-            
+
             return all_results
         else:
-            print(f"❌ [DATABASE] No matches found")
-            
-            # FIX 7: Friendly error message
+            print(f"[DATABASE] No matches found")
+
             st.markdown(f"""
                 <div class="scanner-result" style="border-left-color: #D4765E;">
                     <div class="scanner-result-title">🔍 Item Not Found Yet</div>
                     <div class="scanner-result-text">We're constantly expanding our database with new products.</div>
                     <div style="font-size: 0.9rem; color: #666; margin-top: 8px;">
-                        Try: Repositioning • Better lighting • Different angle
+                        Try: Repositioning - Better lighting - Different angle
                     </div>
                 </div>
             """, unsafe_allow_html=True)
-            
+
             return None
-        
+
     except Exception as e:
         error_msg = str(e)
-        print(f"❌ [SCAN ERROR] {error_msg}")
+        print(f"[SCAN ERROR] {error_msg}")
         import traceback
         traceback.print_exc()
-        
-        # Better error handling for API quota
-        if "429" in error_msg or "quota" in error_msg.lower() or "RESOURCE_EXHAUSTED" in error_msg:
-            st.markdown(f"""
-                <div class="scanner-result" style="border-left-color: #D4765E;">
-                    <div class="scanner-result-title">⚠️ API Limit Reached</div>
-                    <div class="scanner-result-text">High demand detected. Please try again in a few moments.</div>
-                </div>
-            """, unsafe_allow_html=True)
-        else:
-            st.markdown(f"""
-                <div class="scanner-result" style="border-left-color: #D4765E;">
-                    <div class="scanner-result-title">⚠️ Scan Error</div>
-                    <div class="scanner-result-text">{error_msg[:150]}</div>
-                </div>
-            """, unsafe_allow_html=True)
-        
+
+        st.markdown(f"""
+            <div class="scanner-result" style="border-left-color: #D4765E;">
+                <div class="scanner-result-title">⚠️ Scan Error</div>
+                <div class="scanner-result-text">{error_msg[:150]}</div>
+            </div>
+        """, unsafe_allow_html=True)
+
         return None
 
-# === 3B. AI HEALTH COACH AGENT ===
+# === 3B. AI HEALTH COACH AGENT (LOCAL LLM) ===
 def generate_health_insights(trend_data, history_data, days_range):
     """
     Smart Health Coach: Analyzes user's eating trends and generates
-    3 personalized, actionable recommendations using Gemini AI.
-
-    Args:
-        trend_data: list of (date, category, count) tuples from get_trend_data_db
-        history_data: list of (date, item_name, score, category) tuples from get_all_calendar_data_db
-        days_range: int, number of days being analyzed
-    Returns:
-        list of insight dicts or None on error
+    3 personalized, actionable recommendations using local LLM.
     """
-    api_key = get_gemini_api_key()
-    if not api_key:
-        print("[INSIGHTS] No OpenAI API key configured")
+    llm = get_local_llm()
+    if not llm.is_available():
+        print("[INSIGHTS] Local LLM not available")
         return None
 
     try:
@@ -556,83 +491,40 @@ def generate_health_insights(trend_data, history_data, days_range):
 
         items_str = "\n".join(recent_items) if recent_items else "No items logged yet."
 
-        prompt = f"""You are a friendly, expert nutritionist AI health coach. Analyze this user's eating data and provide exactly 3 personalized, specific, actionable insights.
+        print(f"[INSIGHTS] Calling local LLM with {total_items} items over {days_range} days...")
 
-USER'S EATING DATA (last {days_range} days):
-- Total items logged: {total_items}
-- Healthy items (score < 3.0): {healthy_count}
-- Moderate items (score 3.0-7.0): {moderate_count}
-- Unhealthy items (score > 7.0): {unhealthy_count}
-
-RECENT ITEMS:
-{items_str}
-
-SCORING SYSTEM:
-- Score < 3.0 = Metabolic Green (healthy)
-- Score 3.0-7.0 = Metabolic Yellow (moderate)
-- Score > 7.0 = Metabolic Red (unhealthy)
-- Lower scores are better
-
-RULES:
-1. Be encouraging and positive, not judgmental
-2. Reference SPECIFIC items from their history
-3. Give ACTIONABLE swaps or suggestions
-4. Keep each insight to 2-3 sentences max
-5. If they have few items logged, encourage them to log more
-
-Return ONLY valid JSON array, no other text:
-[
-  {{"emoji": "🥗", "title": "Short Title", "insight": "Your personalized observation...", "action": "Specific action step..."}},
-  {{"emoji": "💪", "title": "Short Title", "insight": "Your personalized observation...", "action": "Specific action step..."}},
-  {{"emoji": "🎯", "title": "Short Title", "insight": "Your personalized observation...", "action": "Specific action step..."}}
-]"""
-
-        client = OpenAI(api_key=api_key)
-        print(f"[INSIGHTS] Calling OpenAI GPT-4o with {total_items} items over {days_range} days...")
-
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=800
+        insights = llm.generate_health_insights(
+            total_items=total_items,
+            healthy_count=healthy_count,
+            moderate_count=moderate_count,
+            unhealthy_count=unhealthy_count,
+            recent_items_str=items_str,
+            days_range=days_range,
         )
 
-        response_text = response.choices[0].message.content.strip()
-        print(f"[INSIGHTS] Raw response: {response_text[:200]}...")
-
-        # Parse JSON response
-        import json
-        import re
-        json_match = re.search(r'\[.*\]', response_text, re.DOTALL)
-        if json_match:
-            insights = json.loads(json_match.group(0))
-            print(f"✅ [INSIGHTS] Generated {len(insights)} insights")
-            return insights
+        if insights:
+            print(f"[INSIGHTS] Generated {len(insights)} insights")
         else:
-            print(f"❌ [INSIGHTS] Could not parse JSON from response")
-            return None
+            print(f"[INSIGHTS] Failed to generate insights")
+
+        return insights
 
     except Exception as e:
-        print(f"❌ [INSIGHTS ERROR] {e}")
+        print(f"[INSIGHTS ERROR] {e}")
         import traceback
         traceback.print_exc()
-        raise  # Re-raise so the UI can display the actual error
+        raise
 
 
-# === 3C. AI MEAL PLANNING AGENT ===
+# === 3C. AI MEAL PLANNING AGENT (LOCAL LLM) ===
 def generate_meal_plan(user_history, user_id):
     """
     AI Meal Planning Agent: Generates a personalized 7-day meal plan
-    based on user's eating history and preferences using Gemini AI.
-
-    Args:
-        user_history: list of (date, item_name, score, category) tuples
-        user_id: string, the current user identifier
-    Returns:
-        dict with day names as keys, list of meal dicts as values, or None on error
+    using local LLM.
     """
-    api_key = get_gemini_api_key()
-    if not api_key:
-        print("[MEAL PLAN] No OpenAI API key configured")
+    llm = get_local_llm()
+    if not llm.is_available():
+        print("[MEAL PLAN] Local LLM not available")
         return None
 
     try:
@@ -652,89 +544,38 @@ def generate_meal_plan(user_history, user_id):
         healthy_pct = round((len(healthy_items) / total * 100), 1) if total > 0 else 0
         unhealthy_pct = round((len(unhealthy_items) / total * 100), 1) if total > 0 else 0
 
-        prompt = f"""You are an expert nutritionist AI. Generate a personalized 7-day meal plan for this user.
+        print(f"[MEAL PLAN] Calling local LLM for user {user_id}...")
 
-USER PROFILE:
-- Total items logged: {total}
-- Healthy choices: {healthy_pct}%
-- Unhealthy choices: {unhealthy_pct}%
-
-ITEMS THEY'VE CONSUMED RECENTLY:
-{items_str}
-
-SCORING SYSTEM (Vantage Metabolic Score):
-- Score < 3.0 = Metabolic Green (healthy)
-- Score 3.0-7.0 = Metabolic Yellow (moderate)
-- Score > 7.0 = Metabolic Red (unhealthy)
-- Lower scores are better
-
-RULES:
-1. Generate 3 meals per day (Breakfast, Lunch, Dinner) for 7 days
-2. Incorporate foods they already enjoy (when healthy)
-3. Suggest healthier alternatives to their unhealthy choices
-4. Keep estimated scores realistic (don't make everything 0)
-5. Include variety - don't repeat the same meal
-6. Make meals practical and easy to prepare
-7. Use common grocery items
-
-Return ONLY valid JSON, no other text:
-{{
-  "Monday": [
-    {{"meal": "Breakfast", "name": "Meal description", "estimated_score": 1.5}},
-    {{"meal": "Lunch", "name": "Meal description", "estimated_score": 2.0}},
-    {{"meal": "Dinner", "name": "Meal description", "estimated_score": 2.5}}
-  ],
-  "Tuesday": [...],
-  "Wednesday": [...],
-  "Thursday": [...],
-  "Friday": [...],
-  "Saturday": [...],
-  "Sunday": [...]
-}}"""
-
-        client = OpenAI(api_key=api_key)
-        print(f"[MEAL PLAN] Calling OpenAI GPT-4o for user {user_id}...")
-
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=2000
+        meal_plan = llm.generate_meal_plan(
+            total=total,
+            healthy_pct=healthy_pct,
+            unhealthy_pct=unhealthy_pct,
+            items_str=items_str,
         )
 
-        response_text = response.choices[0].message.content.strip()
-        print(f"[MEAL PLAN] Raw response: {response_text[:200]}...")
-
-        # Parse JSON response
-        import json
-        import re
-        json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
-        if json_match:
-            meal_plan = json.loads(json_match.group(0))
+        if meal_plan:
             total_meals = sum(len(v) for v in meal_plan.values())
-            print(f"✅ [MEAL PLAN] Generated plan with {total_meals} meals across {len(meal_plan)} days")
-            return meal_plan
+            print(f"[MEAL PLAN] Generated plan with {total_meals} meals across {len(meal_plan)} days")
         else:
-            print(f"❌ [MEAL PLAN] Could not parse JSON from response")
-            return None
+            print(f"[MEAL PLAN] Failed to generate plan")
+
+        return meal_plan
 
     except Exception as e:
-        print(f"❌ [MEAL PLAN ERROR] {e}")
+        print(f"[MEAL PLAN ERROR] {e}")
         import traceback
         traceback.print_exc()
-        raise  # Re-raise so the UI can display the actual error
+        raise
 
 
-# === 3D. DAILY HEALTHY RECIPES AGENT ===
+# === 3D. DAILY HEALTHY RECIPES AGENT (LOCAL LLM) ===
 def generate_daily_recipes():
     """
-    Generates 5 unique healthy recipe tiles for the day.
-    Uses OpenAI to pick random healthy recipes inspired by BBC Food.
-    Caches per day so recipes rotate daily but stay consistent within a day.
-    Returns list of 5 recipe dicts or None on error.
+    Generates 5 unique healthy recipe tiles for the day using local LLM.
     """
-    api_key = get_gemini_api_key()
-    if not api_key:
-        print("[RECIPES] No OpenAI API key configured")
+    llm = get_local_llm()
+    if not llm.is_available():
+        print("[RECIPES] Local LLM not available")
         return None
 
     try:
@@ -743,53 +584,19 @@ def generate_daily_recipes():
         day_of_year = today.timetuple().tm_yday
         week_number = today.isocalendar()[1]
 
-        prompt = f"""You are a healthy recipe curator inspired by BBC Food recipes. Today is {day_of_week}, day {day_of_year} of the year, week {week_number}.
+        print(f"[RECIPES] Calling local LLM for daily recipes (day {day_of_year})...")
 
-Generate exactly 5 unique, healthy food recipes for today. These should be real, practical recipes that someone could actually make.
+        recipes = llm.generate_daily_recipes(day_of_week, day_of_year, week_number)
 
-RULES:
-1. Each recipe must be DIFFERENT - no repeating ingredients or themes
-2. Mix cuisines: include at least 3 different cuisine types (Mediterranean, Asian, Mexican, Indian, etc.)
-3. Mix meal types: include breakfast, lunch, dinner, snack, and dessert options
-4. All recipes should be genuinely healthy (low sugar, high fiber/protein, whole ingredients)
-5. Use the day number ({day_of_year}) as a seed - generate DIFFERENT recipes than you would for day {day_of_year - 1} or {day_of_year + 1}
-6. Include estimated prep time
-7. Keep recipe names concise (max 6 words)
-
-Return ONLY valid JSON array, no other text:
-[
-  {{"name": "Recipe Name", "cuisine": "Cuisine Type", "meal_type": "Breakfast", "prep_time": "15 min", "description": "One sentence description of the dish", "key_ingredients": "3-4 main ingredients"}},
-  {{"name": "Recipe Name", "cuisine": "Cuisine Type", "meal_type": "Lunch", "prep_time": "20 min", "description": "One sentence description", "key_ingredients": "3-4 main ingredients"}},
-  {{"name": "Recipe Name", "cuisine": "Cuisine Type", "meal_type": "Dinner", "prep_time": "30 min", "description": "One sentence description", "key_ingredients": "3-4 main ingredients"}},
-  {{"name": "Recipe Name", "cuisine": "Cuisine Type", "meal_type": "Snack", "prep_time": "10 min", "description": "One sentence description", "key_ingredients": "3-4 main ingredients"}},
-  {{"name": "Recipe Name", "cuisine": "Cuisine Type", "meal_type": "Dessert", "prep_time": "15 min", "description": "One sentence description", "key_ingredients": "3-4 main ingredients"}}
-]"""
-
-        client = OpenAI(api_key=api_key)
-        print(f"[RECIPES] Calling OpenAI GPT-4o for daily recipes (day {day_of_year})...")
-
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=1000
-        )
-
-        response_text = response.choices[0].message.content.strip()
-        print(f"[RECIPES] Raw response: {response_text[:200]}...")
-
-        import json
-        import re
-        json_match = re.search(r'\[.*\]', response_text, re.DOTALL)
-        if json_match:
-            recipes = json.loads(json_match.group(0))
-            print(f"✅ [RECIPES] Generated {len(recipes)} recipes")
-            return recipes[:5]
+        if recipes:
+            print(f"[RECIPES] Generated {len(recipes)} recipes")
         else:
-            print(f"❌ [RECIPES] Could not parse JSON from response")
-            return None
+            print(f"[RECIPES] Failed to generate recipes")
+
+        return recipes
 
     except Exception as e:
-        print(f"❌ [RECIPES ERROR] {e}")
+        print(f"[RECIPES ERROR] {e}")
         import traceback
         traceback.print_exc()
         raise
@@ -811,25 +618,25 @@ def get_trend_data_db(username, days=30):
     try:
         threshold_date = datetime.now().date() - timedelta(days=days - 1)
         threshold_str = threshold_date.strftime('%Y-%m-%d')
-        
+
         print(f"\n[TRENDS] ==================")
         print(f"[TRENDS] Username: {username}")
         print(f"[TRENDS] Looking for items since: {threshold_str}")
         print(f"[TRENDS] Days requested: {days}")
-        
+
         results = con.execute("""
             SELECT date, category, COUNT(*) as count
-            FROM calendar 
+            FROM calendar
             WHERE username = ? AND date >= ?
-            GROUP BY date, category 
+            GROUP BY date, category
             ORDER BY date ASC
         """, [username, threshold_str]).fetchall()
-        
+
         print(f"[TRENDS] Found {len(results)} result rows")
         print(f"[TRENDS] ==================\n")
-        
+
         return results
-        
+
     except Exception as e:
         print(f"[TRENDS ERROR] {e}")
         import traceback
@@ -841,9 +648,9 @@ def get_all_calendar_data_db(username):
     con = get_db_connection()
     try:
         results = con.execute("""
-            SELECT date, item_name, score, category 
-            FROM calendar 
-            WHERE username = ? 
+            SELECT date, item_name, score, category
+            FROM calendar
+            WHERE username = ?
             ORDER BY date DESC
         """, [username]).fetchall()
         return results
@@ -853,10 +660,8 @@ def get_all_calendar_data_db(username):
 
 # === 5. AUTH HELPERS ===
 def get_gemini_api_key():
-    """Now returns OpenAI API key (function name kept for import compatibility)"""
-    if hasattr(st, 'secrets') and "OPENAI_API_KEY" in st.secrets:
-        return st.secrets["OPENAI_API_KEY"]
-    return os.getenv("OPENAI_API_KEY")
+    """Kept for backward compatibility - not used for LLM calls anymore."""
+    return None
 
 def authenticate_user(username, password):
     try:
@@ -874,7 +679,7 @@ def add_calendar_item_db(username, date_str, item_name, score):
     try:
         con = get_db_connection()
         category = 'healthy' if score < 3.0 else 'moderate' if score < 7.0 else 'unhealthy'
-        con.execute("INSERT INTO calendar (username, date, item_name, score, category) VALUES (?, ?, ?, ?, ?)", 
+        con.execute("INSERT INTO calendar (username, date, item_name, score, category) VALUES (?, ?, ?, ?, ?)",
                    [username, date_str, item_name, score, category])
         print(f"[CALENDAR] Added: {item_name} ({score}) for {username} on {date_str}")
     except Exception as e:
@@ -883,7 +688,7 @@ def add_calendar_item_db(username, date_str, item_name, score):
 def get_calendar_items_db(username, date_str):
     try:
         con = get_db_connection()
-        return con.execute("SELECT id, item_name, score, category FROM calendar WHERE username = ? AND date = ?", 
+        return con.execute("SELECT id, item_name, score, category FROM calendar WHERE username = ? AND date = ?",
                           [username, date_str]).fetchall()
     except Exception as e:
         print(f"[CALENDAR ERROR] {e}")
@@ -900,7 +705,7 @@ def delete_item_db(item_id):
 def get_log_history_db(username):
     try:
         con = get_db_connection()
-        return con.execute("SELECT date, item_name, score, category FROM calendar WHERE username = ? ORDER BY date DESC", 
+        return con.execute("SELECT date, item_name, score, category FROM calendar WHERE username = ? ORDER BY date DESC",
                           [username]).fetchall()
     except Exception as e:
         print(f"[LOG ERROR] {e}")
@@ -910,7 +715,7 @@ def create_user(username, password):
     try:
         con = get_db_connection()
         exists = con.execute("SELECT * FROM users WHERE username = ?", [username]).fetchone()
-        if exists: 
+        if exists:
             print(f"[AUTH] User '{username}' already exists")
             return False
         pwd_hash = hashlib.sha256(password.encode()).hexdigest()

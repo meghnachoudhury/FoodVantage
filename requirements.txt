@@ -1,5 +1,4 @@
 streamlit==1.50.0
-openai
 duckdb
 python-dotenv
 streamlit-back-camera-input
