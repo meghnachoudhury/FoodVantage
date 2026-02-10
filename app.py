@@ -110,7 +110,6 @@ def needs_portion_size(item_name):
 # --- CSS (Grocery Template Theme) ---
 st.markdown('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">', unsafe_allow_html=True)
 st.markdown('<link href="https://fonts.googleapis.com/css2?family=Josefin+Sans:wght@300;400;600;700&display=swap" rel="stylesheet">', unsafe_allow_html=True)
-st.markdown('<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded" rel="stylesheet">', unsafe_allow_html=True)
 st.markdown(f"""
     <style>
     /* === GLOBAL === */
@@ -136,7 +135,7 @@ st.markdown(f"""
         z-index: 0;
     }}
 
-    h1, h2, h3, h4, h5, h6, p, span, div, label {{
+    h1, h2, h3, h4, h5, h6, p, div, label {{
         font-family: 'Josefin Sans', sans-serif !important;
     }}
 
@@ -322,15 +321,9 @@ st.markdown(f"""
         font-weight: bold !important;
     }}
 
-    /* === SIDEBAR COLLAPSED CONTROL === */
+    /* === SIDEBAR === */
     [data-testid="collapsedControl"] {{
         color: {COLORS['olive']} !important;
-    }}
-
-    [data-testid="collapsedControl"] span {{
-        font-family: 'Material Symbols Rounded' !important;
-        -webkit-font-feature-settings: 'liga' !important;
-        font-feature-settings: 'liga' !important;
     }}
 
     section[data-testid="stSidebar"] {{
