@@ -59,7 +59,7 @@ COLORS = {
     'green': '#4CAF50',          # Healthy score green
     'yellow': '#F9A825',         # Moderate score amber
     'red': '#E53935',            # Unhealthy score red
-    'camera_icon': '#c6d9ec',    # UNTOUCHED - camera icon color
+    'camera_icon': '#444444',    # Dark grey camera icon
     'toggle_button': '#5B8C3E',  # Green toggle buttons
     'unhealthy_bar': '#EF9A9A',  # Softer red for chart bars
     'card_bg': '#FFFFFF',
