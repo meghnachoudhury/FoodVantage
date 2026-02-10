@@ -40,19 +40,21 @@ if 'detected_items' not in st.session_state: st.session_state.detected_items = [
 if 'ai_insights' not in st.session_state: st.session_state.ai_insights = None
 if 'meal_plan' not in st.session_state: st.session_state.meal_plan = None
 
-# --- COLOR PALETTE ---
+# --- COLOR PALETTE (Grocery Template) ---
 COLORS = {
-    'olive': '#6B7E54',
-    'terracotta': '#D4765E',
-    'salmon': '#E89580',
-    'beige': '#F5E6D3',
+    'olive': '#5B8C3E',          # Primary green from template
+    'terracotta': '#5B8C3E',     # Buttons now green (was terracotta)
+    'salmon': '#8BC34A',         # Light green accent
+    'beige': '#F5F0E8',          # Warm cream background from template
     'dark_text': '#2C2C2C',
-    'green': '#6B7E54',
-    'yellow': '#E8B54D',
-    'red': '#D4765E',
-    'camera_icon': '#c6d9ec',
-    'toggle_button': '#737373',
-    'unhealthy_bar': '#ffb3b3'
+    'green': '#4CAF50',          # Healthy score green
+    'yellow': '#F9A825',         # Moderate score amber
+    'red': '#E53935',            # Unhealthy score red
+    'camera_icon': '#c6d9ec',    # UNTOUCHED - camera icon color
+    'toggle_button': '#5B8C3E',  # Green toggle buttons
+    'unhealthy_bar': '#EF9A9A',  # Softer red for chart bars
+    'card_bg': '#FFFFFF',
+    'border': '#E8E0D4',         # Warm border tone
 }
 
 # FIX 2 & 5: Helper function to determine if item needs portion size
@@ -96,180 +98,255 @@ def needs_portion_size(item_name):
     # Everything else (packaged goods) = show portion size
     return True
 
-# --- CSS ---
+# --- CSS (Grocery Template Theme) ---
 st.markdown('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">', unsafe_allow_html=True)
+st.markdown('<link href="https://fonts.googleapis.com/css2?family=Josefin+Sans:wght@300;400;600;700&display=swap" rel="stylesheet">', unsafe_allow_html=True)
 st.markdown(f"""
     <style>
-    .stApp {{ background-color: #F7F5F0; color: #1A1A1A; }}
-    .logo-text {{ font-family: 'Arial Black', sans-serif; font-size: 3rem; text-align: center; }}
-    .logo-dot {{ color: {COLORS['terracotta']}; }}
-    .card {{ background: white; padding: 24px; border-radius: 20px; border: 1px solid #EEE; box-shadow: 0 4px 12px rgba(0,0,0,0.04); margin-bottom: 20px; }}
-    .white-shelf {{ background: white; height: 35px; border-radius: 10px; border: 1px solid #EEE; margin-bottom: 25px; }}
+    /* === GLOBAL === */
+    .stApp {{
+        background-color: {COLORS['beige']};
+        color: #1A1A1A;
+        font-family: 'Josefin Sans', sans-serif;
+    }}
+
+    h1, h2, h3, h4, h5, h6, p, span, div, label {{
+        font-family: 'Josefin Sans', sans-serif !important;
+    }}
+
+    .logo-text {{ font-family: 'Josefin Sans', sans-serif; font-size: 3rem; text-align: center; font-weight: 700; }}
+    .logo-dot {{ color: {COLORS['olive']}; }}
+
+    .card {{
+        background: white;
+        padding: 24px;
+        border-radius: 24px;
+        border: 1px solid {COLORS['border']};
+        box-shadow: 0 4px 16px rgba(91,140,62,0.06);
+        margin-bottom: 20px;
+    }}
+
+    .white-shelf {{
+        background: linear-gradient(135deg, #E8F5E9 0%, #F1F8E9 100%);
+        height: 35px;
+        border-radius: 14px;
+        border: 1px solid #C8E6C9;
+        margin-bottom: 25px;
+    }}
+
     .tomato-wrapper {{ width: 100%; text-align: center; padding: 30px 0; }}
     .tomato-icon {{ font-size: 150px !important; color: {COLORS['camera_icon']} !important; }}
 
+    /* === INPUTS === */
     input[type="text"], input[type="password"] {{
         background-color: white !important;
         color: #1A1A1A !important;
-        border: 1px solid #DDD !important;
-        border-radius: 8px !important;
-        padding: 12px !important;
+        border: 1.5px solid {COLORS['border']} !important;
+        border-radius: 14px !important;
+        padding: 12px 16px !important;
+        font-family: 'Josefin Sans', sans-serif !important;
     }}
-    
+
+    input[type="text"]:focus, input[type="password"]:focus {{
+        border-color: {COLORS['olive']} !important;
+        box-shadow: 0 0 0 2px rgba(91,140,62,0.15) !important;
+    }}
+
     .stTextInput > div > div > input {{
         background-color: white !important;
         color: #1A1A1A !important;
         -webkit-text-fill-color: #1A1A1A !important;
-    }}
-    
-    .stButton > button {{
-        background-color: {COLORS['terracotta']} !important;
-        color: white !important;
-        border: none !important;
+        font-family: 'Josefin Sans', sans-serif !important;
     }}
 
+    /* === BUTTONS === */
+    .stButton > button {{
+        background-color: {COLORS['olive']} !important;
+        color: white !important;
+        border: none !important;
+        border-radius: 50px !important;
+        font-family: 'Josefin Sans', sans-serif !important;
+        font-weight: 600 !important;
+        padding: 0.5rem 1.5rem !important;
+        transition: all 0.2s ease !important;
+    }}
+
+    .stButton > button:hover {{
+        background-color: #4A7A2E !important;
+        box-shadow: 0 4px 12px rgba(91,140,62,0.3) !important;
+        transform: translateY(-1px) !important;
+    }}
+
+    /* === METRICS === */
     [data-testid="stMetricValue"] {{
         color: #1A1A1A !important;
         font-weight: 700 !important;
         font-size: 1.5rem !important;
+        font-family: 'Josefin Sans', sans-serif !important;
     }}
-    
+
     [data-testid="stMetricLabel"] {{
         color: #2C2C2C !important;
         font-weight: 600 !important;
+        font-family: 'Josefin Sans', sans-serif !important;
     }}
-    
+
+    /* === EXPANDERS === */
     .stExpander {{
         background: white !important;
         color: #1A1A1A !important;
+        border-radius: 16px !important;
+        border: 1px solid {COLORS['border']} !important;
     }}
-    
+
     .stExpander p, .stExpander div, .stExpander span {{
         color: #1A1A1A !important;
     }}
 
-    
+    /* === HUD BUBBLE (Scanner Overlay) === */
     .hud-bubble {{
         position: fixed;
         top: calc(50% - 200px);
         left: 50%;
         transform: translateX(-50%);
-        background: white; 
-        padding: 16px 28px; 
+        background: white;
+        padding: 16px 28px;
         border-radius: 50px;
-        box-shadow: 0 10px 30px rgba(0,0,0,0.15); 
-        border: 3px solid {COLORS['terracotta']};
+        box-shadow: 0 10px 30px rgba(91,140,62,0.2);
+        border: 3px solid {COLORS['olive']};
         z-index: 1000;
         text-align: center;
         min-width: 220px;
+        font-family: 'Josefin Sans', sans-serif;
     }}
-    
-    /* Scrollable results container */
+
+    /* === SCROLLABLE RESULTS === */
     .results-scroll-container {{
         max-height: 400px;
         overflow-y: auto;
         padding-right: 10px;
     }}
-    
+
     .results-scroll-container::-webkit-scrollbar {{
         width: 8px;
     }}
-    
+
     .results-scroll-container::-webkit-scrollbar-track {{
-        background: #f1f1f1;
+        background: #E8F5E9;
         border-radius: 10px;
     }}
-    
+
     .results-scroll-container::-webkit-scrollbar-thumb {{
-        background: {COLORS['terracotta']};
+        background: {COLORS['olive']};
         border-radius: 10px;
     }}
-    
+
+    /* === SCANNER RESULTS === */
     .scanner-result {{
         background: white;
         padding: 16px;
-        border-radius: 12px;
+        border-radius: 16px;
         margin: 12px 0;
         border-left: 4px solid {COLORS['olive']};
+        font-family: 'Josefin Sans', sans-serif;
     }}
-    
+
     .scanner-result-title {{
         color: {COLORS['dark_text']};
-        font-weight: 800;
+        font-weight: 700;
         font-size: 1.1rem;
         margin-bottom: 8px;
     }}
-    
+
     .scanner-result-text {{
         color: {COLORS['dark_text']};
-        font-weight: 700;
+        font-weight: 600;
         font-size: 1.3rem;
         line-height: 1.6;
     }}
-    
-    .list-row {{ 
-        display: flex; 
-        justify-content: space-between; 
+
+    /* === LIST ROWS === */
+    .list-row {{
+        display: flex;
+        justify-content: space-between;
         align-items: center;
-        padding: 12px; 
-        background: #FFF; 
-        border-radius: 12px; 
-        border: 1px solid #F0F0F0; 
-        margin-bottom: 8px; 
+        padding: 14px 16px;
+        background: #FFF;
+        border-radius: 16px;
+        border: 1px solid {COLORS['border']};
+        margin-bottom: 8px;
+        font-family: 'Josefin Sans', sans-serif;
     }}
-    
+
+    /* === TREND TABS === */
     .trend-tabs-container {{
         max-width: 400px;
         margin: 0 auto 20px auto;
     }}
-    
+
     .trend-tabs-container .stButton > button {{
         background-color: {COLORS['toggle_button']} !important;
         color: white !important;
         border: none !important;
     }}
-    
+
     .trend-tabs-container .stButton > button[kind="primary"] {{
         background-color: {COLORS['toggle_button']} !important;
         color: white !important;
         font-weight: bold !important;
     }}
-    
+
+    /* === SIDEBAR === */
     [data-testid="collapsedControl"] {{
         color: transparent !important;
         font-size: 0 !important;
     }}
-    
+
     [data-testid="collapsedControl"]::before {{
         content: "»";
         font-size: 1.5rem;
         color: white;
     }}
-    
-    /* FIX 7: Better error messaging */
-    .friendly-error {{
-        background: #FFF3CD;
-        border-left: 4px solid #FFC107;
-        padding: 16px;
-        border-radius: 8px;
-        margin: 12px 0;
+
+    section[data-testid="stSidebar"] {{
+        background-color: #FAFAF5 !important;
+        border-right: 1px solid {COLORS['border']} !important;
     }}
-    
+
+    /* === FRIENDLY ERRORS === */
+    .friendly-error {{
+        background: #F1F8E9;
+        border-left: 4px solid {COLORS['olive']};
+        padding: 16px;
+        border-radius: 12px;
+        margin: 12px 0;
+        font-family: 'Josefin Sans', sans-serif;
+    }}
+
     .friendly-error-title {{
         font-weight: 700;
-        color: #856404;
+        color: #33691E;
         margin-bottom: 8px;
     }}
-    
+
     .friendly-error-text {{
-        color: #856404;
+        color: #558B2F;
         font-size: 0.9rem;
+    }}
+
+    /* === SCAN PROMPT BADGE === */
+    .scan-prompt {{
+        background: linear-gradient(135deg, #E8F5E9 0%, #F1F8E9 100%);
+        padding: 12px 20px;
+        border-radius: 14px;
+        display: inline-block;
+        border: 1px solid #C8E6C9;
     }}
     </style>
 """, unsafe_allow_html=True)
 
 def render_logo(size="3rem"):
-    st.markdown(f"<div style='text-align: center; margin-bottom: 10px;'><div class='logo-text' style='font-size: {size};'>foodvantage<span class='logo-dot'>.</span></div></div>", unsafe_allow_html=True)
+    st.markdown(f"<div style='text-align: center; margin-bottom: 10px;'><div class='logo-text' style='font-size: {size}; font-family: Josefin Sans, sans-serif;'>foodvantage<span class='logo-dot'>.</span></div></div>", unsafe_allow_html=True)
 
 def create_html_calendar(year, month, selected_day=None):
     cal = cal_module.monthcalendar(year, month)
@@ -381,7 +458,7 @@ if st.session_state.page == 'dashboard':
             # Simple camera - NO focus square needed
         st.markdown("""
             <div style="text-align: center; margin: 20px 0;">
-                <div style="background: rgba(212, 118, 94, 0.1); padding: 12px; border-radius: 10px; display: inline-block;">
+                <div class="scan-prompt">
                     📸 <strong>Point camera at item and tap to scan</strong>
                 </div>
             </div>
