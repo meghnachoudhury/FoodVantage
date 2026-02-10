@@ -1,5 +1,5 @@
 streamlit==1.50.0
-google-genai
+openai
 duckdb
 python-dotenv
 streamlit-back-camera-input

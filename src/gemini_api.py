@@ -3,8 +3,7 @@ import os
 import zipfile
 import streamlit as st
 import hashlib
-from google import genai  # CORRECT: User's SDK version
-from google.genai import types  # CORRECT: User's SDK version
+from openai import OpenAI
 from dotenv import load_dotenv
 from PIL import Image
 import io
@@ -319,29 +318,29 @@ def vision_live_scan_dark(image_bytes):
     FIX 6: Status tracking for in-widget display
     """
     api_key = get_gemini_api_key()
-    if not api_key: 
+    if not api_key:
         st.markdown("""
             <div class="scanner-result">
                 <div class="scanner-result-title">⚠️ Configuration Error</div>
-                <div class="scanner-result-text">No Gemini API key configured</div>
+                <div class="scanner-result-text">No OpenAI API key configured</div>
             </div>
         """, unsafe_allow_html=True)
         return None
-    
+
     try:
         # Handle different input types
         if isinstance(image_bytes, io.BytesIO):
             image_bytes = image_bytes.getvalue()
         elif hasattr(image_bytes, 'read'):
             image_bytes = image_bytes.read()
-        
+
         print(f"[DEBUG] Image type: {type(image_bytes)}, size: {len(image_bytes)} bytes")
-        
+
         # Convert to PIL Image
         img = Image.open(io.BytesIO(image_bytes))
         w, h = img.size
         print(f"[DEBUG] Image dimensions: {w}x{h}, mode: {img.mode}")
-        
+
         # Convert to RGB
         if img.mode == 'RGBA':
             print("[DEBUG] Converting RGBA to RGB...")
@@ -356,32 +355,32 @@ def vision_live_scan_dark(image_bytes):
         elif img.mode != 'RGB':
             print(f"[DEBUG] Converting {img.mode} to RGB...")
             img = img.convert('RGB')
-        
+
         # Minimal crop (10% edges) to avoid UI elements, but scan most of frame
         left = int(w * 0.05)
         top = int(h * 0.05)
         right = int(w * 0.95)
         bottom = int(h * 0.95)
         img_cropped = img.crop((left, top, right, bottom))
-        
+
         # Enhance image
         from PIL import ImageEnhance
         enhancer = ImageEnhance.Contrast(img_cropped)
         img_cropped = enhancer.enhance(1.5)
         enhancer = ImageEnhance.Brightness(img_cropped)
         img_cropped = enhancer.enhance(1.2)
-        
+
         # Final RGB check
         if img_cropped.mode != 'RGB':
             img_cropped = img_cropped.convert('RGB')
-        
+
         # Convert to base64
         buf = io.BytesIO()
         img_cropped.save(buf, format="JPEG", quality=95)
         buf.seek(0)
         img_bytes = buf.read()
         img_b64 = base64.b64encode(img_bytes).decode('utf-8')
-        
+
         # Enhanced prompt for whole-frame detection
         prompt = """You are a food detection AI. Identify ALL food items visible in this image.
 
@@ -396,80 +395,71 @@ Return a JSON array like: ["Apple", "Banana", "Banana", "Orange", "Coca Cola"]
 
 If you see 2 apples, list "Apple" twice.
 Be PRECISE. Return ONLY the JSON array, no other text."""
-        
-        # CORRECT: Use user's SDK format
-        client = genai.Client(api_key=api_key)
-        
-        print("[DEBUG] Calling Gemini API...")
-        
-        # DARK themed analyzing message
+
+        client = OpenAI(api_key=api_key)
+
+        print("[DEBUG] Calling OpenAI GPT-4o API...")
+
+        # Analyzing message
         st.markdown("""
             <div class="scanner-result">
                 <div class="scanner-result-title">🔍 Analyzing Image</div>
-                <div class="scanner-result-text">Processing with Gemini AI...</div>
+                <div class="scanner-result-text">Processing with GPT-4o Vision...</div>
             </div>
         """, unsafe_allow_html=True)
-        
+
         try:
-            response = client.models.generate_content(
-                model="gemini-3-pro-preview",
-                contents=types.Content(
-                    parts=[
-                        types.Part(text=prompt),
-                        types.Part(
-                            inline_data=types.Blob(
-                                mime_type="image/jpeg",
-                                data=img_b64
-                            )
-                        )
-                    ]
-                )
+            response = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": prompt},
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/jpeg;base64,{img_b64}",
+                                    "detail": "high"
+                                }
+                            }
+                        ]
+                    }
+                ],
+                max_tokens=500
             )
-            
-            response_text = response.text.strip()
-            print(f"[GEMINI] Raw response: {response_text}")
-            
-            # FIX 3: Parse JSON array of items
+
+            response_text = response.choices[0].message.content.strip()
+            print(f"[GPT-4o] Raw response: {response_text}")
+
+            # Parse JSON array of items
             import re
             json_match = re.search(r'\[.*?\]', response_text, re.DOTALL)
             if json_match:
-                items_json = json_match.group(0)
-                # Safe eval since we control the format
-                detected_items = eval(items_json)
-                print(f"✅ [GEMINI] Detected {len(detected_items)} items: {detected_items}")
+                import json
+                detected_items = json.loads(json_match.group(0))
+                print(f"✅ [GPT-4o] Detected {len(detected_items)} items: {detected_items}")
             else:
                 # Fallback to single item
                 product_name = response_text.replace('"', '').replace('*', '').replace('.', '')
                 detected_items = [product_name]
-                print(f"✅ [GEMINI] Single item detected: {product_name}")
-            
-            # DARK themed detection message
+                print(f"✅ [GPT-4o] Single item detected: {product_name}")
+
+            # Detection message
             items_display = ", ".join(detected_items[:3])
             if len(detected_items) > 3:
                 items_display += f" +{len(detected_items) - 3} more"
-                
+
             st.markdown(f"""
                 <div class="scanner-result">
                     <div class="scanner-result-title">👁️ Items Detected</div>
                     <div class="scanner-result-text">{items_display}</div>
                 </div>
             """, unsafe_allow_html=True)
-            
-        except Exception as gemini_error:
-            print(f"[GEMINI ERROR] {gemini_error}")
-            # Fallback: treat as single item
-            response = client.models.generate_content(
-                model="gemini-3-pro-preview",
-                contents={
-                    "parts": [
-                        {"text": prompt},
-                        {"inline_data": {"mime_type": "image/jpeg", "data": img_b64}}
-                    ]
-                }
-            )
-            product_name = response.text.strip().replace('"', '').replace('*', '').replace('.', '')
-            detected_items = [product_name]
-            print(f"✅ [GEMINI] Fallback single item: {product_name}")
+
+        except Exception as api_error:
+            print(f"[GPT-4o ERROR] {api_error}")
+            raise api_error
         
         # FIX 3: Search for ALL detected items
         all_results = []
@@ -548,7 +538,7 @@ def generate_health_insights(trend_data, history_data, days_range):
     """
     api_key = get_gemini_api_key()
     if not api_key:
-        print("[INSIGHTS] No Gemini API key configured")
+        print("[INSIGHTS] No OpenAI API key configured")
         return None
 
     try:
@@ -597,17 +587,16 @@ Return ONLY valid JSON array, no other text:
   {{"emoji": "🎯", "title": "Short Title", "insight": "Your personalized observation...", "action": "Specific action step..."}}
 ]"""
 
-        client = genai.Client(api_key=api_key)
-        print(f"[INSIGHTS] Calling Gemini API with {total_items} items over {days_range} days...")
+        client = OpenAI(api_key=api_key)
+        print(f"[INSIGHTS] Calling OpenAI GPT-4o with {total_items} items over {days_range} days...")
 
-        response = client.models.generate_content(
-            model="gemini-3-pro-preview",
-            contents=types.Content(
-                parts=[types.Part(text=prompt)]
-            )
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=800
         )
 
-        response_text = response.text.strip()
+        response_text = response.choices[0].message.content.strip()
         print(f"[INSIGHTS] Raw response: {response_text[:200]}...")
 
         # Parse JSON response
@@ -643,7 +632,7 @@ def generate_meal_plan(user_history, user_id):
     """
     api_key = get_gemini_api_key()
     if not api_key:
-        print("[MEAL PLAN] No Gemini API key configured")
+        print("[MEAL PLAN] No OpenAI API key configured")
         return None
 
     try:
@@ -703,17 +692,16 @@ Return ONLY valid JSON, no other text:
   "Sunday": [...]
 }}"""
 
-        client = genai.Client(api_key=api_key)
-        print(f"[MEAL PLAN] Calling Gemini API for user {user_id}...")
+        client = OpenAI(api_key=api_key)
+        print(f"[MEAL PLAN] Calling OpenAI GPT-4o for user {user_id}...")
 
-        response = client.models.generate_content(
-            model="gemini-3-pro-preview",
-            contents=types.Content(
-                parts=[types.Part(text=prompt)]
-            )
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=2000
         )
 
-        response_text = response.text.strip()
+        response_text = response.choices[0].message.content.strip()
         print(f"[MEAL PLAN] Raw response: {response_text[:200]}...")
 
         # Parse JSON response
@@ -794,9 +782,10 @@ def get_all_calendar_data_db(username):
 
 # === 5. AUTH HELPERS ===
 def get_gemini_api_key():
-    if hasattr(st, 'secrets') and "GEMINI_API_KEY" in st.secrets: 
-        return st.secrets["GEMINI_API_KEY"]
-    return os.getenv("GEMINI_API_KEY")
+    """Now returns OpenAI API key (function name kept for import compatibility)"""
+    if hasattr(st, 'secrets') and "OPENAI_API_KEY" in st.secrets:
+        return st.secrets["OPENAI_API_KEY"]
+    return os.getenv("OPENAI_API_KEY")
 
 def authenticate_user(username, password):
     try:
