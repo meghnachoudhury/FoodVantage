@@ -633,7 +633,7 @@ if st.session_state.page == 'dashboard':
                 x=df_pivot.index,
                 y=df_pivot['healthy'],
                 name='Healthy',
-                marker_color=COLORS['olive'],
+                marker_color='#d9d9d9',
                 hovertemplate='%{y} healthy items<extra></extra>'
             ))
         
@@ -651,7 +651,7 @@ if st.session_state.page == 'dashboard':
                 x=df_pivot.index,
                 y=df_pivot['unhealthy'],
                 name='Unhealthy',
-                marker_color=COLORS['unhealthy_bar'],
+                marker_color='#333333',
                 hovertemplate='%{y} unhealthy items<extra></extra>'
             ))
         
