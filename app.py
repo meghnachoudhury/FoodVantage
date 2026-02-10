@@ -42,7 +42,7 @@ if 'ai_insights' not in st.session_state: st.session_state.ai_insights = None
 if 'meal_plan' not in st.session_state: st.session_state.meal_plan = None
 
 # --- BACKGROUND IMAGE ---
-_bg_path = os.path.join(os.path.dirname(__file__), "assets", "grocery_bg_small.jpg")
+_bg_path = os.path.join(os.path.dirname(__file__), "assets", "image_1010.png")
 if os.path.exists(_bg_path):
     with open(_bg_path, "rb") as _f:
         _bg_b64 = base64.b64encode(_f.read()).decode()
@@ -126,11 +126,11 @@ st.markdown(f"""
         left: 0;
         width: 100%;
         height: 100%;
-        background-image: url("data:image/jpeg;base64,{_bg_b64}");
+        background-image: url("data:image/png;base64,{_bg_b64}");
         background-size: cover;
         background-position: center;
         background-repeat: no-repeat;
-        opacity: 0.30;
+        opacity: 0.40;
         pointer-events: none;
         z-index: 0;
     }}
