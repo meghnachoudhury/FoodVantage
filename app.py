@@ -130,7 +130,7 @@ st.markdown(f"""
         background-size: cover;
         background-position: center;
         background-repeat: no-repeat;
-        opacity: 0.40;
+        opacity: 0.20;
         pointer-events: none;
         z-index: 0;
     }}
@@ -323,7 +323,39 @@ st.markdown(f"""
 
     /* === SIDEBAR === */
     [data-testid="collapsedControl"] {{
-        color: {COLORS['olive']} !important;
+        color: transparent !important;
+        font-size: 0 !important;
+        width: 32px !important;
+        height: 32px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+    }}
+
+    [data-testid="collapsedControl"] svg {{
+        display: none !important;
+    }}
+
+    [data-testid="collapsedControl"]::after {{
+        content: "";
+        display: block;
+        width: 18px;
+        height: 14px;
+        border-top: 3px solid {COLORS['olive']};
+        border-bottom: 3px solid {COLORS['olive']};
+        border-image: none;
+        position: relative;
+    }}
+
+    [data-testid="collapsedControl"]::before {{
+        content: "";
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 18px;
+        height: 3px;
+        background: {COLORS['olive']};
     }}
 
     section[data-testid="stSidebar"] {{
