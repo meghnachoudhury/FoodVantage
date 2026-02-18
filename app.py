@@ -127,8 +127,20 @@ st.markdown(f"""
     section[data-testid="stSidebar"] * {{
         color: {C['text']} !important;
     }}
+    /* Sidebar toggle — keep visible even when header is hidden */
     [data-testid="collapsedControl"] {{
+        visibility: visible !important;
         color: {C['teal']} !important;
+        background: {C['sidebar_bg']} !important;
+        border-radius: 8px !important;
+    }}
+    /* Hide the raw "keyboard" text that shows when Material Icons font fails to load */
+    [data-testid="collapsedControl"] span {{
+        font-size: 0 !important;
+        line-height: 0 !important;
+    }}
+    [data-testid="collapsedControl"] svg {{
+        fill: {C['teal']} !important;
     }}
 
     /* === INPUTS === */
@@ -182,16 +194,9 @@ st.markdown(f"""
         border: 1px solid {C['border']} !important;
     }}
 
-        .stButton > button[kind="secondary"] {{
-        background: #111827 !important;
-        color: #A9B6D0 !important;
-        border: 1px solid {COLORS['border']} !important;
-    }}
-
     .stHorizontalBlock div[data-testid="column"] .stButton > button {{
         border-radius: 12px !important;
     }}
-    
     /* === METRICS === */
     [data-testid="stMetricValue"] {{
         color: {C['text']} !important;
@@ -472,10 +477,43 @@ st.markdown(f"""
     }}
     .stAlert p {{ color: {C['text_sec']} !important; }}
 
-    /* Hide Streamlit branding */
+    /* Hide Streamlit branding but keep sidebar toggle visible */
     #MainMenu {{ visibility: hidden; }}
     footer {{ visibility: hidden; }}
     header {{ visibility: hidden; }}
+    /* Override: sidebar toggle must always be clickable */
+    header [data-testid="collapsedControl"],
+    [data-testid="collapsedControl"] {{
+        visibility: visible !important;
+    }}
+
+    /* === SIDEBAR NAV BUTTONS === */
+    .sidebar-nav .stButton > button {{
+        background: transparent !important;
+        border: none !important;
+        text-align: left !important;
+        justify-content: flex-start !important;
+        padding: 10px 14px !important;
+        color: {C['text_sec']} !important;
+        font-weight: 500 !important;
+        border-radius: 10px !important;
+        font-size: 0.9rem !important;
+        margin-bottom: 2px !important;
+        box-shadow: none !important;
+        letter-spacing: 0 !important;
+    }}
+    .sidebar-nav .stButton > button:hover {{
+        background: rgba(91,155,157,0.1) !important;
+        color: {C['text']} !important;
+        transform: none !important;
+        box-shadow: none !important;
+    }}
+    .sidebar-nav .stButton > button[kind="primary"] {{
+        background: rgba(91,155,157,0.15) !important;
+        color: {C['teal_light']} !important;
+        font-weight: 600 !important;
+        box-shadow: none !important;
+    }}
     </style>
 """, unsafe_allow_html=True)
 
@@ -537,25 +575,17 @@ with st.sidebar:
     # Navigation
     page = st.session_state.page
     nav_items = [
-        ('dashboard', 'fa-solid fa-grid-2', 'Dashboard'),
-        ('calendar', 'fa-regular fa-calendar', 'Calendar'),
-        ('log', 'fa-regular fa-clock', 'Meal Plan'),
+        ('dashboard', '🏠', 'Dashboard'),
+        ('calendar', '📅', 'Calendar'),
+        ('log',       '🍽', 'Meal Plan'),
     ]
+    st.markdown('<div class="sidebar-nav">', unsafe_allow_html=True)
     for pg, icon, label in nav_items:
-        active_class = "active" if page == pg else ""
-        st.markdown(f"<div class='nav-btn {active_class}' id='nav-{pg}'><i class='{icon}'></i> {label}</div>", unsafe_allow_html=True)
-
-    # Use streamlit buttons (hidden behind custom nav styling)
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        if st.button("D", key="nav_dash", use_container_width=True):
-            st.session_state.page = 'dashboard'; st.rerun()
-    with col2:
-        if st.button("C", key="nav_cal", use_container_width=True):
-            st.session_state.page = 'calendar'; st.rerun()
-    with col3:
-        if st.button("M", key="nav_meal", use_container_width=True):
-            st.session_state.page = 'log'; st.rerun()
+        btn_type = "primary" if page == pg else "secondary"
+        if st.button(f"{icon}  {label}", key=f"nav_{pg}", use_container_width=True, type=btn_type):
+            st.session_state.page = pg
+            st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
 
     # Streak Card at bottom
     st.markdown(f"<div style='height:20px;'></div>", unsafe_allow_html=True)
@@ -868,7 +898,7 @@ if st.session_state.page == 'dashboard':
                 if st.button("Refresh Insights", key="refresh_insights", use_container_width=True):
                     st.session_state.ai_insights = None; st.rerun()
             else:
-                if st.button("Get AI Insights", use_container_width=True, type="primary", key="get_insights_btn"):
+                if st.button("🧠  Get AI Insights", use_container_width=True, type="primary", key="get_insights_btn"):
                     with st.spinner("Analyzing your patterns..."):
                         try:
                             insights = generate_health_insights(raw, all_data, days)
@@ -907,7 +937,7 @@ if st.session_state.page == 'dashboard':
                 if st.button("New Recipes", key="refresh_recipes", use_container_width=True):
                     st.session_state.daily_recipes = None; st.rerun()
             else:
-                if st.button("Discover Recipes", use_container_width=True, type="primary", key="discover_recipes_btn"):
+                if st.button("🌿  Discover Recipes", use_container_width=True, type="primary", key="discover_recipes_btn"):
                     with st.spinner("Finding healthy recipes..."):
                         try:
                             recipes = generate_daily_recipes()
