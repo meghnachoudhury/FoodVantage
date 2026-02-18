@@ -137,10 +137,10 @@ st.markdown(f"""
         z-index: 0;
     }}
 
-    .block-container {{
+       .block-container {{
         padding-top: 2rem;
     }}
-
+    
     h1, h2, h3, h4, h5, h6, p, div, label {{
         font-family: 'Inter', sans-serif !important;
         color: #E7ECF8;
@@ -154,8 +154,8 @@ st.markdown(f"""
         letter-spacing: -0.6px;
         color: #F6F8FF;
         white-space: nowrap;
-        line-height: 1.1;
-    }}
+        line-height: 1.1;   
+        }}
 
     .logo-dot {{ color: {COLORS['olive']}; }}
 
@@ -166,7 +166,7 @@ st.markdown(f"""
         font-size: 1.35rem;
         font-weight: 500;
     }}
-
+    
     .card {{
         background: linear-gradient(145deg, #0E1220 0%, #0C101B 100%);
         padding: 24px;
@@ -180,7 +180,7 @@ st.markdown(f"""
         background: linear-gradient(135deg, #111626 0%, #111726 100%);
         height: 35px;
         border-radius: 14px;
-        border: 1px solid {COLORS['border']};
+        background: linear-gradient(135deg, #111626 0%, #111726 100%);
         margin-bottom: 25px;
     }}
 
@@ -228,7 +228,7 @@ st.markdown(f"""
         transform: translateY(-1px) !important;
     }}
 
-    .stButton > button[kind="secondary"] {{
+        .stButton > button[kind="secondary"] {{
         background: #111827 !important;
         color: #A9B6D0 !important;
         border: 1px solid {COLORS['border']} !important;
@@ -237,7 +237,7 @@ st.markdown(f"""
     .stHorizontalBlock div[data-testid="column"] .stButton > button {{
         border-radius: 12px !important;
     }}
-
+    
     /* === METRICS === */
     [data-testid="stMetricValue"] {{
         color: #EFF4FF !important;
@@ -339,36 +339,6 @@ st.markdown(f"""
         font-family: 'Inter', sans-serif;
     }}
 
-    /* === TREND & INSIGHTS PANELS === */
-    .trend-shell {{
-        background: linear-gradient(145deg, #0C101B 0%, #0A0F1A 100%);
-        border: 1px solid #1A2338;
-        border-radius: 26px;
-        padding: 22px 22px 12px 22px;
-        margin-top: 12px;
-        margin-bottom: 22px;
-    }}
-
-    .trend-title-row {{
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        margin-bottom: 6px;
-    }}
-
-    .trend-title {{
-        font-size: 2.15rem;
-        font-weight: 700;
-        letter-spacing: -0.4px;
-        color: #F2F6FF;
-    }}
-
-    .trend-sub {{
-        color: #5F6E8D;
-        font-size: 1.02rem;
-        margin-bottom: 8px;
-    }}
-
     .trend-tabs-container {{
         background: #121827;
         border: 1px solid #242F47;
@@ -378,69 +348,17 @@ st.markdown(f"""
     }}
 
     .trend-tabs-container .stButton > button {{
-        background-color: transparent !important;
-        color: #7D89A6 !important;
+        background-color: #141C30 !important;
+        color: #95A3BD !important;
         border: none !important;
         border-radius: 14px !important;
         min-height: 44px;
     }}
 
     .trend-tabs-container .stButton > button[kind="primary"] {{
-        background: #69AFC2 !important;
-        color: #F5FBFF !important;
-        font-weight: 700 !important;
-    }}
-
-    .trend-chart-note {{
-        color: #5E6B88;
-        font-size: 0.92rem;
-        margin-bottom: 10px;
-    }}
-
-    .action-card {{
-        background: linear-gradient(145deg, #0E1220 0%, #0C101A 100%);
-        border: 1px solid #1A2338;
-        border-radius: 26px;
-        padding: 22px;
-        min-height: 285px;
-    }}
-
-    .action-card-header {{
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        margin-bottom: 10px;
-    }}
-
-    .action-title {{
-        color: #EEF3FF;
-        font-size: 2.05rem;
-        font-weight: 700;
-    }}
-
-    .action-chip {{
-        color: #A998CF;
-        border: 1px solid #473B65;
-        background: rgba(51,40,75,0.45);
-        border-radius: 999px;
-        font-size: 0.9rem;
-        font-weight: 600;
-        padding: 4px 14px;
-    }}
-
-    .action-muted {{
-        color: #667593;
-        font-size: 1.02rem;
-        line-height: 1.65;
-        margin-bottom: 18px;
-    }}
-
-    .coach-list-item {{
-        background: #121827;
-        border: 1px solid #27324C;
-        border-radius: 14px;
-        padding: 10px 12px;
-        margin-bottom: 8px;
+        background-color: #6CA7B8 !important;
+        color: #F8FBFF !important;
+        font-weight: bold !important;
     }}
 
     /* === SIDEBAR === */
@@ -550,7 +468,7 @@ st.markdown(f"""
         font-size: 1.05rem;
         font-weight: 600;
     }}
-
+    
     .sidebar-streak-card {{
         margin-top: 24px;
         padding: 14px;
@@ -612,13 +530,13 @@ st.markdown(f"""
         font-size: 0.85rem;
         margin-top: 2px;
     }}
-
+    
     </style>
 """, unsafe_allow_html=True)
 
 def render_logo(size="3rem"):
     st.markdown(f"<div style='margin-bottom: 8px;'><div class='logo-text' style='font-size: {size};'>foodvantage<span class='logo-dot'>.</span></div></div>", unsafe_allow_html=True)
-
+    
 def create_html_calendar(year, month, selected_day=None):
     cal = cal_module.monthcalendar(year, month)
     html = "<table style='width:100%; text-align:center;'><thead><tr>"
@@ -637,7 +555,7 @@ def create_html_calendar(year, month, selected_day=None):
 # === MAIN APP (NO LOGIN PAGE) ===
 with st.sidebar:
     st.write("")
-    render_logo(size="1.85rem")
+    render_logo(size="2.35rem")
 
     st.markdown("<div class='kicker'>Search foods</div>", unsafe_allow_html=True)
     st.text_input("Food search", key="sidebar_food_search", placeholder="Search foods...", label_visibility="collapsed")
