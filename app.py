@@ -478,13 +478,15 @@ st.markdown(f"""
     .stAlert p {{ color: {C['text_sec']} !important; }}
 
     /* Hide Streamlit branding but keep sidebar toggle visible */
-    #MainMenu {{ visibility: hidden; }}
-    footer {{ visibility: hidden; }}
-    header {{ visibility: hidden; }}
-    /* Override: sidebar toggle must always be clickable */
-    header [data-testid="collapsedControl"],
-    [data-testid="collapsedControl"] {{
-        visibility: visible !important;
+    #MainMenu {{ display: none !important; }}
+    footer {{ display: none !important; }}
+    header [data-testid="stToolbar"] {{ display: none !important; }}
+    [data-testid="stDecoration"] {{ display: none !important; }}
+    header [data-testid="stStatusWidget"] {{ display: none !important; }}
+    /* Make header itself transparent so only the sidebar toggle remains */
+    header {{
+        background: transparent !important;
+        border: none !important;
     }}
 
     /* === SIDEBAR NAV BUTTONS === */
