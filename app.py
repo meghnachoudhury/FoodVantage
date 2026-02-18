@@ -552,6 +552,38 @@ def create_html_calendar(year, month, selected_day=None):
         html += "</tr>"
     return html + "</tbody></table>"
 
+
+def get_daily_streak_metrics(history_rows):
+    if not history_rows:
+        return {
+            "total_items": 0,
+            "days_logged": 0,
+            "healthy_streak_days": 0,
+            "avg_health_score": 0,
+        }
+
+    by_date = {}
+    for d, _, score, _ in history_rows:
+        date_key = str(d)
+        by_date.setdefault(date_key, []).append(float(score))
+
+    # Requested behavior: compute average score per day, convert to /100, and
+    # count healthy days where daily average health score is > 50.
+    daily_health_scores = {}
+    for date_key, scores in by_date.items():
+        avg_score_for_date = sum(scores) / len(scores)
+        daily_health_scores[date_key] = int(round(max(0, min(100, avg_score_for_date * 10))))
+
+    healthy_streak_days = sum(1 for s in daily_health_scores.values() if s > 50)
+    avg_health_score = int(round(sum(daily_health_scores.values()) / len(daily_health_scores))) if daily_health_scores else 0
+
+    return {
+        "total_items": len(history_rows),
+        "days_logged": len(by_date),
+        "healthy_streak_days": healthy_streak_days,
+        "avg_health_score": avg_health_score,
+    }
+
 # === MAIN APP (NO LOGIN PAGE) ===
 with st.sidebar:
     st.write("")
@@ -569,15 +601,14 @@ with st.sidebar:
         if filtered_results:
             st.markdown("**Top Results:**")
             st.markdown('<div class="results-scroll-container">', unsafe_allow_html=True)
-            for i, d in enumerate(filtered_results):
+            for d in filtered_results:
                 c = COLORS['green'] if d['vms_score'] < 3.0 else COLORS['yellow'] if d['vms_score'] < 7.0 else COLORS['red']
                 portion_label = " per serving" if needs_portion_size(d['name']) else ""
 
                 st.markdown(f"""
-                    <div class='card' style='padding:12px; margin-bottom:8px;'>
-                        <div style='font-size:0.9rem; font-weight:bold;'>{i+1}. {d['name']}</div>
-                        <div style='color:{c}; font-weight:bold; font-size:1.3rem;'>{d['vms_score']}{portion_label}</div>
-                        <div style='font-size:0.8rem; color:{c};'>{d['rating']}</div>
+                    <div class='list-row'>
+                        <span style='font-size:0.9rem; font-weight:700;'>{d['name']}</span>
+                        <strong style='color:{c}; font-size:1.05rem;'>{d['vms_score']}{portion_label}</strong>
                     </div>
                 """, unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
