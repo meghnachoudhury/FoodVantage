@@ -112,7 +112,7 @@ st.markdown(f"""
     }}
     .stApp::before {{ display: none; }}
 
-    *, h1, h2, h3, h4, h5, h6, p, div, label, span {{
+    h1, h2, h3, h4, h5, h6, p, div, label {{
         font-family: 'Inter', sans-serif !important;
         color: {C['text']};
     }}
