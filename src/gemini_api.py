@@ -111,7 +111,7 @@ def calculate_vms_science(row):
             pts_sugar = min(sug / 4.5, 10.0)
 
         c_total = 0.0 if is_liquid else (min(fib / 0.5, 7.0) + min(prot / 1.2, 7.0))
-        score = round((pts_energy + pts_fat + pts_sodium + pts_sugar) - c_total, 2)
+        score = round((pts_energy + pts_fat + pts_sodium + pts_sugar) - c_total, 1)
         
         if is_whole_fresh: return min(score, -1.0)
         if is_liquid and sug > 4.0: return max(score, 7.5)
@@ -165,6 +165,25 @@ def calculate_day_streak(username):
         print(f"[STREAK ERROR] {e}")
         return 0
 
+def get_total_items_logged(username):
+    """Get total number of items ever logged by user"""
+    con = get_db_connection()
+    try:
+        result = con.execute("SELECT COUNT(*) FROM calendar WHERE username = ?", [username]).fetchone()
+        return result[0] if result else 0
+    except:
+        return 0
+
+def get_items_today(username):
+    """Get number of items logged today"""
+    con = get_db_connection()
+    try:
+        today = datetime.now().strftime('%Y-%m-%d')
+        result = con.execute("SELECT COUNT(*) FROM calendar WHERE username = ? AND date = ?", [username, today]).fetchone()
+        return result[0] if result else 0
+    except:
+        return 0
+
 # === 2. DATABASE ACCESS ===
 @st.cache_resource
 def get_scientific_db():
@@ -209,22 +228,22 @@ def search_vantage_db(product_name: str, limit=5):
         
         output = []
         for r in results:
-            score = calculate_vms_science(r)
+            score = round(calculate_vms_science(r), 1)
             rating = "Metabolic Green" if score < 3.0 else "Metabolic Yellow" if score < 7.0 else "Metabolic Red"
-            
+
             full_name = r[0].title()
             brand = str(r[1]).title() if r[1] and r[1].strip() else ""
-            
+
             if brand and brand not in full_name:
                 display_name = f"{brand} {full_name}"
             else:
                 display_name = full_name
-            
+
             output.append({
                 "name": display_name,
                 "brand": brand,
-                "vms_score": score, 
-                "rating": rating, 
+                "vms_score": score,
+                "rating": rating,
                 "raw": r
             })
         
@@ -321,11 +340,11 @@ def search_open_food_facts(product_name: str, limit=5):
                 
                 row = [name, brand, calories, sugar, fiber, protein, fat, sodium, None, nova]
                 
-                score = calculate_vms_science(row)
+                score = round(calculate_vms_science(row), 1)
                 rating = "Metabolic Green" if score < 3.0 else "Metabolic Yellow" if score < 7.0 else "Metabolic Red"
-                
+
                 display_name = f"{brand.title()} {name.title()}" if brand else name.title()
-                
+
                 output.append({
                     "name": display_name,
                     "brand": brand.title() if brand else "",

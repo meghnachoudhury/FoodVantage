@@ -18,14 +18,14 @@ from gemini_api import (
     get_gemini_api_key, authenticate_user,
     add_calendar_item_db, get_calendar_items_db, delete_item_db,
     get_log_history_db, create_user,
-    vms_to_health_score, calculate_overall_health_score, calculate_day_streak
+    vms_to_health_score, calculate_overall_health_score, calculate_day_streak,
+    get_total_items_logged, get_items_today
 )
 from streamlit_back_camera_input import back_camera_input
 
 st.set_page_config(page_title="FoodVantage", page_icon="🥗", layout="wide", initial_sidebar_state="expanded")
 
 # --- SESSION STATE ---
-# FIX 1: NO LOGIN PAGE - Direct to main app
 if 'logged_in' not in st.session_state: st.session_state.logged_in = True
 if 'user_id' not in st.session_state: st.session_state.user_id = "demo_user"
 if 'page' not in st.session_state: st.session_state.page = 'dashboard'
@@ -35,59 +35,43 @@ if 'selected_result' not in st.session_state: st.session_state.selected_result =
 if 'scanning' not in st.session_state: st.session_state.scanning = False
 if 'scan_count' not in st.session_state: st.session_state.scan_count = 0
 if 'trends_view' not in st.session_state: st.session_state.trends_view = 'weekly'
-# FIX 6: Status tracking for in-widget display
 if 'scan_status' not in st.session_state: st.session_state.scan_status = None
 if 'detected_items' not in st.session_state: st.session_state.detected_items = []
-# AI Agent state
 if 'ai_insights' not in st.session_state: st.session_state.ai_insights = None
 if 'meal_plan' not in st.session_state: st.session_state.meal_plan = None
 if 'daily_recipes' not in st.session_state: st.session_state.daily_recipes = None
 if 'recipes_date' not in st.session_state: st.session_state.recipes_date = None
 
-# --- BACKGROUND IMAGE ---
-_bg_path = os.path.join(os.path.dirname(__file__), "assets", "image_1010.png")
-if os.path.exists(_bg_path):
-    with open(_bg_path, "rb") as _f:
-        _bg_b64 = base64.b64encode(_f.read()).decode()
-else:
-    _bg_b64 = ""
-
-# --- COLOR PALETTE (Grocery Template) ---
-COLORS = {
-    'olive': '#7BD0E7',
-    'terracotta': '#7BD0E7',
-    'salmon': '#A7E8F5',
-    'beige': '#04060D',
-    'dark_text': '#E9EEF7',
-    'green': '#4CC38A',
-    'yellow': '#D8A66A',
-    'red': '#E87474',
-    'camera_icon': '#7BD0E7',
-    'toggle_button': '#8C74CC',
-    'unhealthy_bar': '#6B3240',
-    'card_bg': '#0C111D',
-    'border': '#1B2436',
+# --- DARK THEME COLOR PALETTE ---
+C = {
+    'bg': '#0F1117',
+    'bg_card': '#1A1D25',
+    'bg_elevated': '#222630',
+    'bg_input': '#1E2230',
+    'sidebar_bg': '#141720',
+    'teal': '#5B9B9D',
+    'teal_light': '#7EC8CA',
+    'olive': '#5B8C3E',
+    'text': '#E8EAF0',
+    'text_sec': '#9CA3B0',
+    'text_muted': '#6B7280',
+    'green': '#4CAF50',
+    'yellow': '#F9A825',
+    'red': '#E53935',
+    'orange': '#E8967A',
+    'border': '#2A2E38',
+    'streak_bg': '#1C2030',
 }
 
-# FIX 2 & 5: Helper function to determine if item needs portion size
+# Helper: portion size label
 def needs_portion_size(item_name):
-    """
-    Returns True if item should show 'per serving' label.
-    
-    SHOW portion size for: Packaged goods (oils, chips, cereals, etc.)
-    DON'T show for: Fresh produce, cooked meals, superfoods
-    """
     item_lower = item_name.lower()
-    
-    # Cooked food keywords - NO portion size
     cooked_keywords = [
-        'cooked', 'grilled', 'fried', 'baked', 'roasted', 'steamed', 
+        'cooked', 'grilled', 'fried', 'baked', 'roasted', 'steamed',
         'boiled', 'sauteed', 'plate', 'meal', 'dish', 'curry', 'stew',
         'soup', 'salad', 'pasta', 'rice', 'noodle', 'stir fry', 'pizza',
         'burger', 'sandwich', 'wrap', 'taco', 'burrito', 'bowl'
     ]
-    
-    # Fresh produce - NO portion size (whole items)
     fresh_keywords = [
         'apple', 'banana', 'orange', 'grape', 'strawberry', 'avocado',
         'tomato', 'cucumber', 'carrot', 'lettuce', 'spinach', 'kale',
@@ -95,138 +79,107 @@ def needs_portion_size(item_name):
         'lime', 'onion', 'garlic', 'pepper', 'broccoli', 'cauliflower',
         'fresh', 'whole', 'raw', 'fruit', 'vegetable'
     ]
-    
-    # Superfoods - NO portion size
     superfood_keywords = [
         'superfood', 'chia', 'flax', 'hemp', 'spirulina', 'acai',
         'goji', 'matcha', 'turmeric', 'ginger'
     ]
-    
-    # Check exclusions first
     for keyword in cooked_keywords + fresh_keywords + superfood_keywords:
         if keyword in item_lower:
             return False
-    
-    # Everything else (packaged goods) = show portion size
     return True
 
-# --- CSS (Grocery Template Theme) ---
-st.markdown('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">', unsafe_allow_html=True)
-st.markdown('<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Source+Serif+4:wght@600;700&display=swap" rel="stylesheet">', unsafe_allow_html=True)
+def score_color(score, mode='vms'):
+    """Return color based on score. mode='vms' for VMS scale, mode='health' for 0-100 scale."""
+    if mode == 'health':
+        if score >= 70: return C['green']
+        if score >= 30: return C['yellow']
+        return C['red']
+    else:
+        if score < 3.0: return C['green']
+        if score < 7.0: return C['yellow']
+        return C['red']
+
+# --- CSS (Dark Theme) ---
+st.markdown('<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">', unsafe_allow_html=True)
+st.markdown('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">', unsafe_allow_html=True)
 st.markdown(f"""
     <style>
     /* === GLOBAL === */
     .stApp {{
-        background: radial-gradient(circle at top right, #0B1528 0%, #05070D 45%, #03050A 100%);
-        color: #E7ECF8;
+        background-color: {C['bg']};
+        color: {C['text']};
         font-family: 'Inter', sans-serif;
     }}
+    .stApp::before {{ display: none; }}
 
-    .stApp::before {{
-        content: "";
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background-image: url("data:image/png;base64,{_bg_b64}");
-        background-size: cover;
-        background-position: center;
-        background-repeat: no-repeat;
-        opacity: 0.08;
-        pointer-events: none;
-        z-index: 0;
-    }}
-
-       .block-container {{
-        padding-top: 2rem;
-    }}
-    
-    h1, h2, h3, h4, h5, h6, p, div, label {{
+    *, h1, h2, h3, h4, h5, h6, p, div, label, span {{
         font-family: 'Inter', sans-serif !important;
-        color: #E7ECF8;
+        color: {C['text']};
     }}
 
-    .logo-text {{
-        font-family: 'Source Serif 4', serif !important;
-        font-size: 2rem;
-        text-align: left;
-        font-weight: 700;
-        letter-spacing: -0.6px;
-        color: #F6F8FF;
-        white-space: nowrap;
-        line-height: 1.1;   
-        }}
+    .stMarkdown {{ color: {C['text']}; }}
 
-    .logo-dot {{ color: {COLORS['olive']}; }}
-
-    .subtitle {{
-        color: #627090;
-        margin-top: -8px;
-        margin-bottom: 14px;
-        font-size: 1.35rem;
-        font-weight: 500;
+    /* === SIDEBAR === */
+    section[data-testid="stSidebar"] {{
+        background-color: {C['sidebar_bg']} !important;
+        border-right: 1px solid {C['border']} !important;
     }}
-    
-    .card {{
-        background: linear-gradient(145deg, #0E1220 0%, #0C101B 100%);
-        padding: 24px;
-        border-radius: 24px;
-        border: 1px solid {COLORS['border']};
-        box-shadow: 0 12px 30px rgba(2, 6, 15, 0.45);
-        margin-bottom: 20px;
+    section[data-testid="stSidebar"] * {{
+        color: {C['text']} !important;
     }}
-
-    .white-shelf {{
-        background: linear-gradient(135deg, #111626 0%, #111726 100%);
-        height: 35px;
-        border-radius: 14px;
-        background: linear-gradient(135deg, #111626 0%, #111726 100%);
-        margin-bottom: 25px;
+    [data-testid="collapsedControl"] {{
+        color: {C['teal']} !important;
     }}
-
-    .tomato-wrapper {{ width: 100%; text-align: center; padding: 30px 0; }}
-    .tomato-icon {{ font-size: 150px !important; color: {COLORS['camera_icon']} !important; opacity: 0.8; }}
 
     /* === INPUTS === */
-    input[type="text"], input[type="password"] {{
-        background-color: #141A2A !important;
-        color: #ECF3FF !important;
-        border: 1.5px solid {COLORS['border']} !important;
-        border-radius: 14px !important;
-        padding: 12px 16px !important;
+    input[type="text"], input[type="password"], input[type="number"] {{
+        background-color: {C['bg_input']} !important;
+        color: {C['text']} !important;
+        border: 1px solid {C['border']} !important;
+        border-radius: 12px !important;
+        padding: 10px 14px !important;
         font-family: 'Inter', sans-serif !important;
     }}
-
-    input[type="text"]:focus, input[type="password"]:focus {{
-        border-color: {COLORS['olive']} !important;
-        box-shadow: 0 0 0 2px rgba(123,208,231,0.2) !important;
+    input[type="text"]:focus {{
+        border-color: {C['teal']} !important;
+        box-shadow: 0 0 0 2px rgba(91,155,157,0.2) !important;
     }}
-
     .stTextInput > div > div > input {{
-        background-color: #141A2A !important;
-        color: #ECF3FF !important;
-        -webkit-text-fill-color: #ECF3FF !important;
-        font-family: 'Inter', sans-serif !important;
+        background-color: {C['bg_input']} !important;
+        color: {C['text']} !important;
+        -webkit-text-fill-color: {C['text']} !important;
+    }}
+    .stTextInput label {{
+        color: {C['text_sec']} !important;
+    }}
+
+    /* Date input */
+    .stDateInput > div > div > input {{
+        background-color: {C['bg_input']} !important;
+        color: {C['text']} !important;
+        border: 1px solid {C['border']} !important;
+        border-radius: 12px !important;
     }}
 
     /* === BUTTONS === */
     .stButton > button {{
-        background: linear-gradient(90deg, #5E95A6 0%, #6FAEBF 100%) !important;
-        color: #F5FBFF !important;
-        border: 1px solid rgba(123, 208, 231, 0.35) !important;
-        border-radius: 14px !important;
+        background: linear-gradient(135deg, {C['teal']} 0%, #4A8A8C 100%) !important;
+        color: white !important;
+        border: none !important;
+        border-radius: 12px !important;
         font-family: 'Inter', sans-serif !important;
-        font-weight: 700 !important;
-        padding: 0.62rem 1rem !important;
+        font-weight: 600 !important;
+        padding: 0.5rem 1.5rem !important;
         transition: all 0.2s ease !important;
         letter-spacing: 0.1px;
     }}
-
     .stButton > button:hover {{
-        background: linear-gradient(90deg, #6CA7B8 0%, #7EB9C8 100%) !important;
-        box-shadow: 0 6px 18px rgba(76, 150, 173, 0.35) !important;
+        box-shadow: 0 4px 16px rgba(91,155,157,0.3) !important;
         transform: translateY(-1px) !important;
+    }}
+    .stButton > button[kind="secondary"] {{
+        background: {C['bg_elevated']} !important;
+        border: 1px solid {C['border']} !important;
     }}
 
         .stButton > button[kind="secondary"] {{
@@ -241,90 +194,46 @@ st.markdown(f"""
     
     /* === METRICS === */
     [data-testid="stMetricValue"] {{
-        color: #EFF4FF !important;
+        color: {C['text']} !important;
         font-weight: 700 !important;
-        font-size: 1.5rem !important;
-        font-family: 'Inter', sans-serif !important;
     }}
-
     [data-testid="stMetricLabel"] {{
-        color: #8B99B3 !important;
-        font-weight: 600 !important;
-        font-family: 'Inter', sans-serif !important;
+        color: {C['text_sec']} !important;
     }}
 
     /* === EXPANDERS === */
     .stExpander {{
-        background: #0F1422 !important;
-        color: #E7ECF8 !important;
-        border-radius: 16px !important;
-        border: 1px solid {COLORS['border']} !important;
+        background: {C['bg_card']} !important;
+        border: 1px solid {C['border']} !important;
+        border-radius: 14px !important;
     }}
-
     .stExpander p, .stExpander div, .stExpander span {{
-        color: #D7DEED !important;
+        color: {C['text']} !important;
     }}
 
-    /* === HUD BUBBLE (Scanner Overlay) === */
+    /* === CARDS === */
+    .card {{
+        background: {C['bg_card']};
+        padding: 20px;
+        border-radius: 16px;
+        border: 1px solid {C['border']};
+        margin-bottom: 16px;
+    }}
+
+    /* === HUD BUBBLE === */
     .hud-bubble {{
         position: fixed;
         top: calc(50% - 200px);
         left: 50%;
         transform: translateX(-50%);
-        background: rgba(13, 19, 34, 0.96);
+        background: {C['bg_card']};
         padding: 16px 28px;
         border-radius: 50px;
-        box-shadow: 0 10px 30px rgba(0,0,0,0.45);
-        border: 1px solid rgba(123,208,231,0.4);
+        box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+        border: 2px solid {C['teal']};
         z-index: 1000;
         text-align: center;
         min-width: 220px;
-        font-family: 'Inter', sans-serif;
-    }}
-
-    /* === SCROLLABLE RESULTS === */
-    .results-scroll-container {{
-        max-height: 400px;
-        overflow-y: auto;
-        padding-right: 10px;
-    }}
-
-    .results-scroll-container::-webkit-scrollbar {{
-        width: 8px;
-    }}
-
-    .results-scroll-container::-webkit-scrollbar-track {{
-        background: #0D1423;
-        border-radius: 10px;
-    }}
-
-    .results-scroll-container::-webkit-scrollbar-thumb {{
-        background: #2C3B57;
-        border-radius: 10px;
-    }}
-
-    /* === SCANNER RESULTS === */
-    .scanner-result {{
-        background: #0F1525;
-        padding: 16px;
-        border-radius: 16px;
-        margin: 12px 0;
-        border-left: 4px solid {COLORS['olive']};
-        font-family: 'Inter', sans-serif;
-    }}
-
-    .scanner-result-title {{
-        color: #F1F5FF;
-        font-weight: 700;
-        font-size: 1.1rem;
-        margin-bottom: 8px;
-    }}
-
-    .scanner-result-text {{
-        color: #D9E2F5;
-        font-weight: 600;
-        font-size: 1.3rem;
-        line-height: 1.6;
     }}
 
     /* === LIST ROWS === */
@@ -333,313 +242,404 @@ st.markdown(f"""
         justify-content: space-between;
         align-items: center;
         padding: 14px 16px;
-        background: #131A2D;
-        border-radius: 16px;
-        border: 1px solid {COLORS['border']};
+        background: {C['bg_card']};
+        border-radius: 14px;
+        border: 1px solid {C['border']};
         margin-bottom: 8px;
-        font-family: 'Inter', sans-serif;
     }}
 
-    .trend-tabs-container {{
-        background: #121827;
-        border: 1px solid #242F47;
-        border-radius: 18px;
-        padding: 6px;
-        width: 100%;
+    /* === SCROLLABLE RESULTS === */
+    .results-scroll-container {{
+        max-height: 400px;
+        overflow-y: auto;
+        padding-right: 8px;
+    }}
+    .results-scroll-container::-webkit-scrollbar {{ width: 6px; }}
+    .results-scroll-container::-webkit-scrollbar-track {{ background: {C['bg']}; border-radius: 10px; }}
+    .results-scroll-container::-webkit-scrollbar-thumb {{ background: {C['teal']}; border-radius: 10px; }}
+
+    /* === SCANNER VIEWFINDER === */
+    @keyframes scanner-flicker {{
+        0%, 100% {{ opacity: 0.35; }}
+        50% {{ opacity: 1; }}
+    }}
+    .scanner-viewfinder {{
+        background: {C['bg_card']};
+        border-radius: 20px;
+        position: relative;
+        height: 320px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        margin: 20px auto;
+        max-width: 500px;
+        overflow: hidden;
+    }}
+    .scanner-corner {{
+        position: absolute;
+        width: 45px;
+        height: 45px;
+        border-color: {C['teal']};
+        border-style: solid;
+        animation: scanner-flicker 2.5s ease-in-out infinite;
+    }}
+    .corner-tl {{ top: 28px; left: 28px; border-width: 3px 0 0 3px; border-radius: 6px 0 0 0; }}
+    .corner-tr {{ top: 28px; right: 28px; border-width: 3px 3px 0 0; border-radius: 0 6px 0 0; }}
+    .corner-bl {{ bottom: 28px; left: 28px; border-width: 0 0 3px 3px; border-radius: 0 0 0 6px; }}
+    .corner-br {{ bottom: 28px; right: 28px; border-width: 0 3px 3px 0; border-radius: 0 0 6px 0; }}
+    .scanner-icon {{
+        width: 64px; height: 64px;
+        border-radius: 50%;
+        background: rgba(91,155,157,0.15);
+        display: flex; align-items: center; justify-content: center;
+        margin-bottom: 16px;
+    }}
+    .scanner-icon i {{ font-size: 28px; color: {C['teal']}; }}
+
+    /* === STAT CARDS === */
+    .stat-cards {{
+        display: flex;
+        gap: 16px;
+        margin: 20px 0;
+    }}
+    .stat-card {{
+        flex: 1;
+        background: {C['bg_card']};
+        border: 1px solid {C['border']};
+        border-radius: 16px;
+        padding: 20px;
+        position: relative;
+    }}
+    .stat-label {{
+        font-size: 0.7rem;
+        font-weight: 700;
+        letter-spacing: 1.2px;
+        color: {C['text_muted']};
+        text-transform: uppercase;
+        margin-bottom: 8px;
+    }}
+    .stat-value {{
+        font-size: 1.8rem;
+        font-weight: 800;
+        color: {C['text']};
+        line-height: 1;
+    }}
+    .stat-unit {{
+        font-size: 0.85rem;
+        font-weight: 500;
+        color: {C['text_sec']};
+    }}
+    .stat-sub {{
+        font-size: 0.75rem;
+        color: {C['text_muted']};
+        margin-top: 4px;
     }}
 
-    .trend-tabs-container .stButton > button {{
-        background-color: #141C30 !important;
-        color: #95A3BD !important;
+    /* === STREAK CARD (Sidebar) === */
+    .streak-card {{
+        background: {C['streak_bg']};
+        border: 1px solid {C['border']};
+        border-radius: 14px;
+        padding: 16px;
+        margin-top: 20px;
+    }}
+    .streak-header {{
+        font-size: 1rem;
+        font-weight: 700;
+        color: {C['text']};
+        margin-bottom: 2px;
+    }}
+    .streak-sub {{
+        font-size: 0.75rem;
+        color: {C['text_muted']};
+        margin-bottom: 10px;
+    }}
+    .streak-bar-bg {{
+        background: {C['bg']};
+        border-radius: 6px;
+        height: 8px;
+        overflow: hidden;
+        margin-bottom: 6px;
+    }}
+    .streak-bar-fill {{
+        background: linear-gradient(90deg, {C['orange']}, {C['teal']});
+        height: 100%;
+        border-radius: 6px;
+        transition: width 0.5s ease;
+    }}
+    .streak-milestone {{
+        font-size: 0.7rem;
+        color: {C['text_muted']};
+        margin-bottom: 12px;
+    }}
+    .streak-stats {{
+        display: flex;
+        gap: 8px;
+    }}
+    .streak-stat {{
+        flex: 1;
+        background: {C['bg']};
+        border-radius: 10px;
+        padding: 10px;
+        text-align: center;
+    }}
+    .streak-stat-val {{
+        font-size: 1.1rem;
+        font-weight: 800;
+        color: {C['text']};
+    }}
+    .streak-stat-label {{
+        font-size: 0.65rem;
+        color: {C['text_muted']};
+        margin-top: 2px;
+    }}
+
+    /* === TREND TABS (compact in right column) === */
+    .trend-tabs-compact .stButton > button {{
+        background: {C['bg_elevated']} !important;
+        border: 1px solid {C['border']} !important;
+        border-radius: 8px !important;
+        font-size: 0.8rem !important;
+        padding: 0.3rem 0.6rem !important;
+    }}
+    .trend-tabs-compact .stButton > button[kind="primary"] {{
+        background: linear-gradient(135deg, {C['teal']} 0%, #4A8A8C 100%) !important;
         border: none !important;
         border-radius: 14px !important;
         min-height: 44px;
     }}
 
-    .trend-tabs-container .stButton > button[kind="primary"] {{
-        background-color: #6CA7B8 !important;
-        color: #F8FBFF !important;
-        font-weight: bold !important;
+    /* === SCANNER RESULTS === */
+    .scanner-result {{
+        background: {C['bg_card']};
+        padding: 14px;
+        border-radius: 14px;
+        margin: 10px 0;
+        border-left: 3px solid {C['teal']};
     }}
-
-    /* === SIDEBAR === */
-    [data-testid="collapsedControl"] {{
-        color: {COLORS['olive']} !important;
+    .scanner-result-title {{
+        color: {C['text']};
+        font-weight: 700;
+        font-size: 1rem;
+        margin-bottom: 6px;
     }}
-
-    section[data-testid="stSidebar"] {{
-        background: linear-gradient(180deg, #080C16 0%, #050811 100%) !important;
-        border-right: 1px solid #1A2236 !important;
-    }}
-
-    section[data-testid="stSidebar"] .stMarkdown h4,
-    section[data-testid="stSidebar"] .stMarkdown h5,
-    section[data-testid="stSidebar"] p,
-    section[data-testid="stSidebar"] label {{
-        color: #8A97B3 !important;
-    }}
-
-    section[data-testid="stSidebar"] .stButton > button {{
-        justify-content: flex-start;
-        background: #0E1424 !important;
-        color: #A4B2CD !important;
-        border-radius: 16px !important;
-        border: 1px solid #1E2A42 !important;
-    }}
-
-    section[data-testid="stSidebar"] .stButton > button:hover {{
-        background: #101C2F !important;
+    .scanner-result-text {{
+        color: {C['text_sec']};
+        font-weight: 500;
+        font-size: 0.95rem;
     }}
 
     /* === FRIENDLY ERRORS === */
     .friendly-error {{
-        background: #111726;
-        border-left: 4px solid #476A97;
-        padding: 16px;
+        background: {C['bg_card']};
+        border-left: 3px solid {C['teal']};
+        padding: 14px;
         border-radius: 12px;
-        margin: 12px 0;
-        font-family: 'Inter', sans-serif;
+        margin: 10px 0;
     }}
+    .friendly-error-title {{ font-weight: 700; color: {C['teal']}; margin-bottom: 6px; }}
+    .friendly-error-text {{ color: {C['text_sec']}; font-size: 0.85rem; }}
 
-    .friendly-error-title {{
-        font-weight: 700;
-        color: #BFD4F1;
-        margin-bottom: 8px;
-    }}
-
-    .friendly-error-text {{
-        color: #93A7C7;
+    /* Nav buttons in sidebar */
+    .nav-btn {{
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 14px;
+        border-radius: 10px;
+        cursor: pointer;
+        margin-bottom: 4px;
         font-size: 0.9rem;
+        font-weight: 500;
+        color: {C['text_sec']};
+        transition: all 0.15s ease;
+        text-decoration: none;
     }}
-
-    /* === SCAN PROMPT BADGE === */
-    .scan-prompt {{
-        background: #101A2A;
-        padding: 12px 20px;
-        border-radius: 14px;
-        display: inline-block;
-        border: 1px solid #23304A;
-        color: #C8D6ED;
-    }}
-
-    hr {{
-        border-color: #1A2439;
-    }}
-
-    .stAlert {{
-        background-color: #111726 !important;
-        color: #C8D6ED !important;
-        border: 1px solid #24324C !important;
-    }}
-
-    [data-testid="stSidebar"] [data-testid="stMetric"] {{
-        background: #0D1322;
-        border: 1px solid #1C2942;
-        border-radius: 14px;
-        padding: 8px 10px;
-    }}
-
-    .kicker {{
-        color: #5C6884;
-        text-transform: uppercase;
-        letter-spacing: 1.6px;
-        font-size: 0.78rem;
-        font-weight: 700;
-        margin-bottom: 6px;
-    }}
-
-    .metric-strip {{
-        background: linear-gradient(160deg, #0F1526 0%, #0D1422 100%);
-        border: 1px solid #1A2840;
-        border-radius: 22px;
-        padding: 18px;
-        min-height: 120px;
-    }}
-
-    .metric-strip .metric-value {{
-        font-size: 2.8rem;
-        line-height: 1;
-        font-weight: 700;
-        color: #F3F6FF;
-    }}
-
-    .metric-strip .metric-note {{
-        margin-top: 10px;
-        color: #5FC696;
-        font-size: 1.05rem;
+    .nav-btn:hover {{ background: rgba(91,155,157,0.1); color: {C['text']}; }}
+    .nav-btn.active {{
+        background: rgba(91,155,157,0.15);
+        color: {C['teal_light']};
         font-weight: 600;
     }}
-    
-    .sidebar-streak-card {{
-        margin-top: 24px;
-        padding: 14px;
-        border-radius: 18px;
-        border: 1px solid #1F2A42;
-        background: linear-gradient(155deg, #111726 0%, #0D1321 100%);
-    }}
+    .nav-btn i {{ width: 20px; text-align: center; font-size: 0.95rem; }}
 
-    .sidebar-streak-title {{
-        color: #EEF3FF;
-        font-size: 1.55rem;
-        font-weight: 700;
-        margin-bottom: 2px;
+    /* === INFO / WARNING / SUCCESS overrides === */
+    .stAlert {{
+        background: {C['bg_card']} !important;
+        border: 1px solid {C['border']} !important;
+        border-radius: 12px !important;
     }}
+    .stAlert p {{ color: {C['text_sec']} !important; }}
 
-    .sidebar-streak-sub {{
-        color: #6F7E9E;
-        font-size: 0.95rem;
-        margin-bottom: 10px;
-    }}
-
-    .sidebar-progress-wrap {{
-        width: 100%;
-        height: 6px;
-        background: #1E2840;
-        border-radius: 999px;
-        overflow: hidden;
-    }}
-
-    .sidebar-progress-fill {{
-        height: 100%;
-        background: linear-gradient(90deg, #F2B14C 0%, #E58D32 100%);
-        border-radius: 999px;
-    }}
-
-    .sidebar-mini-stats {{
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 8px;
-        margin-top: 10px;
-    }}
-
-    .stat-tile {{
-        background: #0D1322;
-        border: 1px solid #1E2942;
-        border-radius: 14px;
-        padding: 10px 8px;
-        text-align: center;
-    }}
-
-    .stat-tile .v {{
-        color: #EAF0FD;
-        font-weight: 700;
-        font-size: 1.15rem;
-    }}
-
-    .stat-tile .l {{
-        color: #637290;
-        font-size: 0.85rem;
-        margin-top: 2px;
-    }}
-    
+    /* Hide Streamlit branding */
+    #MainMenu {{ visibility: hidden; }}
+    footer {{ visibility: hidden; }}
+    header {{ visibility: hidden; }}
     </style>
 """, unsafe_allow_html=True)
 
-def render_logo(size="3rem"):
-    st.markdown(f"<div style='margin-bottom: 8px;'><div class='logo-text' style='font-size: {size};'>foodvantage<span class='logo-dot'>.</span></div></div>", unsafe_allow_html=True)
-    
-def create_html_calendar(year, month, selected_day=None):
+def render_logo(size="1.6rem"):
+    st.markdown(f"""<div style='margin-bottom: 6px;'>
+        <span style='font-size: {size}; font-weight: 800; color: {C["text"]};'>foodvantage</span><span style='font-size: {size}; font-weight: 800; color: {C["teal"]};'>.</span>
+    </div>""", unsafe_allow_html=True)
+
+def create_html_calendar(year, month, selected_day=None, logged_days=None):
+    logged_days = logged_days or set()
     cal = cal_module.monthcalendar(year, month)
-    html = "<table style='width:100%; text-align:center;'><thead><tr>"
-    for day in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]: html += f"<th style='color:{COLORS['terracotta']};'>{day}</th>"
+    html = "<table style='width:100%; text-align:center; border-collapse: separate; border-spacing: 4px;'><thead><tr>"
+    for day in ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"]:
+        html += f"<th style='color:{C['text_muted']}; font-size:0.75rem; font-weight:600; padding:6px;'>{day}</th>"
     html += "</tr></thead><tbody>"
     for week in cal:
         html += "<tr>"
         for day in week:
-            if day == 0: html += "<td></td>"
+            if day == 0:
+                html += "<td></td>"
             else:
-                style = f"background:{COLORS['terracotta']}; color:white; border-radius:50%;" if day == selected_day else ""
-                html += f"<td style='padding:10px; {style}'>{day}</td>"
+                is_selected = day == selected_day
+                is_logged = day in logged_days
+                if is_selected:
+                    style = f"background:{C['teal']}; color:white; border-radius:10px; font-weight:700;"
+                elif is_logged:
+                    style = f"color:{C['text']}; font-weight:600; position:relative;"
+                else:
+                    style = f"color:{C['text_sec']};"
+                dot = f"<div style='width:4px;height:4px;border-radius:50%;background:{C['teal']};margin:2px auto 0;'></div>" if is_logged and not is_selected else ""
+                html += f"<td style='padding:8px; font-size:0.85rem; {style}'>{day}{dot}</td>"
         html += "</tr>"
     return html + "</tbody></table>"
 
 
-def get_daily_streak_metrics(history_rows):
-    if not history_rows:
-        return {
-            "total_items": 0,
-            "days_logged": 0,
-            "healthy_streak_days": 0,
-            "avg_health_score": 0,
-        }
-
-    by_date = {}
-    for d, _, score, _ in history_rows:
-        date_key = str(d)
-        by_date.setdefault(date_key, []).append(float(score))
-
-    # Requested behavior: compute average score per day, convert to /100, and
-    # count healthy days where daily average health score is > 50.
-    daily_health_scores = {}
-    for date_key, scores in by_date.items():
-        avg_score_for_date = sum(scores) / len(scores)
-        daily_health_scores[date_key] = int(round(max(0, min(100, avg_score_for_date * 10))))
-
-    healthy_streak_days = sum(1 for s in daily_health_scores.values() if s > 50)
-    avg_health_score = int(round(sum(daily_health_scores.values()) / len(daily_health_scores))) if daily_health_scores else 0
-
-    return {
-        "total_items": len(history_rows),
-        "days_logged": len(by_date),
-        "healthy_streak_days": healthy_streak_days,
-        "avg_health_score": avg_health_score,
-    }
-
-# === MAIN APP (NO LOGIN PAGE) ===
+# ============================
+# SIDEBAR
+# ============================
 with st.sidebar:
-    st.write("")
-    st.markdown("##### Quick Score Check")
-    search_q = st.text_input("Search any food item", key="sidebar_search", placeholder="e.g., apple, coca cola...")
+    render_logo(size="1.5rem")
+    st.markdown(f"<div style='height:12px;'></div>", unsafe_allow_html=True)
+
+    # Quick Score Check
+    st.markdown(f"<div style='font-size:0.7rem; font-weight:700; color:{C['text_muted']}; letter-spacing:1px; text-transform:uppercase; margin-bottom:6px;'>Quick Score Check</div>", unsafe_allow_html=True)
+    search_q = st.text_input("Search any food item", key="sidebar_search", placeholder="Type a food name...", label_visibility="collapsed")
     if search_q:
         results = search_vantage_db(search_q, limit=5)
         filtered_results = [r for r in results if r['vms_score'] != 10.0] if results else []
         if filtered_results:
             for d in filtered_results[:3]:
                 h_score = vms_to_health_score(d['vms_score'])
-                c = COLORS['green'] if h_score >= 70 else COLORS['yellow'] if h_score >= 30 else COLORS['red']
-                st.markdown(f"<div style='padding:4px 0;'><span style='font-size:0.85rem;'>{d['name']}</span> <strong style='color:{c};'>{h_score}/100</strong></div>", unsafe_allow_html=True)
+                clr = score_color(h_score, 'health')
+                st.markdown(f"<div style='padding:4px 0; display:flex; justify-content:space-between;'><span style='font-size:0.8rem; color:{C['text_sec']};'>{d['name'][:30]}</span><strong style='color:{clr}; font-size:0.8rem;'>{h_score}/100</strong></div>", unsafe_allow_html=True)
         else:
-            st.caption("No results found. Try a different term.")
-    st.markdown("---")
-    if st.button("📊 Dashboard", use_container_width=True): st.session_state.page = 'dashboard'; st.rerun()
-    if st.button("🗓️ Calendar", use_container_width=True): st.session_state.page = 'calendar'; st.rerun()
-    if st.button("🍽️ Meal Plan", use_container_width=True): st.session_state.page = 'log'; st.rerun()
+            st.markdown(f"<div style='font-size:0.8rem; color:{C['text_muted']}; padding:4px 0;'>No results found.</div>", unsafe_allow_html=True)
 
-if st.session_state.page == 'dashboard':
-    render_logo(size="3.5rem")
+    st.markdown(f"<div style='height:16px;'></div>", unsafe_allow_html=True)
 
-    # --- Health Score & Day Streak ---
-    overall_score = calculate_overall_health_score(st.session_state.user_id)
+    # Navigation
+    page = st.session_state.page
+    nav_items = [
+        ('dashboard', 'fa-solid fa-grid-2', 'Dashboard'),
+        ('calendar', 'fa-regular fa-calendar', 'Calendar'),
+        ('log', 'fa-regular fa-clock', 'Meal Plan'),
+    ]
+    for pg, icon, label in nav_items:
+        active_class = "active" if page == pg else ""
+        st.markdown(f"<div class='nav-btn {active_class}' id='nav-{pg}'><i class='{icon}'></i> {label}</div>", unsafe_allow_html=True)
+
+    # Use streamlit buttons (hidden behind custom nav styling)
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        if st.button("D", key="nav_dash", use_container_width=True):
+            st.session_state.page = 'dashboard'; st.rerun()
+    with col2:
+        if st.button("C", key="nav_cal", use_container_width=True):
+            st.session_state.page = 'calendar'; st.rerun()
+    with col3:
+        if st.button("M", key="nav_meal", use_container_width=True):
+            st.session_state.page = 'log'; st.rerun()
+
+    # Streak Card at bottom
+    st.markdown(f"<div style='height:20px;'></div>", unsafe_allow_html=True)
     day_streak = calculate_day_streak(st.session_state.user_id)
-    score_color = COLORS['green'] if overall_score >= 70 else COLORS['yellow'] if overall_score >= 30 else COLORS['red']
-
+    overall_score = calculate_overall_health_score(st.session_state.user_id)
+    total_items = get_total_items_logged(st.session_state.user_id)
+    streak_pct = min(day_streak * 10, 100)
     st.markdown(f"""
-        <div style="display:flex; justify-content:center; align-items:center; gap:40px; margin:10px 0 20px 0;">
-            <div style="text-align:center;">
-                <div style="position:relative; width:100px; height:100px; margin:0 auto;">
-                    <svg viewBox="0 0 36 36" style="width:100px; height:100px; transform:rotate(-90deg);">
-                        <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                              fill="none" stroke="#E8E0D4" stroke-width="3"/>
-                        <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                              fill="none" stroke="{score_color}" stroke-width="3"
-                              stroke-dasharray="{overall_score}, 100" stroke-linecap="round"/>
-                    </svg>
-                    <div style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); font-size:1.6rem; font-weight:800; color:{score_color};">{overall_score}</div>
-                </div>
-                <div style="font-size:0.8rem; font-weight:600; color:#555; margin-top:4px;">Health Score</div>
+        <div class='streak-card'>
+            <div class='streak-header'>&#128293; {day_streak}-day streak</div>
+            <div class='streak-sub'>{'Keep it going!' if day_streak > 0 else 'Start logging to build your streak!'}</div>
+            <div class='streak-bar-bg'>
+                <div class='streak-bar-fill' style='width:{streak_pct}%'></div>
             </div>
-            <div style="text-align:center;">
-                <div style="font-size:2.8rem; font-weight:800; color:{COLORS['olive']}; line-height:1;">{day_streak}</div>
-                <div style="font-size:0.8rem; font-weight:600; color:#555; margin-top:4px;">Day{'s' if day_streak != 1 else ''} of Healthy Eating</div>
+            <div class='streak-milestone'>{day_streak} / 10 days to next milestone</div>
+            <div class='streak-stats'>
+                <div class='streak-stat'>
+                    <div class='streak-stat-val'>{total_items}</div>
+                    <div class='streak-stat-label'>items logged</div>
+                </div>
+                <div class='streak-stat'>
+                    <div class='streak-stat-val'>{overall_score}</div>
+                    <div class='streak-stat-label'>health score</div>
+                </div>
             </div>
         </div>
     """, unsafe_allow_html=True)
 
-    st.markdown("<h3 style='text-align: center;'>Active Focus Scanner</h3>", unsafe_allow_html=True)
-    st.markdown('<div class="white-shelf"></div>', unsafe_allow_html=True)
-    
+
+# ============================
+# DASHBOARD PAGE
+# ============================
+if st.session_state.page == 'dashboard':
+    # Header
+    now = datetime.now()
+    st.markdown(f"""
+        <div style='margin-bottom:4px;'>
+            <h2 style='margin:0; font-weight:800; font-size:1.8rem;'>Dashboard</h2>
+            <div style='color:{C["text_muted"]}; font-size:0.85rem;'>{now.strftime('%A, %B %d, %Y')} &middot; Track smarter. Live better.</div>
+        </div>
+    """, unsafe_allow_html=True)
+
+    # Stat cards
+    overall_score = calculate_overall_health_score(st.session_state.user_id)
+    day_streak = calculate_day_streak(st.session_state.user_id)
+    items_today = get_items_today(st.session_state.user_id)
+    sc = score_color(overall_score, 'health')
+
+    st.markdown(f"""
+        <div class='stat-cards'>
+            <div class='stat-card'>
+                <div class='stat-label'>Items Tracked</div>
+                <div class='stat-value'>{items_today} <span class='stat-unit'>today</span></div>
+                <div class='stat-sub'>scanned &amp; logged</div>
+            </div>
+            <div class='stat-card'>
+                <div class='stat-label'>Health Score</div>
+                <div class='stat-value' style='color:{sc};'>{overall_score} <span class='stat-unit'>/100</span></div>
+                <div class='stat-sub'>overall average</div>
+            </div>
+            <div class='stat-card'>
+                <div class='stat-label'>Day Streak</div>
+                <div class='stat-value' style='color:{C["teal"]};'>{day_streak} <span class='stat-unit'>day{"s" if day_streak != 1 else ""}</span></div>
+                <div class='stat-sub'>of healthy eating</div>
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
+
+    # Active Focus Scanner
+    st.markdown(f"<h3 style='font-weight:700; margin-top:24px;'>Active Focus Scanner</h3>", unsafe_allow_html=True)
+
     if not st.session_state.camera_active:
-        st.markdown('<div class="tomato-wrapper"><i class="fa fa-camera tomato-icon"></i></div>', unsafe_allow_html=True)
+        # Scanner viewfinder
+        st.markdown(f"""
+            <div class='scanner-viewfinder'>
+                <div class='scanner-corner corner-tl'></div>
+                <div class='scanner-corner corner-tr'></div>
+                <div class='scanner-corner corner-bl'></div>
+                <div class='scanner-corner corner-br'></div>
+                <div class='scanner-icon'><i class='fa-solid fa-camera'></i></div>
+                <div style='font-size:1rem; font-weight:600; color:{C["text"]}; margin-bottom:4px;'>Scanner ready</div>
+                <div style='font-size:0.8rem; color:{C["text_muted"]};'>Tap below to begin live scanning</div>
+            </div>
+        """, unsafe_allow_html=True)
         if st.button("Start Live Scan", type="primary", use_container_width=True):
             st.session_state.camera_active = True
             st.session_state.scanning = True
@@ -650,52 +650,48 @@ if st.session_state.page == 'dashboard':
             st.session_state.detected_items = []
             st.rerun()
     else:
-        # SCANNER ACTIVE
-        # Show status ABOVE camera as overlay bubble (same style as metabolic score)
+        # Scanner active - show HUD
         if st.session_state.selected_result:
             ls = st.session_state.selected_result
-            clr = COLORS['green'] if ls['vms_score'] < 3.0 else COLORS['yellow'] if ls['vms_score'] < 7.0 else COLORS['red']
-
-            # FIX 2: Add portion size label
+            clr = score_color(ls['vms_score'])
             portion_label = " /serving" if needs_portion_size(ls['name']) else ""
-
             st.markdown(f"""
                 <div class="hud-bubble">
-                    <div style="font-size: 0.9rem; margin-bottom: 4px;">{ls['name']}</div>
-                    <div style="color:{clr}; font-size:2.2rem; font-weight:900;">{ls['vms_score']}{portion_label}</div>
-                    <div style="font-size: 0.8rem; color: {clr};">{ls['rating']}</div>
+                    <div style="font-size: 0.85rem; margin-bottom: 4px; color:{C['text_sec']};">{ls['name']}</div>
+                    <div style="color:{clr}; font-size:2rem; font-weight:900;">{round(ls['vms_score'], 1)}{portion_label}</div>
+                    <div style="font-size: 0.75rem; color:{clr};">{ls['rating']}</div>
                 </div>
             """, unsafe_allow_html=True)
         elif st.session_state.get('scan_status') == "analyzing":
             st.markdown(f"""
                 <div class="hud-bubble">
-                    <div style="font-size: 1.2rem; font-weight: 700;">🔍 Analyzing Image...</div>
-                    <div style="font-size: 0.85rem; color: #666; margin-top: 4px;">Processing with Gemini AI</div>
+                    <div style="font-size: 1.1rem; font-weight: 700; color:{C['text']};">Analyzing Image...</div>
+                    <div style="font-size: 0.8rem; color:{C['text_muted']}; margin-top: 4px;">Processing with AI</div>
                 </div>
             """, unsafe_allow_html=True)
         elif st.session_state.get('detected_items'):
             items_text = ", ".join(st.session_state.detected_items[:3])
             st.markdown(f"""
                 <div class="hud-bubble">
-                    <div style="font-size: 1.2rem; font-weight: 700;">👁️ Items Detected</div>
-                    <div style="font-size: 0.95rem; color: {COLORS['olive']}; margin-top: 4px;">{items_text}</div>
+                    <div style="font-size: 1.1rem; font-weight: 700; color:{C['text']};">Items Detected</div>
+                    <div style="font-size: 0.9rem; color:{C['teal']}; margin-top: 4px;">{items_text}</div>
                 </div>
             """, unsafe_allow_html=True)
 
-            # Simple camera - NO focus square needed
-        st.markdown("""
-            <div style="text-align: center; margin: 20px 0;">
-                <div class="scan-prompt">
-                    📸 <strong>Point camera at item and tap to scan</strong>
+        st.markdown(f"""
+            <div style="text-align: center; margin: 16px 0;">
+                <div style='background:{C["bg_card"]}; padding:10px 20px; border-radius:12px; display:inline-block; border:1px solid {C["border"]};'>
+                    <i class='fa-solid fa-camera' style='color:{C["teal"]};'></i>
+                    <span style='color:{C["text_sec"]}; margin-left:8px; font-weight:500;'>Point camera at item and tap to scan</span>
                 </div>
             </div>
         """, unsafe_allow_html=True)
 
         image = back_camera_input(key="hud_cam")
-        
+
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
-            if st.button("❌ Stop Scanning", use_container_width=True):
+            if st.button("Stop Scanning", use_container_width=True):
                 st.session_state.camera_active = False
                 st.session_state.scan_results = None
                 st.session_state.selected_result = None
@@ -703,18 +699,13 @@ if st.session_state.page == 'dashboard':
                 st.session_state.scan_status = None
                 st.session_state.detected_items = []
                 st.rerun()
-        
-        # SCANNING LOGIC
+
+        # Scanning logic
         if image and st.session_state.scanning:
             st.session_state.scan_count += 1
-            
             if st.session_state.scan_count % 2 == 0:
-                # Set analyzing status (displayed on next rerun after processing)
                 st.session_state.scan_status = "analyzing"
-
-                # Run the scan (no st.rerun() before this - it would kill execution)
                 results = vision_live_scan_dark(image)
-
                 if results:
                     st.session_state.scan_results = results
                     st.session_state.selected_result = results[0]
@@ -722,398 +713,432 @@ if st.session_state.page == 'dashboard':
                     st.session_state.scanning = False
                     st.session_state.scan_status = None
                 else:
-                    # Clear analyzing status so it doesn't stick on failure
                     st.session_state.scan_status = None
                 st.rerun()
 
-    # FIX 3: Show ALL results with scroll
+    # Scan results
     if st.session_state.scan_results:
-        st.markdown("### 📋 Select Your Item")
-        st.markdown(f"Found **{len(st.session_state.scan_results)}** items in frame:")
-        
-        # FIX 7: Verification reminder
-        st.info("💡 Always verify your selection matches what you scanned!")
-        
-        # FIX 3: Scrollable results (NO 5-item cap)
+        st.markdown(f"<h4 style='font-weight:700;'>Select Your Item</h4>", unsafe_allow_html=True)
+        st.markdown(f"<div style='color:{C['text_sec']}; font-size:0.85rem; margin-bottom:8px;'>Found {len(st.session_state.scan_results)} items in frame</div>", unsafe_allow_html=True)
+
         st.markdown('<div class="results-scroll-container">', unsafe_allow_html=True)
         for i, result in enumerate(st.session_state.scan_results):
-            clr = COLORS['green'] if result['vms_score'] < 3.0 else COLORS['yellow'] if result['vms_score'] < 7.0 else COLORS['red']
+            clr = score_color(result['vms_score'])
             selected = st.session_state.selected_result == result
-            
-            # FIX 2: Add portion size label
             portion_label = " /serving" if needs_portion_size(result['name']) else ""
-            
             col1, col2 = st.columns([4, 1])
             with col1:
-                if st.button(
-                    f"{i+1}. {result['name']}", 
-                    key=f"select_{i}",
-                    type="primary" if selected else "secondary",
-                    use_container_width=True
-                ):
+                if st.button(f"{i+1}. {result['name']}", key=f"select_{i}",
+                             type="primary" if selected else "secondary", use_container_width=True):
                     st.session_state.selected_result = result
                     st.rerun()
             with col2:
-                st.markdown(f"<div style='text-align:center; color:{clr}; font-size:1.5rem; font-weight:bold;'>{result['vms_score']}{portion_label}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='text-align:center; color:{clr}; font-size:1.3rem; font-weight:bold; padding-top:4px;'>{round(result['vms_score'], 1)}{portion_label}</div>", unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # DEEP DIVE
+    # Deep dive
     if st.session_state.selected_result:
-        with st.expander("📊 Metabolic Nutrient Deep Dive", expanded=True):
+        with st.expander("Metabolic Nutrient Deep Dive", expanded=True):
             ls_raw = st.session_state.selected_result['raw']
             item_name = st.session_state.selected_result['name']
             scale = get_serving_scale(item_name)
-
             if scale < 1.0:
                 serving_g = int(scale * 100)
-                st.markdown(f"#### Clinical Data *(per serving ~{serving_g}g)*")
+                st.markdown(f"**Clinical Data** *(per serving ~{serving_g}g)*")
             else:
-                st.markdown("#### Clinical Data *(per 100g)*")
+                st.markdown("**Clinical Data** *(per 100g)*")
 
             c1, c2, c3 = st.columns(3)
             c1.metric("Calories", f"{round(float(ls_raw[2] or 0) * scale, 1)}")
             c2.metric("Sugar", f"{round(float(ls_raw[3] or 0) * scale, 1)}g")
             c3.metric("Fiber", f"{round(float(ls_raw[4] or 0) * scale, 1)}g")
-
             c4, c5, c6 = st.columns(3)
             c4.metric("Protein", f"{round(float(ls_raw[5] or 0) * scale, 1)}g")
             c5.metric("Fat", f"{round(float(ls_raw[6] or 0) * scale, 1)}g")
             c6.metric("Sodium", f"{round(float(ls_raw[7] or 0) * scale, 1)}mg")
-            
+
             col1, col2 = st.columns(2)
             with col1:
-                if st.button("➕ Log to My Journey", use_container_width=True):
+                if st.button("Log to My Journey", use_container_width=True):
                     add_calendar_item_db(
-                        st.session_state.user_id, 
-                        datetime.now().strftime("%Y-%m-%d"), 
-                        st.session_state.selected_result['name'], 
-                        st.session_state.selected_result['vms_score']
+                        st.session_state.user_id,
+                        datetime.now().strftime("%Y-%m-%d"),
+                        st.session_state.selected_result['name'],
+                        round(st.session_state.selected_result['vms_score'], 1)
                     )
-                    st.success("✅ Added!")
+                    st.success("Added!")
             with col2:
-                if st.button("🔄 Scan Again", use_container_width=True):
+                if st.button("Scan Again", use_container_width=True):
                     st.session_state.scan_results = None
                     st.session_state.selected_result = None
                     st.session_state.scanning = True
                     st.session_state.detected_items = []
                     st.rerun()
 
-    # TRENDS
-    st.markdown('<div class="trend-shell">', unsafe_allow_html=True)
-    head_left, head_right = st.columns([3.2, 1])
-    with head_left:
-        st.markdown("""
-            <div class='trend-title-row'>
-                <div style='color:#66B8CC; font-size:1.6rem;'>↗</div>
-                <div class='trend-title'>Your Health Trends</div>
-            </div>
-        """, unsafe_allow_html=True)
-    
-    if st.session_state.trends_view == 'daily':
-        days = 1
-    elif st.session_state.trends_view == 'weekly':
-        days = 7
-    else:
-        days = 30
+    # Health Trends - header with tabs on the right
+    col_trends_title, col_trends_tabs = st.columns([2, 1])
+    with col_trends_title:
+        st.markdown(f"<h3 style='font-weight:700; margin-top:28px;'>Your Health Trends</h3>", unsafe_allow_html=True)
+    with col_trends_tabs:
+        st.markdown(f"<div style='height:28px;'></div>", unsafe_allow_html=True)
+        col_d, col_w, col_m = st.columns(3)
+        with col_d:
+            if st.button("Day", use_container_width=True, key="day_tab",
+                          type="primary" if st.session_state.trends_view == 'daily' else "secondary"):
+                st.session_state.trends_view = 'daily'; st.rerun()
+        with col_w:
+            if st.button("Week", use_container_width=True, key="week_tab",
+                          type="primary" if st.session_state.trends_view == 'weekly' else "secondary"):
+                st.session_state.trends_view = 'weekly'; st.rerun()
+        with col_m:
+            if st.button("Month", use_container_width=True, key="month_tab",
+                          type="primary" if st.session_state.trends_view == 'monthly' else "secondary"):
+                st.session_state.trends_view = 'monthly'; st.rerun()
+
+    if st.session_state.trends_view == 'daily': days = 1
+    elif st.session_state.trends_view == 'weekly': days = 7
+    else: days = 30
 
     all_data = get_all_calendar_data_db(st.session_state.user_id)
     raw = get_trend_data_db(st.session_state.user_id, days=days)
 
-    total_items = 0
-    healthy_count = 0
     if raw and len(raw) > 0:
         df = pd.DataFrame(raw, columns=["date", "category", "count"])
         df['date'] = pd.to_datetime(df['date'])
-        total_items = int(df['count'].sum())
+        df_pivot = df.pivot_table(index='date', columns='category', values='count', aggfunc='sum', fill_value=0)
+
+        # Line chart matching Figma design
+        fig = go.Figure()
+        if 'healthy' in df_pivot.columns:
+            fig.add_trace(go.Scatter(x=df_pivot.index, y=df_pivot['healthy'], name='Healthy',
+                                     mode='lines+markers', line=dict(color=C['teal'], width=2.5, shape='spline'),
+                                     marker=dict(size=6), fill='tozeroy',
+                                     fillcolor='rgba(91,155,157,0.1)',
+                                     hovertemplate='%{y} healthy<extra></extra>'))
+        if 'moderate' in df_pivot.columns:
+            fig.add_trace(go.Scatter(x=df_pivot.index, y=df_pivot['moderate'], name='Moderate',
+                                     mode='lines+markers', line=dict(color=C['yellow'], width=2, shape='spline'),
+                                     marker=dict(size=5),
+                                     hovertemplate='%{y} moderate<extra></extra>'))
+        if 'unhealthy' in df_pivot.columns:
+            fig.add_trace(go.Scatter(x=df_pivot.index, y=df_pivot['unhealthy'], name='Unhealthy',
+                                     mode='lines+markers', line=dict(color=C['red'], width=2, shape='spline'),
+                                     marker=dict(size=5),
+                                     hovertemplate='%{y} unhealthy<extra></extra>'))
+
+        fig.update_layout(
+            height=280,
+            margin=dict(l=16, r=16, t=8, b=32),
+            plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
+            xaxis=dict(showgrid=False, showline=False, tickfont=dict(color=C['text_muted']), color=C['text_muted']),
+            yaxis=dict(showgrid=True, gridcolor=C['border'], showline=False, tickfont=dict(color=C['text_muted']), color=C['text_muted']),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5, font=dict(color=C['text_sec'])),
+            hovermode='x unified'
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+        total_items_trend = int(df['count'].sum())
         healthy_count = int(df[df['category'] == 'healthy']['count'].sum()) if 'healthy' in df['category'].values else 0
-        trend_source = df.groupby('date', as_index=False)['count'].sum().sort_values('date')
+        st.markdown(f"<div style='color:{C['text_sec']}; font-size:0.85rem;'>Total items: <strong>{total_items_trend}</strong> &middot; Healthy choices: <strong style='color:{C['green']};'>{healthy_count}</strong></div>", unsafe_allow_html=True)
 
-        if st.session_state.trends_view == 'daily':
-            labels = ['6AM', '8AM', '10AM', '12PM', '2PM', '4PM', '6PM', '8PM']
-            slot_vals = [0] * len(labels)
-            for _, row in trend_source.iterrows():
-                h = row['date'].hour
-                idx = min(range(len(labels)), key=lambda i: abs((6 + i * 2) - h))
-                slot_vals[idx] += int(row['count'])
-            y_vals = []
-            running = 0
-            for v in slot_vals:
-                running += v
-                y_vals.append(running)
-            x_vals = labels
-            hover_suffix = 'items tracked'
-            hover_prefix = ''
-        else:
-            trend_source['label'] = trend_source['date'].dt.strftime('%b %d')
-            trend_source['cum'] = trend_source['count'].cumsum()
-            x_vals = trend_source['label'].tolist()
-            y_vals = trend_source['cum'].astype(int).tolist()
-            hover_suffix = 'items tracked'
-            hover_prefix = ''
+        # AI Health Coach & Healthy Recipes - side by side cards
+        st.markdown(f"<div style='height:20px;'></div>", unsafe_allow_html=True)
+        col_coach, col_recipes = st.columns(2)
 
-        with head_left:
-            st.markdown(f"<div class='trend-sub'>Total items: {total_items} · Healthy choices: {healthy_count} · Based on your logged data</div>", unsafe_allow_html=True)
-    else:
-        x_vals = ['6AM', '8AM', '10AM', '12PM', '2PM', '4PM', '6PM', '8PM']
-        y_vals = [0, 0, 1, 1, 1, 2, 2, 3]
-        hover_suffix = 'items tracked'
-        hover_prefix = ''
-        with head_left:
-            st.markdown("<div class='trend-sub'>Total items: 0 · Healthy choices: 0 · Based on your logged data</div>", unsafe_allow_html=True)
-
-    with head_right:
-        st.markdown('<div class="trend-tabs-container">', unsafe_allow_html=True)
-        col_d, col_w, col_m = st.columns(3)
-        with col_d:
-            if st.button("Day", use_container_width=True, key="day_tab", type="primary" if st.session_state.trends_view == 'daily' else "secondary"):
-                st.session_state.trends_view = 'daily'
-                st.rerun()
-        with col_w:
-            if st.button("Week", use_container_width=True, key="week_tab", type="primary" if st.session_state.trends_view == 'weekly' else "secondary"):
-                st.session_state.trends_view = 'weekly'
-                st.rerun()
-        with col_m:
-            if st.button("Month", use_container_width=True, key="month_tab", type="primary" if st.session_state.trends_view == 'monthly' else "secondary"):
-                st.session_state.trends_view = 'monthly'
-                st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(
-        x=x_vals,
-        y=y_vals,
-        mode='lines+markers',
-        line=dict(color='#67AEC3', width=4, shape='spline', smoothing=0.6),
-        marker=dict(color='#67AEC3', size=8, line=dict(color='#081018', width=2)),
-        fill='tozeroy',
-        fillcolor='rgba(103,174,195,0.12)',
-        hovertemplate=f"%{{x}}<br>{hover_prefix}%{{y}} {hover_suffix}<extra></extra>"
-    ))
-
-    ymax = max(4, max(y_vals) if y_vals else 4)
-    fig.update_layout(
-        height=360,
-        margin=dict(l=20, r=20, t=10, b=25),
-        plot_bgcolor='rgba(0,0,0,0)',
-        paper_bgcolor='rgba(0,0,0,0)',
-        xaxis=dict(showgrid=False, showline=False, title=None, tickfont=dict(color='#394560', size=16)),
-        yaxis=dict(showgrid=True, gridcolor='rgba(57,69,96,0.25)', griddash='dot', showline=False, title=None,
-                   tickfont=dict(color='#394560', size=16), rangemode='tozero', range=[0, ymax * 1.15]),
-        hovermode='x unified',
-        showlegend=False,
-        hoverlabel=dict(bgcolor='#1A2133', bordercolor='#2B3650', font=dict(color='#CFE4F2', size=16))
-    )
-    st.plotly_chart(fig, use_container_width=True)
-    st.markdown('</div>', unsafe_allow_html=True)
-
-    if not raw or len(raw) == 0:
-        if all_data and len(all_data) > 0:
-            st.warning(f"⚠️ You have {len(all_data)} logged items, but none in the last {days} day(s). Try selecting a different time range.")
-        else:
-            st.info("📊 No data yet. Start logging items!")
-
-    # === AI HEALTH COACH + RECIPES (FIGMA-STYLE PANELS) ===
-    today_str = datetime.now().strftime("%Y-%m-%d")
-
-    if st.session_state.recipes_date != today_str:
-        st.session_state.daily_recipes = None
-        st.session_state.recipes_date = today_str
-
-    coach_col, recipe_col = st.columns(2)
-
-    with coach_col:
-        insights_ready = len(st.session_state.ai_insights) if st.session_state.ai_insights else 3
-        st.markdown(f"""
-            <div class='action-card'>
-                <div class='action-card-header'>
-                    <div class='action-title'>🧠 AI Health Coach</div>
-                    <div class='action-chip'>{insights_ready} insights ready</div>
-                </div>
-                <div class='action-muted'>Your AI coach has analyzed food entries and found personalized insights to improve your health outcomes.</div>
-            </div>
-        """, unsafe_allow_html=True)
-
-        if not st.session_state.ai_insights:
-            if st.button("✨ Get AI Insights", key="figma_get_insights", use_container_width=True, type="primary"):
-                with st.spinner("🧠 Your AI Health Coach is analyzing your patterns..."):
-                    try:
-                        insights = generate_health_insights(raw or [], all_data or [], days)
-                        if insights:
-                            st.session_state.ai_insights = insights
-                            st.rerun()
-                        else:
-                            st.warning("Could not generate insights. Please try again.")
-                    except Exception as e:
-                        st.error(f"AI Insights error: {e}")
-        else:
-            if st.button("🔄 Refresh Insights", key="figma_refresh_insights", use_container_width=True):
-                st.session_state.ai_insights = None
-                st.rerun()
-
-            for insight in st.session_state.ai_insights[:3]:
-                emoji = insight.get('emoji', '💡')
-                title = insight.get('title', 'Insight')
-                body = insight.get('insight', '')
-                st.markdown(f"""
-                    <div class='coach-list-item'>
-                        <div style='font-weight:700; color:#DDE7FA; margin-bottom:2px;'>{emoji} {title}</div>
-                        <div style='font-size:0.9rem; color:#7F8DAB;'>{body}</div>
+        with col_coach:
+            st.markdown(f"""
+                <div class='card' style='min-height:200px;'>
+                    <div style='display:flex; align-items:center; gap:10px; margin-bottom:12px;'>
+                        <div style='width:36px; height:36px; border-radius:10px; background:rgba(91,155,157,0.15); display:flex; align-items:center; justify-content:center;'>
+                            <i class='fa-solid fa-heart-pulse' style='color:{C["teal"]}; font-size:1rem;'></i>
+                        </div>
+                        <div>
+                            <div style='font-weight:700; font-size:0.95rem;'>AI Health Coach</div>
+                            <div style='font-size:0.7rem; color:{C["text_muted"]};'>Personalized insights</div>
+                        </div>
                     </div>
-                """, unsafe_allow_html=True)
+            """, unsafe_allow_html=True)
 
-    with recipe_col:
-        st.markdown("""
-            <div class='action-card'>
-                <div class='action-card-header'>
-                    <div class='action-title'>👨‍🍳 Healthy Recipes</div>
-                    <div style='color:#5E6685; font-size:0.95rem; font-weight:600;'>Matched to your goals</div>
-                </div>
-                <div class='action-muted'>Discover today's recipes curated around your nutrition targets and most-tracked foods.</div>
-            </div>
-        """, unsafe_allow_html=True)
+            if st.session_state.ai_insights:
+                for i, insight in enumerate(st.session_state.ai_insights[:2]):
+                    emoji = insight.get('emoji', '')
+                    title = insight.get('title', 'Insight')
+                    body = insight.get('insight', '')
+                    st.markdown(f"<div style='font-size:0.8rem; margin-bottom:8px;'><strong>{emoji} {title}</strong><br><span style='color:{C['text_sec']};'>{body[:120]}</span></div>", unsafe_allow_html=True)
+                if st.button("Refresh Insights", key="refresh_insights", use_container_width=True):
+                    st.session_state.ai_insights = None; st.rerun()
+            else:
+                if st.button("Get AI Insights", use_container_width=True, type="primary", key="get_insights_btn"):
+                    with st.spinner("Analyzing your patterns..."):
+                        try:
+                            insights = generate_health_insights(raw, all_data, days)
+                            if insights:
+                                st.session_state.ai_insights = insights; st.rerun()
+                            else: st.warning("Could not generate insights.")
+                        except Exception as e: st.error(f"Error: {e}")
 
-        if not st.session_state.daily_recipes:
-            if st.button("🍳 Discover Today's Recipes", key="figma_discover_recipes", use_container_width=True, type="primary"):
-                with st.spinner("🍳 Finding healthy recipes for you..."):
-                    try:
-                        recipes = generate_daily_recipes()
-                        if recipes:
-                            st.session_state.daily_recipes = recipes
-                            st.session_state.recipes_date = today_str
-                            st.rerun()
-                        else:
-                            st.warning("Could not load recipes. Please try again.")
-                    except Exception as e:
-                        st.error(f"Recipe error: {e}")
-        else:
-            if st.button("🔄 New Recipes", key="figma_refresh_recipes", use_container_width=True):
+            st.markdown("</div>", unsafe_allow_html=True)
+
+        with col_recipes:
+            today_str = datetime.now().strftime("%Y-%m-%d")
+            if st.session_state.recipes_date != today_str:
                 st.session_state.daily_recipes = None
-                st.rerun()
+                st.session_state.recipes_date = today_str
 
-            for recipe in st.session_state.daily_recipes[:3]:
-                r_name = recipe.get('name', 'Recipe')
-                r_type = recipe.get('meal_type', 'Meal')
-                r_time = recipe.get('prep_time', '?')
-                st.markdown(f"""
-                    <div class='coach-list-item' style='border-color:#3A3341;'>
-                        <div style='font-weight:700; color:#E5DBBD; margin-bottom:2px;'>🍽️ {r_name}</div>
-                        <div style='font-size:0.9rem; color:#938A72;'>{r_type} · {r_time}</div>
+            st.markdown(f"""
+                <div class='card' style='min-height:200px;'>
+                    <div style='display:flex; align-items:center; gap:10px; margin-bottom:12px;'>
+                        <div style='width:36px; height:36px; border-radius:10px; background:rgba(91,140,62,0.15); display:flex; align-items:center; justify-content:center;'>
+                            <i class='fa-solid fa-utensils' style='color:{C["olive"]}; font-size:1rem;'></i>
+                        </div>
+                        <div>
+                            <div style='font-weight:700; font-size:0.95rem;'>Healthy Recipes</div>
+                            <div style='font-size:0.7rem; color:{C["text_muted"]};'>Daily meal inspiration</div>
+                        </div>
                     </div>
-                """, unsafe_allow_html=True)
+            """, unsafe_allow_html=True)
 
+            if st.session_state.daily_recipes:
+                for recipe in st.session_state.daily_recipes[:2]:
+                    r_name = recipe.get('name', 'Recipe')
+                    r_type = recipe.get('meal_type', '')
+                    r_time = recipe.get('prep_time', '')
+                    st.markdown(f"<div style='font-size:0.8rem; margin-bottom:8px;'><strong>{r_name}</strong><br><span style='color:{C['text_muted']}; font-size:0.7rem;'>{r_type} &middot; {r_time}</span></div>", unsafe_allow_html=True)
+                if st.button("New Recipes", key="refresh_recipes", use_container_width=True):
+                    st.session_state.daily_recipes = None; st.rerun()
+            else:
+                if st.button("Discover Recipes", use_container_width=True, type="primary", key="discover_recipes_btn"):
+                    with st.spinner("Finding healthy recipes..."):
+                        try:
+                            recipes = generate_daily_recipes()
+                            if recipes:
+                                st.session_state.daily_recipes = recipes
+                                st.session_state.recipes_date = today_str
+                                st.rerun()
+                            else: st.warning("Could not load recipes.")
+                        except Exception as e: st.error(f"Error: {e}")
+
+            st.markdown("</div>", unsafe_allow_html=True)
+
+    else:
+        if all_data and len(all_data) > 0:
+            st.info(f"You have {len(all_data)} logged items, but none in the last {days} day(s). Try a different time range.")
+        else:
+            st.info("No data yet. Start scanning and logging items!")
+
+
+# ============================
+# CALENDAR PAGE
+# ============================
 elif st.session_state.page == 'calendar':
-    st.markdown("## 📅 Grocery Calendar")
-    calendar_all = get_all_calendar_data_db(st.session_state.user_id) or []
-    tracked_days = len({d for d, *_ in calendar_all}) if calendar_all else 0
-    st.markdown(f"<div class='subtitle'>{tracked_days} days tracked · {len(calendar_all)} items logged total</div>", unsafe_allow_html=True)
+    # Get logged days for the calendar dots
+    all_items = get_all_calendar_data_db(st.session_state.user_id)
+    total_logged = len(all_items) if all_items else 0
+    unique_dates = set()
+    if all_items:
+        for item in all_items:
+            try:
+                d = item[0]
+                if hasattr(d, 'day'):
+                    unique_dates.add(d)
+                else:
+                    unique_dates.add(datetime.strptime(str(d), '%Y-%m-%d').date())
+            except:
+                pass
+
+    st.markdown(f"""
+        <div style='margin-bottom:16px;'>
+            <h2 style='margin:0; font-weight:800; font-size:1.8rem;'><i class='fa-regular fa-calendar' style='color:{C["teal"]}; margin-right:8px;'></i>Grocery Calendar</h2>
+            <div style='color:{C["text_muted"]}; font-size:0.85rem;'>{len(unique_dates)} days tracked &middot; {total_logged} items logged total</div>
+        </div>
+    """, unsafe_allow_html=True)
+
     c1, c2 = st.columns([1, 1.5])
-    
+
     with c1:
-        st.markdown('<div class="card">', unsafe_allow_html=True)
         sel_date = st.date_input("Select Date", datetime.now(), label_visibility="collapsed")
-        st.markdown(create_html_calendar(sel_date.year, sel_date.month, sel_date.day), unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
-    
+        # Get logged days for current month
+        logged_days_in_month = set()
+        for d in unique_dates:
+            if hasattr(d, 'year') and d.year == sel_date.year and d.month == sel_date.month:
+                logged_days_in_month.add(d.day)
+        st.markdown(f"<div class='card'>{create_html_calendar(sel_date.year, sel_date.month, sel_date.day, logged_days_in_month)}</div>", unsafe_allow_html=True)
+
     with c2:
-        st.markdown(f"### 🗓️ {sel_date.strftime('%b %d, %Y')}")
-        
-        st.markdown("#### ➕ Add Item to This Day")
-        search_item = st.text_input("Search for an item", key="calendar_search", placeholder="e.g., banana, coca cola, avocado...")
-        
+        items = get_calendar_items_db(st.session_state.user_id, sel_date.strftime("%Y-%m-%d"))
+        item_count = len(items) if items else 0
+        st.markdown(f"""
+            <div style='margin-bottom:16px;'>
+                <h4 style='font-weight:700; margin:0;'>{sel_date.strftime('%b %d, %Y')}</h4>
+                <div style='color:{C["text_muted"]}; font-size:0.8rem;'>{item_count} item{"s" if item_count != 1 else ""} logged</div>
+            </div>
+        """, unsafe_allow_html=True)
+
+        # Add item
+        st.markdown(f"<div style='font-size:0.75rem; font-weight:600; color:{C['text_muted']}; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px;'>Add Item to This Day</div>", unsafe_allow_html=True)
+        search_item = st.text_input("Search for an item", key="calendar_search", placeholder="e.g., banana, avocado...", label_visibility="collapsed")
+
         if search_item:
-            search_results = search_vantage_db(search_item, limit=20)  # FIX 3: Increased limit
+            search_results = search_vantage_db(search_item, limit=10)
             filtered_results = [r for r in search_results if r['vms_score'] != 10.0] if search_results else []
-            
             if filtered_results:
-                # FIX 3: Scrollable container
                 st.markdown('<div class="results-scroll-container">', unsafe_allow_html=True)
                 for idx, result in enumerate(filtered_results):
-                    clr = COLORS['green'] if result['vms_score'] < 3.0 else COLORS['yellow'] if result['vms_score'] < 7.0 else COLORS['red']
-                    
-                    # FIX 2: Add portion size label
-                    portion_label = " /serving" if needs_portion_size(result['name']) else ""
-                    
+                    clr = score_color(result['vms_score'])
                     col_a, col_b, col_c = st.columns([3, 1, 0.6])
                     with col_a:
-                        st.markdown(f"**{result['name']}**")
+                        st.markdown(f"<span style='font-size:0.9rem;'>{result['name']}</span>", unsafe_allow_html=True)
                     with col_b:
-                        st.markdown(f"<div style='text-align:center; color:{clr}; font-weight:bold; font-size:1.2rem;'>{result['vms_score']}{portion_label}</div>", unsafe_allow_html=True)
+                        st.markdown(f"<div style='text-align:center; color:{clr}; font-weight:bold;'>{round(result['vms_score'], 1)}</div>", unsafe_allow_html=True)
                     with col_c:
-                        if st.button("➕", key=f"add_cal_{idx}_{sel_date}", help=f"Add {result['name']}"):
-                            add_calendar_item_db(
-                                st.session_state.user_id,
-                                sel_date.strftime("%Y-%m-%d"),
-                                result['name'],
-                                result['vms_score']
-                            )
-                            st.success(f"✅ Added!")
+                        if st.button("+", key=f"add_cal_{idx}_{sel_date}", help=f"Add {result['name']}"):
+                            add_calendar_item_db(st.session_state.user_id, sel_date.strftime("%Y-%m-%d"),
+                                                 result['name'], round(result['vms_score'], 1))
+                            st.success("Added!")
                             time.sleep(0.5)
                             st.rerun()
                 st.markdown('</div>', unsafe_allow_html=True)
             else:
-                # FIX 7: Friendly error
-                st.markdown("""
+                st.markdown(f"""
                     <div class='friendly-error'>
-                        <div class='friendly-error-title'>🔍 Item Not Found Yet</div>
-                        <div class='friendly-error-text'>
-                            Our database is growing every day!<br>
-                            Try a different search term or check back soon.
-                        </div>
+                        <div class='friendly-error-title'>Item Not Found Yet</div>
+                        <div class='friendly-error-text'>Our database is growing every day! Try a different search term.</div>
                     </div>
                 """, unsafe_allow_html=True)
-        
-        st.markdown("---")
-        st.markdown("#### 📝 Items for This Day")
-        
-        items = get_calendar_items_db(st.session_state.user_id, sel_date.strftime("%Y-%m-%d"))
+
+        # Items for this day
+        st.markdown(f"<div style='height:12px;'></div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='font-size:0.75rem; font-weight:600; color:{C['text_muted']}; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px;'>Items for This Day</div>", unsafe_allow_html=True)
         if items:
-            for iid, name, score, cat in items:
-                clr = COLORS['green'] if score < 3.0 else COLORS['yellow'] if score < 7.0 else COLORS['red']
+            for iid, name, score_val, cat in items:
+                clr = score_color(score_val)
                 col_item, col_del = st.columns([5, 1])
                 with col_item:
-                    st.markdown(f"<div class='list-row'><span>{name}</span><strong style='color:{clr}'>{score}</strong></div>", unsafe_allow_html=True)
+                    st.markdown(f"""
+                        <div class='list-row'>
+                            <div style='display:flex; align-items:center; gap:10px;'>
+                                <div style='width:8px; height:8px; border-radius:50%; background:{clr};'></div>
+                                <span style='font-size:0.9rem;'>{name}</span>
+                            </div>
+                            <strong style='color:{clr}; font-size:0.9rem;'>{round(score_val, 1)}</strong>
+                        </div>
+                    """, unsafe_allow_html=True)
                 with col_del:
-                    if st.button("🗑️", key=f"del_{iid}", help="Delete this item"):
+                    if st.button("🗑", key=f"del_{iid}", help="Delete"):
                         delete_item_db(iid)
                         st.rerun()
         else:
-            st.info("📭 No items for this date. Add items above!")
+            st.markdown(f"<div style='color:{C['text_muted']}; font-size:0.85rem; padding:12px;'>No items for this date. Add items above!</div>", unsafe_allow_html=True)
 
+
+# ============================
+# MEAL PLAN PAGE
+# ============================
 elif st.session_state.page == 'log':
-    st.markdown("## 🍽️ Meal Plan")
-    history = get_log_history_db(st.session_state.user_id)
-    if history:
-        for d, name, score, cat in history:
-            clr = COLORS['green'] if score < 3.0 else COLORS['yellow'] if score < 7.0 else COLORS['red']
-            st.markdown(f"<div class='list-row'><span><b>{d}</b>: {name}</span><strong style='color:{clr}'>{score}</strong></div>", unsafe_allow_html=True)
-    else:
-        st.info("📭 No history yet. Start logging items!")
+    history_raw = get_log_history_db(st.session_state.user_id)
+    # Also get items with IDs for delete functionality
+    all_items_with_ids = []
+    try:
+        con = get_db_connection()
+        all_items_with_ids = con.execute(
+            "SELECT id, date, item_name, score, category FROM calendar WHERE username = ? ORDER BY date DESC",
+            [st.session_state.user_id]
+        ).fetchall()
+    except:
+        pass
+    history = history_raw
 
-    # === AI MEAL PLANNING AGENT ===
-    st.markdown("---")
+    # Count summaries
+    healthy_count = sum(1 for _, _, s, _ in history if s < 3.0) if history else 0
+    watch_count = sum(1 for _, _, s, _ in history if s >= 3.0) if history else 0
+    unique_days = len(set(str(d) for d, _, _, _ in history)) if history else 0
+
+    st.markdown(f"""
+        <div style='margin-bottom:8px;'>
+            <h2 style='margin:0; font-weight:800; font-size:1.8rem;'><i class='fa-regular fa-clock' style='color:{C["teal"]}; margin-right:8px;'></i>Meal Plan</h2>
+            <div style='display:flex; gap:8px; margin-top:6px;'>
+                <span style='background:rgba(76,175,80,0.15); color:{C["green"]}; padding:3px 10px; border-radius:8px; font-size:0.75rem; font-weight:600;'>{healthy_count} healthy</span>
+                <span style='background:rgba(249,168,37,0.15); color:{C["yellow"]}; padding:3px 10px; border-radius:8px; font-size:0.75rem; font-weight:600;'>{watch_count} to watch</span>
+            </div>
+            <div style='color:{C["text_muted"]}; font-size:0.8rem; margin-top:6px;'>{len(history) if history else 0} items &middot; {unique_days} days</div>
+        </div>
+    """, unsafe_allow_html=True)
+
+    if history:
+        # Group items by date (with IDs for delete)
+        from collections import OrderedDict
+        grouped = OrderedDict()
+        for row in all_items_with_ids:
+            iid, d, name, score_val, cat = row
+            date_str = str(d)
+            if date_str not in grouped:
+                grouped[date_str] = []
+            grouped[date_str].append((iid, name, score_val, cat))
+
+        for date_str, items_list in grouped.items():
+            # Calculate total estimated calories for the date group
+            total_cal = len(items_list) * 180  # rough estimate per item
+            st.markdown(f"""
+                <div class='card' style='padding:16px; margin-bottom:12px;'>
+                    <div style='display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;'>
+                        <div style='display:flex; align-items:center; gap:8px;'>
+                            <i class='fa-regular fa-calendar' style='color:{C["teal"]}; font-size:0.85rem;'></i>
+                            <span style='font-weight:700; font-size:0.9rem; color:{C["text"]};'>{date_str}</span>
+                            <span style='color:{C["text_muted"]}; font-size:0.75rem;'>{len(items_list)} items</span>
+                        </div>
+                        <span style='color:{C["text_muted"]}; font-size:0.75rem;'>~{total_cal} cal</span>
+                    </div>
+            """, unsafe_allow_html=True)
+            for iid, name, score_val, cat in items_list:
+                clr = score_color(score_val)
+                # Show +/- prefix for VMS scores
+                score_prefix = "+" if score_val >= 0 else ""
+                score_display = f"{score_prefix}{round(score_val, 1)}"
+                # Estimate calories per item based on score category
+                item_cal = 89 if score_val < 3.0 else 220 if score_val < 7.0 else 320
+                col_item, col_del = st.columns([6, 0.5])
+                with col_item:
+                    st.markdown(f"""
+                        <div style='display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid {C["border"]};'>
+                            <div style='display:flex; align-items:center; gap:10px;'>
+                                <div style='width:8px; height:8px; border-radius:50%; background:{clr};'></div>
+                                <div>
+                                    <span style='font-size:0.9rem;'>{name}</span>
+                                    <span style='font-size:0.7rem; color:{C["text_muted"]}; margin-left:8px;'>~{item_cal} cal</span>
+                                </div>
+                            </div>
+                            <strong style='color:{clr}; font-size:0.9rem;'>{score_display}</strong>
+                        </div>
+                    """, unsafe_allow_html=True)
+                with col_del:
+                    if st.button("🗑", key=f"mp_del_{iid}", help="Delete"):
+                        delete_item_db(iid)
+                        st.rerun()
+            st.markdown("</div>", unsafe_allow_html=True)
+    else:
+        st.markdown(f"<div style='color:{C['text_muted']}; font-size:0.9rem; padding:20px;'>No history yet. Start scanning and logging items!</div>", unsafe_allow_html=True)
+
+    # AI Meal Planning Agent
+    st.markdown(f"<div style='height:16px;'></div>", unsafe_allow_html=True)
     col_mp1, col_mp2 = st.columns([3, 1])
     with col_mp1:
-        st.markdown("#### 🤖 AI Meal Planning")
+        st.markdown(f"<h4 style='font-weight:700;'>AI Meal Planning</h4>", unsafe_allow_html=True)
     with col_mp2:
         if st.session_state.meal_plan:
-            if st.button("🗑️ Clear", key="clear_meal_plan", use_container_width=True):
-                st.session_state.meal_plan = None
-                st.rerun()
+            if st.button("Clear", key="clear_meal_plan", use_container_width=True):
+                st.session_state.meal_plan = None; st.rerun()
 
     if not st.session_state.meal_plan:
-        st.markdown("Get a personalized 7-day meal plan based on your eating history.")
-        if st.button("🤖 Generate AI Meal Plan", use_container_width=True, type="primary"):
-            with st.spinner("🤖 Your AI nutritionist is crafting your personalized meal plan..."):
+        st.markdown(f"<div style='color:{C['text_sec']}; font-size:0.85rem; margin-bottom:8px;'>Get a personalized 7-day meal plan based on your eating history.</div>", unsafe_allow_html=True)
+        if st.button("Generate AI Meal Plan", use_container_width=True, type="primary"):
+            with st.spinner("Crafting your personalized meal plan..."):
                 try:
-                    history = get_log_history_db(st.session_state.user_id)
-                    plan = generate_meal_plan(history, st.session_state.user_id)
+                    history_data = get_log_history_db(st.session_state.user_id)
+                    plan = generate_meal_plan(history_data, st.session_state.user_id)
                     if plan:
-                        st.session_state.meal_plan = plan
-                        st.rerun()
-                    else:
-                        st.warning("Could not generate meal plan. Please try again.")
-                except Exception as e:
-                    st.error(f"Meal Plan error: {e}")
+                        st.session_state.meal_plan = plan; st.rerun()
+                    else: st.warning("Could not generate meal plan.")
+                except Exception as e: st.error(f"Error: {e}")
 
     if st.session_state.meal_plan:
         day_order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
@@ -1122,30 +1147,21 @@ elif st.session_state.page == 'log':
 
         for day_name in day_order:
             meals = plan.get(day_name, [])
-            if not meals:
-                continue
-
-            with st.expander(f"📅 {day_name}", expanded=False):
+            if not meals: continue
+            with st.expander(f"{day_name}", expanded=False):
                 for midx, meal in enumerate(meals):
                     meal_type = meal.get('meal', 'Meal')
                     meal_name = meal.get('name', 'Unknown')
-                    est_score = meal.get('estimated_score', 5.0)
-
-                    clr = COLORS['green'] if est_score < 3.0 else COLORS['yellow'] if est_score < 7.0 else COLORS['red']
-
+                    est_score = round(meal.get('estimated_score', 5.0), 1)
+                    clr = score_color(est_score)
                     col_meal, col_score, col_add = st.columns([3, 1, 0.6])
                     with col_meal:
                         st.markdown(f"**{meal_type}:** {meal_name}")
                     with col_score:
                         st.markdown(f"<div style='text-align:center; color:{clr}; font-weight:bold;'>{est_score}</div>", unsafe_allow_html=True)
                     with col_add:
-                        if st.button("➕", key=f"mp_{day_name}_{midx}", help=f"Add {meal_name} to today"):
-                            add_calendar_item_db(
-                                st.session_state.user_id,
-                                today_str,
-                                meal_name,
-                                est_score
-                            )
-                            st.success(f"✅ Added!")
+                        if st.button("+", key=f"mp_{day_name}_{midx}", help=f"Add {meal_name} to today"):
+                            add_calendar_item_db(st.session_state.user_id, today_str, meal_name, est_score)
+                            st.success("Added!")
                             time.sleep(0.5)
                             st.rerun()
