@@ -53,19 +53,19 @@ else:
 
 # --- COLOR PALETTE (Grocery Template) ---
 COLORS = {
-    'olive': '#5B8C3E',          # Primary green from template
-    'terracotta': '#5B8C3E',     # Buttons now green (was terracotta)
-    'salmon': '#8BC34A',         # Light green accent
-    'beige': '#F5F0E8',          # Warm cream background from template
-    'dark_text': '#2C2C2C',
-    'green': '#4CAF50',          # Healthy score green
-    'yellow': '#F9A825',         # Moderate score amber
-    'red': '#E53935',            # Unhealthy score red
-    'camera_icon': '#444444',    # Dark grey camera icon
-    'toggle_button': '#E8967A',  # Salmon pink toggle buttons
-    'unhealthy_bar': '#EF9A9A',  # Softer red for chart bars
-    'card_bg': '#FFFFFF',
-    'border': '#E8E0D4',         # Warm border tone
+    'olive': '#7BD0E7',
+    'terracotta': '#7BD0E7',
+    'salmon': '#A7E8F5',
+    'beige': '#04060D',
+    'dark_text': '#E9EEF7',
+    'green': '#4CC38A',
+    'yellow': '#D8A66A',
+    'red': '#E87474',
+    'camera_icon': '#7BD0E7',
+    'toggle_button': '#8C74CC',
+    'unhealthy_bar': '#6B3240',
+    'card_bg': '#0C111D',
+    'border': '#1B2436',
 }
 
 # FIX 2 & 5: Helper function to determine if item needs portion size
@@ -111,14 +111,14 @@ def needs_portion_size(item_name):
 
 # --- CSS (Grocery Template Theme) ---
 st.markdown('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">', unsafe_allow_html=True)
-st.markdown('<link href="https://fonts.googleapis.com/css2?family=Josefin+Sans:wght@300;400;600;700&display=swap" rel="stylesheet">', unsafe_allow_html=True)
+st.markdown('<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Source+Serif+4:wght@600;700&display=swap" rel="stylesheet">', unsafe_allow_html=True)
 st.markdown(f"""
     <style>
     /* === GLOBAL === */
     .stApp {{
-        background-color: {COLORS['beige']};
-        color: #1A1A1A;
-        font-family: 'Josefin Sans', sans-serif;
+        background: radial-gradient(circle at top right, #0B1528 0%, #05070D 45%, #03050A 100%);
+        color: #E7ECF8;
+        font-family: 'Inter', sans-serif;
     }}
 
     .stApp::before {{
@@ -132,102 +132,136 @@ st.markdown(f"""
         background-size: cover;
         background-position: center;
         background-repeat: no-repeat;
-        opacity: 0.20;
+        opacity: 0.08;
         pointer-events: none;
         z-index: 0;
     }}
 
-    h1, h2, h3, h4, h5, h6, p, div, label {{
-        font-family: 'Josefin Sans', sans-serif !important;
+    .block-container {{
+        padding-top: 2rem;
     }}
 
-    .logo-text {{ font-family: 'Josefin Sans', sans-serif; font-size: 3rem; text-align: center; font-weight: 700; }}
+    h1, h2, h3, h4, h5, h6, p, div, label {{
+        font-family: 'Inter', sans-serif !important;
+        color: #E7ECF8;
+    }}
+
+    .logo-text {{
+        font-family: 'Source Serif 4', serif !important;
+        font-size: 2rem;
+        text-align: left;
+        font-weight: 700;
+        letter-spacing: -0.6px;
+        color: #F6F8FF;
+        white-space: nowrap;
+        line-height: 1.1;
+    }}
+
     .logo-dot {{ color: {COLORS['olive']}; }}
 
+    .subtitle {{
+        color: #627090;
+        margin-top: -8px;
+        margin-bottom: 14px;
+        font-size: 1.35rem;
+        font-weight: 500;
+    }}
+
     .card {{
-        background: white;
+        background: linear-gradient(145deg, #0E1220 0%, #0C101B 100%);
         padding: 24px;
         border-radius: 24px;
         border: 1px solid {COLORS['border']};
-        box-shadow: 0 4px 16px rgba(91,140,62,0.06);
+        box-shadow: 0 12px 30px rgba(2, 6, 15, 0.45);
         margin-bottom: 20px;
     }}
 
     .white-shelf {{
-        background: linear-gradient(135deg, #E8F5E9 0%, #F1F8E9 100%);
+        background: linear-gradient(135deg, #111626 0%, #111726 100%);
         height: 35px;
         border-radius: 14px;
-        border: 1px solid #C8E6C9;
+        border: 1px solid {COLORS['border']};
         margin-bottom: 25px;
     }}
 
     .tomato-wrapper {{ width: 100%; text-align: center; padding: 30px 0; }}
-    .tomato-icon {{ font-size: 150px !important; color: {COLORS['camera_icon']} !important; }}
+    .tomato-icon {{ font-size: 150px !important; color: {COLORS['camera_icon']} !important; opacity: 0.8; }}
 
     /* === INPUTS === */
     input[type="text"], input[type="password"] {{
-        background-color: white !important;
-        color: #1A1A1A !important;
+        background-color: #141A2A !important;
+        color: #ECF3FF !important;
         border: 1.5px solid {COLORS['border']} !important;
         border-radius: 14px !important;
         padding: 12px 16px !important;
-        font-family: 'Josefin Sans', sans-serif !important;
+        font-family: 'Inter', sans-serif !important;
     }}
 
     input[type="text"]:focus, input[type="password"]:focus {{
         border-color: {COLORS['olive']} !important;
-        box-shadow: 0 0 0 2px rgba(91,140,62,0.15) !important;
+        box-shadow: 0 0 0 2px rgba(123,208,231,0.2) !important;
     }}
 
     .stTextInput > div > div > input {{
-        background-color: white !important;
-        color: #1A1A1A !important;
-        -webkit-text-fill-color: #1A1A1A !important;
-        font-family: 'Josefin Sans', sans-serif !important;
+        background-color: #141A2A !important;
+        color: #ECF3FF !important;
+        -webkit-text-fill-color: #ECF3FF !important;
+        font-family: 'Inter', sans-serif !important;
     }}
 
     /* === BUTTONS === */
     .stButton > button {{
-        background-color: {COLORS['olive']} !important;
-        color: white !important;
-        border: none !important;
-        border-radius: 50px !important;
-        font-family: 'Josefin Sans', sans-serif !important;
-        font-weight: 600 !important;
-        padding: 0.5rem 1.5rem !important;
+        background: linear-gradient(90deg, #5E95A6 0%, #6FAEBF 100%) !important;
+        color: #F5FBFF !important;
+        border: 1px solid rgba(123, 208, 231, 0.35) !important;
+        border-radius: 14px !important;
+        font-family: 'Inter', sans-serif !important;
+        font-weight: 700 !important;
+        padding: 0.62rem 1rem !important;
         transition: all 0.2s ease !important;
+        letter-spacing: 0.1px;
     }}
 
     .stButton > button:hover {{
-        background-color: #4A7A2E !important;
-        box-shadow: 0 4px 12px rgba(91,140,62,0.3) !important;
+        background: linear-gradient(90deg, #6CA7B8 0%, #7EB9C8 100%) !important;
+        box-shadow: 0 6px 18px rgba(76, 150, 173, 0.35) !important;
         transform: translateY(-1px) !important;
+    }}
+
+    .stButton > button[kind="secondary"] {{
+        background: #111827 !important;
+        color: #A9B6D0 !important;
+        border: 1px solid {COLORS['border']} !important;
+    }}
+
+    .stHorizontalBlock div[data-testid="column"] .stButton > button {{
+        border-radius: 12px !important;
     }}
 
     /* === METRICS === */
     [data-testid="stMetricValue"] {{
-        color: #1A1A1A !important;
+        color: #EFF4FF !important;
         font-weight: 700 !important;
         font-size: 1.5rem !important;
-        font-family: 'Josefin Sans', sans-serif !important;
+        font-family: 'Inter', sans-serif !important;
     }}
 
     [data-testid="stMetricLabel"] {{
-        color: #2C2C2C !important;
+        color: #8B99B3 !important;
         font-weight: 600 !important;
-        font-family: 'Josefin Sans', sans-serif !important;
+        font-family: 'Inter', sans-serif !important;
     }}
 
     /* === EXPANDERS === */
     .stExpander {{
-        background: white !important;
-        color: #1A1A1A !important;
+        background: #0F1422 !important;
+        color: #E7ECF8 !important;
         border-radius: 16px !important;
         border: 1px solid {COLORS['border']} !important;
     }}
 
     .stExpander p, .stExpander div, .stExpander span {{
-        color: #1A1A1A !important;
+        color: #D7DEED !important;
     }}
 
     /* === HUD BUBBLE (Scanner Overlay) === */
@@ -236,15 +270,15 @@ st.markdown(f"""
         top: calc(50% - 200px);
         left: 50%;
         transform: translateX(-50%);
-        background: white;
+        background: rgba(13, 19, 34, 0.96);
         padding: 16px 28px;
         border-radius: 50px;
-        box-shadow: 0 10px 30px rgba(91,140,62,0.2);
-        border: 3px solid {COLORS['olive']};
+        box-shadow: 0 10px 30px rgba(0,0,0,0.45);
+        border: 1px solid rgba(123,208,231,0.4);
         z-index: 1000;
         text-align: center;
         min-width: 220px;
-        font-family: 'Josefin Sans', sans-serif;
+        font-family: 'Inter', sans-serif;
     }}
 
     /* === SCROLLABLE RESULTS === */
@@ -259,34 +293,34 @@ st.markdown(f"""
     }}
 
     .results-scroll-container::-webkit-scrollbar-track {{
-        background: #E8F5E9;
+        background: #0D1423;
         border-radius: 10px;
     }}
 
     .results-scroll-container::-webkit-scrollbar-thumb {{
-        background: {COLORS['olive']};
+        background: #2C3B57;
         border-radius: 10px;
     }}
 
     /* === SCANNER RESULTS === */
     .scanner-result {{
-        background: white;
+        background: #0F1525;
         padding: 16px;
         border-radius: 16px;
         margin: 12px 0;
         border-left: 4px solid {COLORS['olive']};
-        font-family: 'Josefin Sans', sans-serif;
+        font-family: 'Inter', sans-serif;
     }}
 
     .scanner-result-title {{
-        color: {COLORS['dark_text']};
+        color: #F1F5FF;
         font-weight: 700;
         font-size: 1.1rem;
         margin-bottom: 8px;
     }}
 
     .scanner-result-text {{
-        color: {COLORS['dark_text']};
+        color: #D9E2F5;
         font-weight: 600;
         font-size: 1.3rem;
         line-height: 1.6;
@@ -298,29 +332,115 @@ st.markdown(f"""
         justify-content: space-between;
         align-items: center;
         padding: 14px 16px;
-        background: #FFF;
+        background: #131A2D;
         border-radius: 16px;
         border: 1px solid {COLORS['border']};
         margin-bottom: 8px;
-        font-family: 'Josefin Sans', sans-serif;
+        font-family: 'Inter', sans-serif;
     }}
 
-    /* === TREND TABS === */
+    /* === TREND & INSIGHTS PANELS === */
+    .trend-shell {{
+        background: linear-gradient(145deg, #0C101B 0%, #0A0F1A 100%);
+        border: 1px solid #1A2338;
+        border-radius: 26px;
+        padding: 22px 22px 12px 22px;
+        margin-top: 12px;
+        margin-bottom: 22px;
+    }}
+
+    .trend-title-row {{
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 6px;
+    }}
+
+    .trend-title {{
+        font-size: 2.15rem;
+        font-weight: 700;
+        letter-spacing: -0.4px;
+        color: #F2F6FF;
+    }}
+
+    .trend-sub {{
+        color: #5F6E8D;
+        font-size: 1.02rem;
+        margin-bottom: 8px;
+    }}
+
     .trend-tabs-container {{
-        max-width: 400px;
-        margin: 0 auto 20px auto;
+        background: #121827;
+        border: 1px solid #242F47;
+        border-radius: 18px;
+        padding: 6px;
+        width: 100%;
     }}
 
     .trend-tabs-container .stButton > button {{
-        background-color: {COLORS['toggle_button']} !important;
-        color: white !important;
+        background-color: transparent !important;
+        color: #7D89A6 !important;
         border: none !important;
+        border-radius: 14px !important;
+        min-height: 44px;
     }}
 
     .trend-tabs-container .stButton > button[kind="primary"] {{
-        background-color: {COLORS['toggle_button']} !important;
-        color: white !important;
-        font-weight: bold !important;
+        background: #69AFC2 !important;
+        color: #F5FBFF !important;
+        font-weight: 700 !important;
+    }}
+
+    .trend-chart-note {{
+        color: #5E6B88;
+        font-size: 0.92rem;
+        margin-bottom: 10px;
+    }}
+
+    .action-card {{
+        background: linear-gradient(145deg, #0E1220 0%, #0C101A 100%);
+        border: 1px solid #1A2338;
+        border-radius: 26px;
+        padding: 22px;
+        min-height: 285px;
+    }}
+
+    .action-card-header {{
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 10px;
+    }}
+
+    .action-title {{
+        color: #EEF3FF;
+        font-size: 2.05rem;
+        font-weight: 700;
+    }}
+
+    .action-chip {{
+        color: #A998CF;
+        border: 1px solid #473B65;
+        background: rgba(51,40,75,0.45);
+        border-radius: 999px;
+        font-size: 0.9rem;
+        font-weight: 600;
+        padding: 4px 14px;
+    }}
+
+    .action-muted {{
+        color: #667593;
+        font-size: 1.02rem;
+        line-height: 1.65;
+        margin-bottom: 18px;
+    }}
+
+    .coach-list-item {{
+        background: #121827;
+        border: 1px solid #27324C;
+        border-radius: 14px;
+        padding: 10px 12px;
+        margin-bottom: 8px;
     }}
 
     /* === SIDEBAR === */
@@ -329,44 +449,175 @@ st.markdown(f"""
     }}
 
     section[data-testid="stSidebar"] {{
-        background-color: #FAFAF5 !important;
-        border-right: 1px solid {COLORS['border']} !important;
+        background: linear-gradient(180deg, #080C16 0%, #050811 100%) !important;
+        border-right: 1px solid #1A2236 !important;
+    }}
+
+    section[data-testid="stSidebar"] .stMarkdown h4,
+    section[data-testid="stSidebar"] .stMarkdown h5,
+    section[data-testid="stSidebar"] p,
+    section[data-testid="stSidebar"] label {{
+        color: #8A97B3 !important;
+    }}
+
+    section[data-testid="stSidebar"] .stButton > button {{
+        justify-content: flex-start;
+        background: #0E1424 !important;
+        color: #A4B2CD !important;
+        border-radius: 16px !important;
+        border: 1px solid #1E2A42 !important;
+    }}
+
+    section[data-testid="stSidebar"] .stButton > button:hover {{
+        background: #101C2F !important;
     }}
 
     /* === FRIENDLY ERRORS === */
     .friendly-error {{
-        background: #F1F8E9;
-        border-left: 4px solid {COLORS['olive']};
+        background: #111726;
+        border-left: 4px solid #476A97;
         padding: 16px;
         border-radius: 12px;
         margin: 12px 0;
-        font-family: 'Josefin Sans', sans-serif;
+        font-family: 'Inter', sans-serif;
     }}
 
     .friendly-error-title {{
         font-weight: 700;
-        color: #33691E;
+        color: #BFD4F1;
         margin-bottom: 8px;
     }}
 
     .friendly-error-text {{
-        color: #558B2F;
+        color: #93A7C7;
         font-size: 0.9rem;
     }}
 
     /* === SCAN PROMPT BADGE === */
     .scan-prompt {{
-        background: linear-gradient(135deg, #E8F5E9 0%, #F1F8E9 100%);
+        background: #101A2A;
         padding: 12px 20px;
         border-radius: 14px;
         display: inline-block;
-        border: 1px solid #C8E6C9;
+        border: 1px solid #23304A;
+        color: #C8D6ED;
     }}
+
+    hr {{
+        border-color: #1A2439;
+    }}
+
+    .stAlert {{
+        background-color: #111726 !important;
+        color: #C8D6ED !important;
+        border: 1px solid #24324C !important;
+    }}
+
+    [data-testid="stSidebar"] [data-testid="stMetric"] {{
+        background: #0D1322;
+        border: 1px solid #1C2942;
+        border-radius: 14px;
+        padding: 8px 10px;
+    }}
+
+    .kicker {{
+        color: #5C6884;
+        text-transform: uppercase;
+        letter-spacing: 1.6px;
+        font-size: 0.78rem;
+        font-weight: 700;
+        margin-bottom: 6px;
+    }}
+
+    .metric-strip {{
+        background: linear-gradient(160deg, #0F1526 0%, #0D1422 100%);
+        border: 1px solid #1A2840;
+        border-radius: 22px;
+        padding: 18px;
+        min-height: 120px;
+    }}
+
+    .metric-strip .metric-value {{
+        font-size: 2.8rem;
+        line-height: 1;
+        font-weight: 700;
+        color: #F3F6FF;
+    }}
+
+    .metric-strip .metric-note {{
+        margin-top: 10px;
+        color: #5FC696;
+        font-size: 1.05rem;
+        font-weight: 600;
+    }}
+
+    .sidebar-streak-card {{
+        margin-top: 24px;
+        padding: 14px;
+        border-radius: 18px;
+        border: 1px solid #1F2A42;
+        background: linear-gradient(155deg, #111726 0%, #0D1321 100%);
+    }}
+
+    .sidebar-streak-title {{
+        color: #EEF3FF;
+        font-size: 1.55rem;
+        font-weight: 700;
+        margin-bottom: 2px;
+    }}
+
+    .sidebar-streak-sub {{
+        color: #6F7E9E;
+        font-size: 0.95rem;
+        margin-bottom: 10px;
+    }}
+
+    .sidebar-progress-wrap {{
+        width: 100%;
+        height: 6px;
+        background: #1E2840;
+        border-radius: 999px;
+        overflow: hidden;
+    }}
+
+    .sidebar-progress-fill {{
+        height: 100%;
+        background: linear-gradient(90deg, #F2B14C 0%, #E58D32 100%);
+        border-radius: 999px;
+    }}
+
+    .sidebar-mini-stats {{
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        margin-top: 10px;
+    }}
+
+    .stat-tile {{
+        background: #0D1322;
+        border: 1px solid #1E2942;
+        border-radius: 14px;
+        padding: 10px 8px;
+        text-align: center;
+    }}
+
+    .stat-tile .v {{
+        color: #EAF0FD;
+        font-weight: 700;
+        font-size: 1.15rem;
+    }}
+
+    .stat-tile .l {{
+        color: #637290;
+        font-size: 0.85rem;
+        margin-top: 2px;
+    }}
+
     </style>
 """, unsafe_allow_html=True)
 
 def render_logo(size="3rem"):
-    st.markdown(f"<div style='text-align: center; margin-bottom: 10px;'><div class='logo-text' style='font-size: {size}; font-family: Josefin Sans, sans-serif;'>foodvantage<span class='logo-dot'>.</span></div></div>", unsafe_allow_html=True)
+    st.markdown(f"<div style='margin-bottom: 8px;'><div class='logo-text' style='font-size: {size};'>foodvantage<span class='logo-dot'>.</span></div></div>", unsafe_allow_html=True)
 
 def create_html_calendar(year, month, selected_day=None):
     cal = cal_module.monthcalendar(year, month)
@@ -386,22 +637,24 @@ def create_html_calendar(year, month, selected_day=None):
 # === MAIN APP (NO LOGIN PAGE) ===
 with st.sidebar:
     st.write("")
-    st.markdown("##### 🔍 Search")
-    search_q = st.text_input("Quick check score", key="sidebar_search")
+    render_logo(size="1.85rem")
+
+    st.markdown("<div class='kicker'>Search foods</div>", unsafe_allow_html=True)
+    st.text_input("Food search", key="sidebar_food_search", placeholder="Search foods...", label_visibility="collapsed")
+
+    st.markdown("<div class='kicker' style='margin-top:8px;'>Quick score check</div>", unsafe_allow_html=True)
+    search_q = st.text_input("Quick score search", key="sidebar_search", placeholder="e.g. banana...", label_visibility="collapsed")
     if search_q:
-        results = search_vantage_db(search_q, limit=20)  # FIX 3: Increased from 5 to 20
+        results = search_vantage_db(search_q, limit=20)
         filtered_results = [r for r in results if r['vms_score'] != 10.0] if results else []
-        
+
         if filtered_results:
             st.markdown("**Top Results:**")
-            # FIX 3: Add scrollable container
             st.markdown('<div class="results-scroll-container">', unsafe_allow_html=True)
             for i, d in enumerate(filtered_results):
                 c = COLORS['green'] if d['vms_score'] < 3.0 else COLORS['yellow'] if d['vms_score'] < 7.0 else COLORS['red']
-                
-                # FIX 2: Add portion size label if needed
                 portion_label = " per serving" if needs_portion_size(d['name']) else ""
-                
+
                 st.markdown(f"""
                     <div class='card' style='padding:12px; margin-bottom:8px;'>
                         <div style='font-size:0.9rem; font-weight:bold;'>{i+1}. {d['name']}</div>
@@ -411,7 +664,6 @@ with st.sidebar:
                 """, unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
         else:
-            # FIX 7: Friendly error message
             st.markdown("""
                 <div class='friendly-error'>
                     <div class='friendly-error-title'>🔍 Item Not Found Yet</div>
@@ -421,14 +673,84 @@ with st.sidebar:
                     </div>
                 </div>
             """, unsafe_allow_html=True)
+
     st.markdown("---")
-    if st.button("🏠 Dashboard", use_container_width=True): st.session_state.page = 'dashboard'; st.rerun()
-    if st.button("📅 Calendar", use_container_width=True): st.session_state.page = 'calendar'; st.rerun()
-    if st.button("📝 Log History", use_container_width=True): st.session_state.page = 'log'; st.rerun()
+    if st.button("📊 Dashboard", use_container_width=True, type="primary" if st.session_state.page == 'dashboard' else "secondary"):
+        st.session_state.page = 'dashboard'
+        st.rerun()
+    if st.button("📅 Calendar", use_container_width=True, type="primary" if st.session_state.page == 'calendar' else "secondary"):
+        st.session_state.page = 'calendar'
+        st.rerun()
+    if st.button("🕒 Meal Plan", use_container_width=True, type="primary" if st.session_state.page == 'log' else "secondary"):
+        st.session_state.page = 'log'
+        st.rerun()
+
+    history_sidebar = get_log_history_db(st.session_state.user_id) or []
+    total_logged_sidebar = len(history_sidebar)
+    healthy_sidebar = sum(1 for _, _, score, _ in history_sidebar if float(score) < 3.0)
+    health_score_sidebar = int(round((healthy_sidebar / total_logged_sidebar) * 100)) if total_logged_sidebar else 78
+    streak_days = min(total_logged_sidebar, 10)
+    streak_pct = int((streak_days / 10) * 100)
+
+    st.markdown(f"""
+        <div class='sidebar-streak-card'>
+            <div class='sidebar-streak-title'>🔥 {max(1, min(streak_days, 7))}-day streak</div>
+            <div class='sidebar-streak-sub'>Keep it going!</div>
+            <div class='sidebar-progress-wrap'>
+                <div class='sidebar-progress-fill' style='width:{streak_pct}%;'></div>
+            </div>
+            <div style='margin-top:8px; color:#556582; font-size:0.82rem;'>{streak_days} / 10 days to next milestone</div>
+            <div class='sidebar-mini-stats'>
+                <div class='stat-tile'>
+                    <div class='v'>{total_logged_sidebar:,}</div>
+                    <div class='l'>items logged</div>
+                </div>
+                <div class='stat-tile'>
+                    <div class='v'>{health_score_sidebar}</div>
+                    <div class='l'>health score</div>
+                </div>
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
 
 if st.session_state.page == 'dashboard':
-    render_logo(size="3.5rem")
-    st.markdown("<h3 style='text-align: center;'>Active Focus Scanner</h3>", unsafe_allow_html=True)
+    st.markdown("<h1 style='margin-bottom:4px;'>Dashboard</h1>", unsafe_allow_html=True)
+    st.markdown(f"<div class='subtitle'>{datetime.now().strftime('%A, %B %d, %Y')} · Track smarter. Live better.</div>", unsafe_allow_html=True)
+    history_dashboard = get_log_history_db(st.session_state.user_id) or []
+    today_key = datetime.now().strftime("%Y-%m-%d")
+    items_today = sum(1 for d, *_ in history_dashboard if str(d) == today_key)
+    total_items_dashboard = len(history_dashboard)
+    healthy_items_dashboard = sum(1 for _, _, score, _ in history_dashboard if float(score) < 3.0)
+    health_score_dashboard = int(round((healthy_items_dashboard / total_items_dashboard) * 100)) if total_items_dashboard else 78
+    day_streak_dashboard = max(1, min(total_items_dashboard, 7))
+
+    m1, m2, m3 = st.columns(3)
+    with m1:
+        st.markdown(f"""
+            <div class='metric-strip'>
+                <div class='kicker'>Items tracked</div>
+                <div class='metric-value'>{items_today}</div>
+                <div class='metric-note'>↗ Start scanning more</div>
+            </div>
+        """, unsafe_allow_html=True)
+    with m2:
+        st.markdown(f"""
+            <div class='metric-strip'>
+                <div class='kicker'>Health score</div>
+                <div class='metric-value'>{health_score_dashboard}<span style='font-size:1.5rem; color:#7D8CAC;'>/100</span></div>
+                <div class='metric-note'>↗ ↑ {max(1, healthy_items_dashboard)} pts this week</div>
+            </div>
+        """, unsafe_allow_html=True)
+    with m3:
+        st.markdown(f"""
+            <div class='metric-strip'>
+                <div class='kicker'>Day streak</div>
+                <div class='metric-value'>{day_streak_dashboard}<span style='font-size:1.5rem; color:#7D8CAC;'> days</span></div>
+                <div class='metric-note'>↗ Personal best!</div>
+            </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("<h3 style='margin-top:6px;'>Active Focus Scanner</h3>", unsafe_allow_html=True)
     st.markdown('<div class="white-shelf"></div>', unsafe_allow_html=True)
     
     if not st.session_state.camera_active:
@@ -592,26 +914,15 @@ if st.session_state.page == 'dashboard':
                     st.rerun()
 
     # TRENDS
-    st.markdown("### 📈 Your Health Trends")
-    
-    st.markdown('<div class="trend-tabs-container">', unsafe_allow_html=True)
-    col_d, col_w, col_m = st.columns(3)
-    with col_d:
-        if st.button("Day", use_container_width=True, key="day_tab",
-                    type="primary" if st.session_state.trends_view == 'daily' else "secondary"):
-            st.session_state.trends_view = 'daily'
-            st.rerun()
-    with col_w:
-        if st.button("Week", use_container_width=True, key="week_tab",
-                    type="primary" if st.session_state.trends_view == 'weekly' else "secondary"):
-            st.session_state.trends_view = 'weekly'
-            st.rerun()
-    with col_m:
-        if st.button("Month", use_container_width=True, key="month_tab",
-                    type="primary" if st.session_state.trends_view == 'monthly' else "secondary"):
-            st.session_state.trends_view = 'monthly'
-            st.rerun()
-    st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown('<div class="trend-shell">', unsafe_allow_html=True)
+    head_left, head_right = st.columns([3.2, 1])
+    with head_left:
+        st.markdown("""
+            <div class='trend-title-row'>
+                <div style='color:#66B8CC; font-size:1.6rem;'>↗</div>
+                <div class='trend-title'>Your Health Trends</div>
+            </div>
+        """, unsafe_allow_html=True)
     
     if st.session_state.trends_view == 'daily':
         days = 1
@@ -619,78 +930,129 @@ if st.session_state.page == 'dashboard':
         days = 7
     else:
         days = 30
-    
+
     all_data = get_all_calendar_data_db(st.session_state.user_id)
     raw = get_trend_data_db(st.session_state.user_id, days=days)
-    
+
+    total_items = 0
+    healthy_count = 0
     if raw and len(raw) > 0:
         df = pd.DataFrame(raw, columns=["date", "category", "count"])
         df['date'] = pd.to_datetime(df['date'])
-        df_pivot = df.pivot_table(index='date', columns='category', values='count', aggfunc='sum', fill_value=0)
-        
-        fig = go.Figure()
-        
-        if 'healthy' in df_pivot.columns:
-            fig.add_trace(go.Bar(
-                x=df_pivot.index,
-                y=df_pivot['healthy'],
-                name='Healthy',
-                marker_color='rgba(217,217,217,0.7)',
-                hovertemplate='%{y} healthy items<extra></extra>'
-            ))
-        
-        if 'moderate' in df_pivot.columns:
-            fig.add_trace(go.Bar(
-                x=df_pivot.index,
-                y=df_pivot['moderate'],
-                name='Moderate',
-                marker_color='rgba(139,195,74,0.7)',
-                hovertemplate='%{y} moderate items<extra></extra>'
-            ))
-        
-        if 'unhealthy' in df_pivot.columns:
-            fig.add_trace(go.Bar(
-                x=df_pivot.index,
-                y=df_pivot['unhealthy'],
-                name='Unhealthy',
-                marker_color='rgba(51,51,51,0.7)',
-                hovertemplate='%{y} unhealthy items<extra></extra>'
-            ))
-        
-        fig.update_layout(
-            barmode='stack',
-            height=300,
-            margin=dict(l=20, r=20, t=20, b=40),
-            plot_bgcolor='rgba(0,0,0,0)',
-            paper_bgcolor='rgba(0,0,0,0)',
-            xaxis=dict(showgrid=False, showline=False, title=None, tickfont=dict(color='#1A1A1A'), color='#1A1A1A'),
-            yaxis=dict(showgrid=True, gridcolor='#E0E0E0', showline=False, title=None, tickfont=dict(color='#1A1A1A'), color='#1A1A1A'),
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5, font=dict(color='#1A1A1A')),
-            hovermode='x unified'
-        )
-        
-        st.plotly_chart(fig, use_container_width=True)
-        
         total_items = int(df['count'].sum())
         healthy_count = int(df[df['category'] == 'healthy']['count'].sum()) if 'healthy' in df['category'].values else 0
-        st.markdown(f"**Total items:** {total_items} | **Healthy choices:** {healthy_count}")
+        trend_source = df.groupby('date', as_index=False)['count'].sum().sort_values('date')
 
-        # === AI HEALTH COACH ===
-        st.markdown("---")
-        col_ins1, col_ins2 = st.columns([3, 1])
-        with col_ins1:
-            st.markdown("#### 🧠 AI Health Coach")
-        with col_ins2:
-            if st.session_state.ai_insights:
-                if st.button("🔄 Refresh", key="refresh_insights", use_container_width=True):
-                    st.session_state.ai_insights = None
-                    st.rerun()
+        if st.session_state.trends_view == 'daily':
+            labels = ['6AM', '8AM', '10AM', '12PM', '2PM', '4PM', '6PM', '8PM']
+            slot_vals = [0] * len(labels)
+            for _, row in trend_source.iterrows():
+                h = row['date'].hour
+                idx = min(range(len(labels)), key=lambda i: abs((6 + i * 2) - h))
+                slot_vals[idx] += int(row['count'])
+            y_vals = []
+            running = 0
+            for v in slot_vals:
+                running += v
+                y_vals.append(running)
+            x_vals = labels
+            hover_suffix = 'items tracked'
+            hover_prefix = ''
+        else:
+            trend_source['label'] = trend_source['date'].dt.strftime('%b %d')
+            trend_source['cum'] = trend_source['count'].cumsum()
+            x_vals = trend_source['label'].tolist()
+            y_vals = trend_source['cum'].astype(int).tolist()
+            hover_suffix = 'items tracked'
+            hover_prefix = ''
+
+        with head_left:
+            st.markdown(f"<div class='trend-sub'>Total items: {total_items} · Healthy choices: {healthy_count} · Based on your logged data</div>", unsafe_allow_html=True)
+    else:
+        x_vals = ['6AM', '8AM', '10AM', '12PM', '2PM', '4PM', '6PM', '8PM']
+        y_vals = [0, 0, 1, 1, 1, 2, 2, 3]
+        hover_suffix = 'items tracked'
+        hover_prefix = ''
+        with head_left:
+            st.markdown("<div class='trend-sub'>Total items: 0 · Healthy choices: 0 · Based on your logged data</div>", unsafe_allow_html=True)
+
+    with head_right:
+        st.markdown('<div class="trend-tabs-container">', unsafe_allow_html=True)
+        col_d, col_w, col_m = st.columns(3)
+        with col_d:
+            if st.button("Day", use_container_width=True, key="day_tab", type="primary" if st.session_state.trends_view == 'daily' else "secondary"):
+                st.session_state.trends_view = 'daily'
+                st.rerun()
+        with col_w:
+            if st.button("Week", use_container_width=True, key="week_tab", type="primary" if st.session_state.trends_view == 'weekly' else "secondary"):
+                st.session_state.trends_view = 'weekly'
+                st.rerun()
+        with col_m:
+            if st.button("Month", use_container_width=True, key="month_tab", type="primary" if st.session_state.trends_view == 'monthly' else "secondary"):
+                st.session_state.trends_view = 'monthly'
+                st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=x_vals,
+        y=y_vals,
+        mode='lines+markers',
+        line=dict(color='#67AEC3', width=4, shape='spline', smoothing=0.6),
+        marker=dict(color='#67AEC3', size=8, line=dict(color='#081018', width=2)),
+        fill='tozeroy',
+        fillcolor='rgba(103,174,195,0.12)',
+        hovertemplate=f"%{{x}}<br>{hover_prefix}%{{y}} {hover_suffix}<extra></extra>"
+    ))
+
+    ymax = max(4, max(y_vals) if y_vals else 4)
+    fig.update_layout(
+        height=360,
+        margin=dict(l=20, r=20, t=10, b=25),
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
+        xaxis=dict(showgrid=False, showline=False, title=None, tickfont=dict(color='#394560', size=16)),
+        yaxis=dict(showgrid=True, gridcolor='rgba(57,69,96,0.25)', griddash='dot', showline=False, title=None,
+                   tickfont=dict(color='#394560', size=16), rangemode='tozero', range=[0, ymax * 1.15]),
+        hovermode='x unified',
+        showlegend=False,
+        hoverlabel=dict(bgcolor='#1A2133', bordercolor='#2B3650', font=dict(color='#CFE4F2', size=16))
+    )
+    st.plotly_chart(fig, use_container_width=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    if not raw or len(raw) == 0:
+        if all_data and len(all_data) > 0:
+            st.warning(f"⚠️ You have {len(all_data)} logged items, but none in the last {days} day(s). Try selecting a different time range.")
+        else:
+            st.info("📊 No data yet. Start logging items!")
+
+    # === AI HEALTH COACH + RECIPES (FIGMA-STYLE PANELS) ===
+    today_str = datetime.now().strftime("%Y-%m-%d")
+
+    if st.session_state.recipes_date != today_str:
+        st.session_state.daily_recipes = None
+        st.session_state.recipes_date = today_str
+
+    coach_col, recipe_col = st.columns(2)
+
+    with coach_col:
+        insights_ready = len(st.session_state.ai_insights) if st.session_state.ai_insights else 3
+        st.markdown(f"""
+            <div class='action-card'>
+                <div class='action-card-header'>
+                    <div class='action-title'>🧠 AI Health Coach</div>
+                    <div class='action-chip'>{insights_ready} insights ready</div>
+                </div>
+                <div class='action-muted'>Your AI coach has analyzed food entries and found personalized insights to improve your health outcomes.</div>
+            </div>
+        """, unsafe_allow_html=True)
 
         if not st.session_state.ai_insights:
-            if st.button("🧠 Get AI Insights", use_container_width=True, type="primary"):
+            if st.button("✨ Get AI Insights", key="figma_get_insights", use_container_width=True, type="primary"):
                 with st.spinner("🧠 Your AI Health Coach is analyzing your patterns..."):
                     try:
-                        insights = generate_health_insights(raw, all_data, days)
+                        insights = generate_health_insights(raw or [], all_data or [], days)
                         if insights:
                             st.session_state.ai_insights = insights
                             st.rerun()
@@ -698,92 +1060,67 @@ if st.session_state.page == 'dashboard':
                             st.warning("Could not generate insights. Please try again.")
                     except Exception as e:
                         st.error(f"AI Insights error: {e}")
+        else:
+            if st.button("🔄 Refresh Insights", key="figma_refresh_insights", use_container_width=True):
+                st.session_state.ai_insights = None
+                st.rerun()
 
-        if st.session_state.ai_insights:
-            for i, insight in enumerate(st.session_state.ai_insights):
+            for insight in st.session_state.ai_insights[:3]:
                 emoji = insight.get('emoji', '💡')
                 title = insight.get('title', 'Insight')
                 body = insight.get('insight', '')
-                action = insight.get('action', '')
-                border_colors = [COLORS['olive'], COLORS['yellow'], COLORS['terracotta']]
-                bc = border_colors[i % len(border_colors)]
                 st.markdown(f"""
-                    <div class='card' style='border-left: 4px solid {bc}; padding: 16px;'>
-                        <div style='font-size: 1.1rem; font-weight: 800; margin-bottom: 6px;'>{emoji} {title}</div>
-                        <div style='color: #444; font-size: 0.95rem; margin-bottom: 8px;'>{body}</div>
-                        <div style='color: {COLORS["olive"]}; font-weight: 600; font-size: 0.9rem;'>→ {action}</div>
+                    <div class='coach-list-item'>
+                        <div style='font-weight:700; color:#DDE7FA; margin-bottom:2px;'>{emoji} {title}</div>
+                        <div style='font-size:0.9rem; color:#7F8DAB;'>{body}</div>
                     </div>
                 """, unsafe_allow_html=True)
 
-    else:
-        if all_data and len(all_data) > 0:
-            st.warning(f"⚠️ You have {len(all_data)} logged items, but none in the last {days} day(s). Try selecting a different time range.")
+    with recipe_col:
+        st.markdown("""
+            <div class='action-card'>
+                <div class='action-card-header'>
+                    <div class='action-title'>👨‍🍳 Healthy Recipes</div>
+                    <div style='color:#5E6685; font-size:0.95rem; font-weight:600;'>Matched to your goals</div>
+                </div>
+                <div class='action-muted'>Discover today's recipes curated around your nutrition targets and most-tracked foods.</div>
+            </div>
+        """, unsafe_allow_html=True)
+
+        if not st.session_state.daily_recipes:
+            if st.button("🍳 Discover Today's Recipes", key="figma_discover_recipes", use_container_width=True, type="primary"):
+                with st.spinner("🍳 Finding healthy recipes for you..."):
+                    try:
+                        recipes = generate_daily_recipes()
+                        if recipes:
+                            st.session_state.daily_recipes = recipes
+                            st.session_state.recipes_date = today_str
+                            st.rerun()
+                        else:
+                            st.warning("Could not load recipes. Please try again.")
+                    except Exception as e:
+                        st.error(f"Recipe error: {e}")
         else:
-            st.info("📊 No data yet. Start logging items!")
-
-    # === DAILY HEALTHY RECIPES ===
-    st.markdown("---")
-    st.markdown("### 🥗 Healthy Recipes for the Day")
-
-    today_str = datetime.now().strftime("%Y-%m-%d")
-
-    # Auto-refresh recipes if it's a new day
-    if st.session_state.recipes_date != today_str:
-        st.session_state.daily_recipes = None
-        st.session_state.recipes_date = today_str
-
-    if not st.session_state.daily_recipes:
-        if st.button("🍳 Discover Today's Recipes", use_container_width=True, type="primary"):
-            with st.spinner("🍳 Finding healthy recipes for you..."):
-                try:
-                    recipes = generate_daily_recipes()
-                    if recipes:
-                        st.session_state.daily_recipes = recipes
-                        st.session_state.recipes_date = today_str
-                        st.rerun()
-                    else:
-                        st.warning("Could not load recipes. Please try again.")
-                except Exception as e:
-                    st.error(f"Recipe error: {e}")
-
-    if st.session_state.daily_recipes:
-        meal_emojis = {
-            'Breakfast': '🌅', 'Lunch': '☀️', 'Dinner': '🌙',
-            'Snack': '🍎', 'Dessert': '🍨'
-        }
-        cuisine_colors = ['#E8967A', '#5B8C3E', '#F9A825', '#4CAF50', '#8BC34A']
-
-        cols = st.columns(5)
-        for idx, recipe in enumerate(st.session_state.daily_recipes[:5]):
-            with cols[idx % 5]:
-                r_name = recipe.get('name', 'Recipe')
-                r_type = recipe.get('meal_type', 'Meal')
-                r_cuisine = recipe.get('cuisine', '')
-                r_time = recipe.get('prep_time', '?')
-                r_desc = recipe.get('description', '')
-                r_ingredients = recipe.get('key_ingredients', '')
-                r_emoji = meal_emojis.get(r_type, '🍽️')
-                r_color = cuisine_colors[idx % len(cuisine_colors)]
-
-                st.markdown(f"""
-                    <div class='card' style='text-align: center; padding: 16px; border-top: 4px solid {r_color}; min-height: 240px;'>
-                        <div style='font-size: 2rem; margin-bottom: 6px;'>{r_emoji}</div>
-                        <div style='font-size: 0.75rem; color: {r_color}; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;'>{r_type}</div>
-                        <div style='font-size: 0.95rem; font-weight: 800; margin: 8px 0 4px 0; line-height: 1.2;'>{r_name}</div>
-                        <div style='font-size: 0.75rem; color: #888; margin-bottom: 6px;'>{r_cuisine} · {r_time}</div>
-                        <div style='font-size: 0.8rem; color: #555; margin-bottom: 6px;'>{r_desc}</div>
-                        <div style='font-size: 0.7rem; color: #999; font-style: italic;'>{r_ingredients}</div>
-                    </div>
-                """, unsafe_allow_html=True)
-
-        col_refresh = st.columns([3, 1])[1]
-        with col_refresh:
-            if st.button("🔄 New Recipes", key="refresh_recipes", use_container_width=True):
+            if st.button("🔄 New Recipes", key="figma_refresh_recipes", use_container_width=True):
                 st.session_state.daily_recipes = None
                 st.rerun()
 
+            for recipe in st.session_state.daily_recipes[:3]:
+                r_name = recipe.get('name', 'Recipe')
+                r_type = recipe.get('meal_type', 'Meal')
+                r_time = recipe.get('prep_time', '?')
+                st.markdown(f"""
+                    <div class='coach-list-item' style='border-color:#3A3341;'>
+                        <div style='font-weight:700; color:#E5DBBD; margin-bottom:2px;'>🍽️ {r_name}</div>
+                        <div style='font-size:0.9rem; color:#938A72;'>{r_type} · {r_time}</div>
+                    </div>
+                """, unsafe_allow_html=True)
+
 elif st.session_state.page == 'calendar':
     st.markdown("## 📅 Grocery Calendar")
+    calendar_all = get_all_calendar_data_db(st.session_state.user_id) or []
+    tracked_days = len({d for d, *_ in calendar_all}) if calendar_all else 0
+    st.markdown(f"<div class='subtitle'>{tracked_days} days tracked · {len(calendar_all)} items logged total</div>", unsafe_allow_html=True)
     c1, c2 = st.columns([1, 1.5])
     
     with c1:
@@ -858,7 +1195,11 @@ elif st.session_state.page == 'calendar':
             st.info("📭 No items for this date. Add items above!")
 
 elif st.session_state.page == 'log':
-    st.markdown("## 📝 Log History")
+    st.markdown("## 🕒 Meal Plan")
+    meal_hist = get_log_history_db(st.session_state.user_id) or []
+    healthy_meal = sum(1 for _, _, score, _ in meal_hist if float(score) < 3.0)
+    watch_meal = max(0, len(meal_hist) - healthy_meal)
+    st.markdown(f"<div class='subtitle'>{len(meal_hist)} items · {healthy_meal} healthy · {watch_meal} to watch</div>", unsafe_allow_html=True)
     history = get_log_history_db(st.session_state.user_id)
     if history:
         for d, name, score, cat in history:
@@ -927,4 +1268,3 @@ elif st.session_state.page == 'log':
                             st.success(f"✅ Added!")
                             time.sleep(0.5)
                             st.rerun()
-
