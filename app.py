@@ -17,7 +17,8 @@ from gemini_api import (
     get_db_connection, get_trend_data_db, get_all_calendar_data_db,
     get_gemini_api_key, authenticate_user,
     add_calendar_item_db, get_calendar_items_db, delete_item_db,
-    get_log_history_db, create_user
+    get_log_history_db, create_user,
+    vms_to_health_score, calculate_overall_health_score, calculate_day_streak
 )
 from streamlit_back_camera_input import back_camera_input
 
@@ -386,48 +387,53 @@ def create_html_calendar(year, month, selected_day=None):
 # === MAIN APP (NO LOGIN PAGE) ===
 with st.sidebar:
     st.write("")
-    st.markdown("##### 🔍 Search")
-    search_q = st.text_input("Quick check score", key="sidebar_search")
+    st.markdown("##### Quick Score Check")
+    search_q = st.text_input("Search any food item", key="sidebar_search", placeholder="e.g., apple, coca cola...")
     if search_q:
-        results = search_vantage_db(search_q, limit=20)  # FIX 3: Increased from 5 to 20
+        results = search_vantage_db(search_q, limit=5)
         filtered_results = [r for r in results if r['vms_score'] != 10.0] if results else []
-        
         if filtered_results:
-            st.markdown("**Top Results:**")
-            # FIX 3: Add scrollable container
-            st.markdown('<div class="results-scroll-container">', unsafe_allow_html=True)
-            for i, d in enumerate(filtered_results):
-                c = COLORS['green'] if d['vms_score'] < 3.0 else COLORS['yellow'] if d['vms_score'] < 7.0 else COLORS['red']
-                
-                # FIX 2: Add portion size label if needed
-                portion_label = " per serving" if needs_portion_size(d['name']) else ""
-                
-                st.markdown(f"""
-                    <div class='card' style='padding:12px; margin-bottom:8px;'>
-                        <div style='font-size:0.9rem; font-weight:bold;'>{i+1}. {d['name']}</div>
-                        <div style='color:{c}; font-weight:bold; font-size:1.3rem;'>{d['vms_score']}{portion_label}</div>
-                        <div style='font-size:0.8rem; color:{c};'>{d['rating']}</div>
-                    </div>
-                """, unsafe_allow_html=True)
-            st.markdown('</div>', unsafe_allow_html=True)
+            for d in filtered_results[:3]:
+                h_score = vms_to_health_score(d['vms_score'])
+                c = COLORS['green'] if h_score >= 70 else COLORS['yellow'] if h_score >= 30 else COLORS['red']
+                st.markdown(f"<div style='padding:4px 0;'><span style='font-size:0.85rem;'>{d['name']}</span> <strong style='color:{c};'>{h_score}/100</strong></div>", unsafe_allow_html=True)
         else:
-            # FIX 7: Friendly error message
-            st.markdown("""
-                <div class='friendly-error'>
-                    <div class='friendly-error-title'>🔍 Item Not Found Yet</div>
-                    <div class='friendly-error-text'>
-                        We're constantly expanding our database with new products.<br>
-                        Try searching for similar items or check back soon!
-                    </div>
-                </div>
-            """, unsafe_allow_html=True)
+            st.caption("No results found. Try a different term.")
     st.markdown("---")
-    if st.button("🏠 Dashboard", use_container_width=True): st.session_state.page = 'dashboard'; st.rerun()
-    if st.button("📅 Calendar", use_container_width=True): st.session_state.page = 'calendar'; st.rerun()
-    if st.button("📝 Log History", use_container_width=True): st.session_state.page = 'log'; st.rerun()
+    if st.button("📊 Dashboard", use_container_width=True): st.session_state.page = 'dashboard'; st.rerun()
+    if st.button("🗓️ Calendar", use_container_width=True): st.session_state.page = 'calendar'; st.rerun()
+    if st.button("🍽️ Meal Plan", use_container_width=True): st.session_state.page = 'log'; st.rerun()
 
 if st.session_state.page == 'dashboard':
     render_logo(size="3.5rem")
+
+    # --- Health Score & Day Streak ---
+    overall_score = calculate_overall_health_score(st.session_state.user_id)
+    day_streak = calculate_day_streak(st.session_state.user_id)
+    score_color = COLORS['green'] if overall_score >= 70 else COLORS['yellow'] if overall_score >= 30 else COLORS['red']
+
+    st.markdown(f"""
+        <div style="display:flex; justify-content:center; align-items:center; gap:40px; margin:10px 0 20px 0;">
+            <div style="text-align:center;">
+                <div style="position:relative; width:100px; height:100px; margin:0 auto;">
+                    <svg viewBox="0 0 36 36" style="width:100px; height:100px; transform:rotate(-90deg);">
+                        <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                              fill="none" stroke="#E8E0D4" stroke-width="3"/>
+                        <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                              fill="none" stroke="{score_color}" stroke-width="3"
+                              stroke-dasharray="{overall_score}, 100" stroke-linecap="round"/>
+                    </svg>
+                    <div style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); font-size:1.6rem; font-weight:800; color:{score_color};">{overall_score}</div>
+                </div>
+                <div style="font-size:0.8rem; font-weight:600; color:#555; margin-top:4px;">Health Score</div>
+            </div>
+            <div style="text-align:center;">
+                <div style="font-size:2.8rem; font-weight:800; color:{COLORS['olive']}; line-height:1;">{day_streak}</div>
+                <div style="font-size:0.8rem; font-weight:600; color:#555; margin-top:4px;">Day{'s' if day_streak != 1 else ''} of Healthy Eating</div>
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
+
     st.markdown("<h3 style='text-align: center;'>Active Focus Scanner</h3>", unsafe_allow_html=True)
     st.markdown('<div class="white-shelf"></div>', unsafe_allow_html=True)
     
@@ -858,7 +864,7 @@ elif st.session_state.page == 'calendar':
             st.info("📭 No items for this date. Add items above!")
 
 elif st.session_state.page == 'log':
-    st.markdown("## 📝 Log History")
+    st.markdown("## 🍽️ Meal Plan")
     history = get_log_history_db(st.session_state.user_id)
     if history:
         for d, name, score, cat in history:
