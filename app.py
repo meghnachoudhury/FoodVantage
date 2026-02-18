@@ -411,14 +411,126 @@ st.markdown(f"""
         padding: 12px 20px;
         border-radius: 14px;
         display: inline-block;
-        border: 1px solid #C8E6C9;
+        border: 1px solid #23304A;
+        color: #C8D6ED;
     }}
+
+    hr {{
+        border-color: #1A2439;
+    }}
+
+    .stAlert {{
+        background-color: #111726 !important;
+        color: #C8D6ED !important;
+        border: 1px solid #24324C !important;
+    }}
+
+    [data-testid="stSidebar"] [data-testid="stMetric"] {{
+        background: #0D1322;
+        border: 1px solid #1C2942;
+        border-radius: 14px;
+        padding: 8px 10px;
+    }}
+
+    .kicker {{
+        color: #5C6884;
+        text-transform: uppercase;
+        letter-spacing: 1.6px;
+        font-size: 0.78rem;
+        font-weight: 700;
+        margin-bottom: 6px;
+    }}
+
+    .metric-strip {{
+        background: linear-gradient(160deg, #0F1526 0%, #0D1422 100%);
+        border: 1px solid #1A2840;
+        border-radius: 22px;
+        padding: 18px;
+        min-height: 120px;
+    }}
+
+    .metric-strip .metric-value {{
+        font-size: 2.8rem;
+        line-height: 1;
+        font-weight: 700;
+        color: #F3F6FF;
+    }}
+
+    .metric-strip .metric-note {{
+        margin-top: 10px;
+        color: #5FC696;
+        font-size: 1.05rem;
+        font-weight: 600;
+    }}
+    
+    .sidebar-streak-card {{
+        margin-top: 24px;
+        padding: 14px;
+        border-radius: 18px;
+        border: 1px solid #1F2A42;
+        background: linear-gradient(155deg, #111726 0%, #0D1321 100%);
+    }}
+
+    .sidebar-streak-title {{
+        color: #EEF3FF;
+        font-size: 1.55rem;
+        font-weight: 700;
+        margin-bottom: 2px;
+    }}
+
+    .sidebar-streak-sub {{
+        color: #6F7E9E;
+        font-size: 0.95rem;
+        margin-bottom: 10px;
+    }}
+
+    .sidebar-progress-wrap {{
+        width: 100%;
+        height: 6px;
+        background: #1E2840;
+        border-radius: 999px;
+        overflow: hidden;
+    }}
+
+    .sidebar-progress-fill {{
+        height: 100%;
+        background: linear-gradient(90deg, #F2B14C 0%, #E58D32 100%);
+        border-radius: 999px;
+    }}
+
+    .sidebar-mini-stats {{
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        margin-top: 10px;
+    }}
+
+    .stat-tile {{
+        background: #0D1322;
+        border: 1px solid #1E2942;
+        border-radius: 14px;
+        padding: 10px 8px;
+        text-align: center;
+    }}
+
+    .stat-tile .v {{
+        color: #EAF0FD;
+        font-weight: 700;
+        font-size: 1.15rem;
+    }}
+
+    .stat-tile .l {{
+        color: #637290;
+        font-size: 0.85rem;
+        margin-top: 2px;
+    }}
+    
     </style>
 """, unsafe_allow_html=True)
 
 def render_logo(size="3rem"):
-    st.markdown(f"<div style='text-align: center; margin-bottom: 10px;'><div class='logo-text' style='font-size: {size}; font-family: Josefin Sans, sans-serif;'>foodvantage<span class='logo-dot'>.</span></div></div>", unsafe_allow_html=True)
-
+    st.markdown(f"<div style='margin-bottom: 8px;'><div class='logo-text' style='font-size: {size};'>foodvantage<span class='logo-dot'>.</span></div></div>", unsafe_allow_html=True)
+    
 def create_html_calendar(year, month, selected_day=None):
     cal = cal_module.monthcalendar(year, month)
     html = "<table style='width:100%; text-align:center;'><thead><tr>"
@@ -437,10 +549,15 @@ def create_html_calendar(year, month, selected_day=None):
 # === MAIN APP (NO LOGIN PAGE) ===
 with st.sidebar:
     st.write("")
-    st.markdown("##### 🔍 Search")
-    search_q = st.text_input("Quick check score", key="sidebar_search")
+    render_logo(size="2.35rem")
+
+    st.markdown("<div class='kicker'>Search foods</div>", unsafe_allow_html=True)
+    st.text_input("Food search", key="sidebar_food_search", placeholder="Search foods...", label_visibility="collapsed")
+
+    st.markdown("<div class='kicker' style='margin-top:8px;'>Quick score check</div>", unsafe_allow_html=True)
+    search_q = st.text_input("Quick score search", key="sidebar_search", placeholder="e.g. banana...", label_visibility="collapsed")
     if search_q:
-        results = search_vantage_db(search_q, limit=20)  # FIX 3: Increased from 5 to 20
+        results = search_vantage_db(search_q, limit=20)
         filtered_results = [r for r in results if r['vms_score'] != 10.0] if results else []
         
         if filtered_results:
@@ -473,13 +590,82 @@ with st.sidebar:
                 </div>
             """, unsafe_allow_html=True)
     st.markdown("---")
-    if st.button("🏠 Dashboard", use_container_width=True): st.session_state.page = 'dashboard'; st.rerun()
-    if st.button("📅 Calendar", use_container_width=True): st.session_state.page = 'calendar'; st.rerun()
-    if st.button("📝 Log History", use_container_width=True): st.session_state.page = 'log'; st.rerun()
+    if st.button("📊 Dashboard", use_container_width=True, type="primary" if st.session_state.page == 'dashboard' else "secondary"):
+        st.session_state.page = 'dashboard'
+        st.rerun()
+    if st.button("📅 Calendar", use_container_width=True, type="primary" if st.session_state.page == 'calendar' else "secondary"):
+        st.session_state.page = 'calendar'
+        st.rerun()
+    if st.button("🕒 Meal Plan", use_container_width=True, type="primary" if st.session_state.page == 'log' else "secondary"):
+        st.session_state.page = 'log'
+        st.rerun()
+
+    history_sidebar = get_log_history_db(st.session_state.user_id) or []
+    total_logged_sidebar = len(history_sidebar)
+    healthy_sidebar = sum(1 for _, _, score, _ in history_sidebar if float(score) < 3.0)
+    health_score_sidebar = int(round((healthy_sidebar / total_logged_sidebar) * 100)) if total_logged_sidebar else 78
+    streak_days = min(total_logged_sidebar, 10)
+    streak_pct = int((streak_days / 10) * 100)
+
+    st.markdown(f"""
+        <div class='sidebar-streak-card'>
+            <div class='sidebar-streak-title'>🔥 {max(1, min(streak_days, 7))}-day streak</div>
+            <div class='sidebar-streak-sub'>Keep it going!</div>
+            <div class='sidebar-progress-wrap'>
+                <div class='sidebar-progress-fill' style='width:{streak_pct}%;'></div>
+            </div>
+            <div style='margin-top:8px; color:#556582; font-size:0.82rem;'>{streak_days} / 10 days to next milestone</div>
+            <div class='sidebar-mini-stats'>
+                <div class='stat-tile'>
+                    <div class='v'>{total_logged_sidebar:,}</div>
+                    <div class='l'>items logged</div>
+                </div>
+                <div class='stat-tile'>
+                    <div class='v'>{health_score_sidebar}</div>
+                    <div class='l'>health score</div>
+                </div>
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
 
 if st.session_state.page == 'dashboard':
-    render_logo(size="3.5rem")
-    st.markdown("<h3 style='text-align: center;'>Active Focus Scanner</h3>", unsafe_allow_html=True)
+    st.markdown("<h1 style='margin-bottom:4px;'>Dashboard</h1>", unsafe_allow_html=True)
+    st.markdown(f"<div class='subtitle'>{datetime.now().strftime('%A, %B %d, %Y')} · Track smarter. Live better.</div>", unsafe_allow_html=True)
+    history_dashboard = get_log_history_db(st.session_state.user_id) or []
+    today_key = datetime.now().strftime("%Y-%m-%d")
+    items_today = sum(1 for d, *_ in history_dashboard if str(d) == today_key)
+    total_items_dashboard = len(history_dashboard)
+    healthy_items_dashboard = sum(1 for _, _, score, _ in history_dashboard if float(score) < 3.0)
+    health_score_dashboard = int(round((healthy_items_dashboard / total_items_dashboard) * 100)) if total_items_dashboard else 78
+    day_streak_dashboard = max(1, min(total_items_dashboard, 7))
+
+    m1, m2, m3 = st.columns(3)
+    with m1:
+        st.markdown(f"""
+            <div class='metric-strip'>
+                <div class='kicker'>Items tracked</div>
+                <div class='metric-value'>{items_today}</div>
+                <div class='metric-note'>↗ Start scanning more</div>
+            </div>
+        """, unsafe_allow_html=True)
+    with m2:
+        st.markdown(f"""
+            <div class='metric-strip'>
+                <div class='kicker'>Health score</div>
+                <div class='metric-value'>{health_score_dashboard}<span style='font-size:1.5rem; color:#7D8CAC;'>/100</span></div>
+                <div class='metric-note'>↗ ↑ {max(1, healthy_items_dashboard)} pts this week</div>
+            </div>
+        """, unsafe_allow_html=True)
+    with m3:
+        st.markdown(f"""
+            <div class='metric-strip'>
+                <div class='kicker'>Day streak</div>
+                <div class='metric-value'>{day_streak_dashboard}<span style='font-size:1.5rem; color:#7D8CAC;'> days</span></div>
+                <div class='metric-note'>↗ Personal best!</div>
+            </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("<h3 style='margin-top:6px;'>Active Focus Scanner</h3>", unsafe_allow_html=True)
     st.markdown('<div class="white-shelf"></div>', unsafe_allow_html=True)
     
     if not st.session_state.camera_active:
@@ -835,6 +1021,9 @@ if st.session_state.page == 'dashboard':
 
 elif st.session_state.page == 'calendar':
     st.markdown("## 📅 Grocery Calendar")
+    calendar_all = get_all_calendar_data_db(st.session_state.user_id) or []
+    tracked_days = len({d for d, *_ in calendar_all}) if calendar_all else 0
+    st.markdown(f"<div class='subtitle'>{tracked_days} days tracked · {len(calendar_all)} items logged total</div>", unsafe_allow_html=True)
     c1, c2 = st.columns([1, 1.5])
     
     with c1:
@@ -909,7 +1098,11 @@ elif st.session_state.page == 'calendar':
             st.info("📭 No items for this date. Add items above!")
 
 elif st.session_state.page == 'log':
-    st.markdown("## 📝 Log History")
+    st.markdown("## 🕒 Meal Plan")
+    meal_hist = get_log_history_db(st.session_state.user_id) or []
+    healthy_meal = sum(1 for _, _, score, _ in meal_hist if float(score) < 3.0)
+    watch_meal = max(0, len(meal_hist) - healthy_meal)
+    st.markdown(f"<div class='subtitle'>{len(meal_hist)} items · {healthy_meal} healthy · {watch_meal} to watch</div>", unsafe_allow_html=True)
     history = get_log_history_db(st.session_state.user_id)
     if history:
         for d, name, score, cat in history:
