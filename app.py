@@ -127,20 +127,10 @@ st.markdown(f"""
     section[data-testid="stSidebar"] * {{
         color: {C['text']} !important;
     }}
-    /* Sidebar toggle — keep visible even when header is hidden */
+    /* Sidebar toggle */
     [data-testid="collapsedControl"] {{
         visibility: visible !important;
         color: {C['teal']} !important;
-        background: {C['sidebar_bg']} !important;
-        border-radius: 8px !important;
-    }}
-    /* Hide the raw "keyboard" text that shows when Material Icons font fails to load */
-    [data-testid="collapsedControl"] span {{
-        font-size: 0 !important;
-        line-height: 0 !important;
-    }}
-    [data-testid="collapsedControl"] svg {{
-        fill: {C['teal']} !important;
     }}
 
     /* === INPUTS === */
