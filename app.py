@@ -148,11 +148,13 @@ st.markdown(f"""
 
     .logo-text {{
         font-family: 'Source Serif 4', serif !important;
-        font-size: 1.95rem;
+        font-size: 2rem;
         text-align: left;
         font-weight: 700;
         letter-spacing: -0.6px;
-        color: #F6F8FF;    
+        color: #F6F8FF;
+        white-space: nowrap;
+        line-height: 1.1;   
         }}
 
     .logo-dot {{ color: {COLORS['olive']}; }}
