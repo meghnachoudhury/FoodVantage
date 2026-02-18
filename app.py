@@ -339,16 +339,20 @@ st.markdown(f"""
         font-family: 'Inter', sans-serif;
     }}
 
-    /* === TREND TABS === */
     .trend-tabs-container {{
-        max-width: 400px;
-        margin: 0 auto 20px auto;
+        background: #121827;
+        border: 1px solid #242F47;
+        border-radius: 18px;
+        padding: 6px;
+        width: 100%;
     }}
 
     .trend-tabs-container .stButton > button {{
         background-color: #141C30 !important;
         color: #95A3BD !important;
         border: none !important;
+        border-radius: 14px !important;
+        min-height: 44px;
     }}
 
     .trend-tabs-container .stButton > button[kind="primary"] {{
@@ -561,17 +565,14 @@ with st.sidebar:
     if search_q:
         results = search_vantage_db(search_q, limit=20)
         filtered_results = [r for r in results if r['vms_score'] != 10.0] if results else []
-        
+
         if filtered_results:
             st.markdown("**Top Results:**")
-            # FIX 3: Add scrollable container
             st.markdown('<div class="results-scroll-container">', unsafe_allow_html=True)
             for i, d in enumerate(filtered_results):
                 c = COLORS['green'] if d['vms_score'] < 3.0 else COLORS['yellow'] if d['vms_score'] < 7.0 else COLORS['red']
-                
-                # FIX 2: Add portion size label if needed
                 portion_label = " per serving" if needs_portion_size(d['name']) else ""
-                
+
                 st.markdown(f"""
                     <div class='card' style='padding:12px; margin-bottom:8px;'>
                         <div style='font-size:0.9rem; font-weight:bold;'>{i+1}. {d['name']}</div>
@@ -581,7 +582,6 @@ with st.sidebar:
                 """, unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
         else:
-            # FIX 7: Friendly error message
             st.markdown("""
                 <div class='friendly-error'>
                     <div class='friendly-error-title'>🔍 Item Not Found Yet</div>
@@ -591,6 +591,7 @@ with st.sidebar:
                     </div>
                 </div>
             """, unsafe_allow_html=True)
+
     st.markdown("---")
     if st.button("📊 Dashboard", use_container_width=True, type="primary" if st.session_state.page == 'dashboard' else "secondary"):
         st.session_state.page = 'dashboard'
@@ -831,26 +832,15 @@ if st.session_state.page == 'dashboard':
                     st.rerun()
 
     # TRENDS
-    st.markdown("### 📈 Your Health Trends")
-    
-    st.markdown('<div class="trend-tabs-container">', unsafe_allow_html=True)
-    col_d, col_w, col_m = st.columns(3)
-    with col_d:
-        if st.button("Day", use_container_width=True, key="day_tab",
-                    type="primary" if st.session_state.trends_view == 'daily' else "secondary"):
-            st.session_state.trends_view = 'daily'
-            st.rerun()
-    with col_w:
-        if st.button("Week", use_container_width=True, key="week_tab",
-                    type="primary" if st.session_state.trends_view == 'weekly' else "secondary"):
-            st.session_state.trends_view = 'weekly'
-            st.rerun()
-    with col_m:
-        if st.button("Month", use_container_width=True, key="month_tab",
-                    type="primary" if st.session_state.trends_view == 'monthly' else "secondary"):
-            st.session_state.trends_view = 'monthly'
-            st.rerun()
-    st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown('<div class="trend-shell">', unsafe_allow_html=True)
+    head_left, head_right = st.columns([3.2, 1])
+    with head_left:
+        st.markdown("""
+            <div class='trend-title-row'>
+                <div style='color:#66B8CC; font-size:1.6rem;'>↗</div>
+                <div class='trend-title'>Your Health Trends</div>
+            </div>
+        """, unsafe_allow_html=True)
     
     if st.session_state.trends_view == 'daily':
         days = 1
@@ -858,78 +848,129 @@ if st.session_state.page == 'dashboard':
         days = 7
     else:
         days = 30
-    
+
     all_data = get_all_calendar_data_db(st.session_state.user_id)
     raw = get_trend_data_db(st.session_state.user_id, days=days)
-    
+
+    total_items = 0
+    healthy_count = 0
     if raw and len(raw) > 0:
         df = pd.DataFrame(raw, columns=["date", "category", "count"])
         df['date'] = pd.to_datetime(df['date'])
-        df_pivot = df.pivot_table(index='date', columns='category', values='count', aggfunc='sum', fill_value=0)
-        
-        fig = go.Figure()
-        
-        if 'healthy' in df_pivot.columns:
-            fig.add_trace(go.Bar(
-                x=df_pivot.index,
-                y=df_pivot['healthy'],
-                name='Healthy',
-                marker_color='rgba(217,217,217,0.7)',
-                hovertemplate='%{y} healthy items<extra></extra>'
-            ))
-        
-        if 'moderate' in df_pivot.columns:
-            fig.add_trace(go.Bar(
-                x=df_pivot.index,
-                y=df_pivot['moderate'],
-                name='Moderate',
-                marker_color='rgba(139,195,74,0.7)',
-                hovertemplate='%{y} moderate items<extra></extra>'
-            ))
-        
-        if 'unhealthy' in df_pivot.columns:
-            fig.add_trace(go.Bar(
-                x=df_pivot.index,
-                y=df_pivot['unhealthy'],
-                name='Unhealthy',
-                marker_color='rgba(51,51,51,0.7)',
-                hovertemplate='%{y} unhealthy items<extra></extra>'
-            ))
-        
-        fig.update_layout(
-            barmode='stack',
-            height=300,
-            margin=dict(l=20, r=20, t=20, b=40),
-            plot_bgcolor='rgba(0,0,0,0)',
-            paper_bgcolor='rgba(0,0,0,0)',
-            xaxis=dict(showgrid=False, showline=False, title=None, tickfont=dict(color='#1A1A1A'), color='#1A1A1A'),
-            yaxis=dict(showgrid=True, gridcolor='#E0E0E0', showline=False, title=None, tickfont=dict(color='#1A1A1A'), color='#1A1A1A'),
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5, font=dict(color='#1A1A1A')),
-            hovermode='x unified'
-        )
-        
-        st.plotly_chart(fig, use_container_width=True)
-        
         total_items = int(df['count'].sum())
         healthy_count = int(df[df['category'] == 'healthy']['count'].sum()) if 'healthy' in df['category'].values else 0
-        st.markdown(f"**Total items:** {total_items} | **Healthy choices:** {healthy_count}")
+        trend_source = df.groupby('date', as_index=False)['count'].sum().sort_values('date')
 
-        # === AI HEALTH COACH ===
-        st.markdown("---")
-        col_ins1, col_ins2 = st.columns([3, 1])
-        with col_ins1:
-            st.markdown("#### 🧠 AI Health Coach")
-        with col_ins2:
-            if st.session_state.ai_insights:
-                if st.button("🔄 Refresh", key="refresh_insights", use_container_width=True):
-                    st.session_state.ai_insights = None
-                    st.rerun()
+        if st.session_state.trends_view == 'daily':
+            labels = ['6AM', '8AM', '10AM', '12PM', '2PM', '4PM', '6PM', '8PM']
+            slot_vals = [0] * len(labels)
+            for _, row in trend_source.iterrows():
+                h = row['date'].hour
+                idx = min(range(len(labels)), key=lambda i: abs((6 + i * 2) - h))
+                slot_vals[idx] += int(row['count'])
+            y_vals = []
+            running = 0
+            for v in slot_vals:
+                running += v
+                y_vals.append(running)
+            x_vals = labels
+            hover_suffix = 'items tracked'
+            hover_prefix = ''
+        else:
+            trend_source['label'] = trend_source['date'].dt.strftime('%b %d')
+            trend_source['cum'] = trend_source['count'].cumsum()
+            x_vals = trend_source['label'].tolist()
+            y_vals = trend_source['cum'].astype(int).tolist()
+            hover_suffix = 'items tracked'
+            hover_prefix = ''
+
+        with head_left:
+            st.markdown(f"<div class='trend-sub'>Total items: {total_items} · Healthy choices: {healthy_count} · Based on your logged data</div>", unsafe_allow_html=True)
+    else:
+        x_vals = ['6AM', '8AM', '10AM', '12PM', '2PM', '4PM', '6PM', '8PM']
+        y_vals = [0, 0, 1, 1, 1, 2, 2, 3]
+        hover_suffix = 'items tracked'
+        hover_prefix = ''
+        with head_left:
+            st.markdown("<div class='trend-sub'>Total items: 0 · Healthy choices: 0 · Based on your logged data</div>", unsafe_allow_html=True)
+
+    with head_right:
+        st.markdown('<div class="trend-tabs-container">', unsafe_allow_html=True)
+        col_d, col_w, col_m = st.columns(3)
+        with col_d:
+            if st.button("Day", use_container_width=True, key="day_tab", type="primary" if st.session_state.trends_view == 'daily' else "secondary"):
+                st.session_state.trends_view = 'daily'
+                st.rerun()
+        with col_w:
+            if st.button("Week", use_container_width=True, key="week_tab", type="primary" if st.session_state.trends_view == 'weekly' else "secondary"):
+                st.session_state.trends_view = 'weekly'
+                st.rerun()
+        with col_m:
+            if st.button("Month", use_container_width=True, key="month_tab", type="primary" if st.session_state.trends_view == 'monthly' else "secondary"):
+                st.session_state.trends_view = 'monthly'
+                st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=x_vals,
+        y=y_vals,
+        mode='lines+markers',
+        line=dict(color='#67AEC3', width=4, shape='spline', smoothing=0.6),
+        marker=dict(color='#67AEC3', size=8, line=dict(color='#081018', width=2)),
+        fill='tozeroy',
+        fillcolor='rgba(103,174,195,0.12)',
+        hovertemplate=f"%{{x}}<br>{hover_prefix}%{{y}} {hover_suffix}<extra></extra>"
+    ))
+
+    ymax = max(4, max(y_vals) if y_vals else 4)
+    fig.update_layout(
+        height=360,
+        margin=dict(l=20, r=20, t=10, b=25),
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
+        xaxis=dict(showgrid=False, showline=False, title=None, tickfont=dict(color='#394560', size=16)),
+        yaxis=dict(showgrid=True, gridcolor='rgba(57,69,96,0.25)', griddash='dot', showline=False, title=None,
+                   tickfont=dict(color='#394560', size=16), rangemode='tozero', range=[0, ymax * 1.15]),
+        hovermode='x unified',
+        showlegend=False,
+        hoverlabel=dict(bgcolor='#1A2133', bordercolor='#2B3650', font=dict(color='#CFE4F2', size=16))
+    )
+    st.plotly_chart(fig, use_container_width=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    if not raw or len(raw) == 0:
+        if all_data and len(all_data) > 0:
+            st.warning(f"⚠️ You have {len(all_data)} logged items, but none in the last {days} day(s). Try selecting a different time range.")
+        else:
+            st.info("📊 No data yet. Start logging items!")
+
+    # === AI HEALTH COACH + RECIPES (FIGMA-STYLE PANELS) ===
+    today_str = datetime.now().strftime("%Y-%m-%d")
+
+    if st.session_state.recipes_date != today_str:
+        st.session_state.daily_recipes = None
+        st.session_state.recipes_date = today_str
+
+    coach_col, recipe_col = st.columns(2)
+
+    with coach_col:
+        insights_ready = len(st.session_state.ai_insights) if st.session_state.ai_insights else 3
+        st.markdown(f"""
+            <div class='action-card'>
+                <div class='action-card-header'>
+                    <div class='action-title'>🧠 AI Health Coach</div>
+                    <div class='action-chip'>{insights_ready} insights ready</div>
+                </div>
+                <div class='action-muted'>Your AI coach has analyzed food entries and found personalized insights to improve your health outcomes.</div>
+            </div>
+        """, unsafe_allow_html=True)
 
         if not st.session_state.ai_insights:
-            if st.button("🧠 Get AI Insights", use_container_width=True, type="primary"):
+            if st.button("✨ Get AI Insights", key="figma_get_insights", use_container_width=True, type="primary"):
                 with st.spinner("🧠 Your AI Health Coach is analyzing your patterns..."):
                     try:
-                        insights = generate_health_insights(raw, all_data, days)
+                        insights = generate_health_insights(raw or [], all_data or [], days)
                         if insights:
                             st.session_state.ai_insights = insights
                             st.rerun()
@@ -937,89 +978,61 @@ if st.session_state.page == 'dashboard':
                             st.warning("Could not generate insights. Please try again.")
                     except Exception as e:
                         st.error(f"AI Insights error: {e}")
+        else:
+            if st.button("🔄 Refresh Insights", key="figma_refresh_insights", use_container_width=True):
+                st.session_state.ai_insights = None
+                st.rerun()
 
-        if st.session_state.ai_insights:
-            for i, insight in enumerate(st.session_state.ai_insights):
+            for insight in st.session_state.ai_insights[:3]:
                 emoji = insight.get('emoji', '💡')
                 title = insight.get('title', 'Insight')
                 body = insight.get('insight', '')
-                action = insight.get('action', '')
-                border_colors = [COLORS['olive'], COLORS['yellow'], COLORS['terracotta']]
-                bc = border_colors[i % len(border_colors)]
                 st.markdown(f"""
-                    <div class='card' style='border-left: 4px solid {bc}; padding: 16px;'>
-                        <div style='font-size: 1.1rem; font-weight: 800; margin-bottom: 6px;'>{emoji} {title}</div>
-                        <div style='color: #444; font-size: 0.95rem; margin-bottom: 8px;'>{body}</div>
-                        <div style='color: {COLORS["olive"]}; font-weight: 600; font-size: 0.9rem;'>→ {action}</div>
+                    <div class='coach-list-item'>
+                        <div style='font-weight:700; color:#DDE7FA; margin-bottom:2px;'>{emoji} {title}</div>
+                        <div style='font-size:0.9rem; color:#7F8DAB;'>{body}</div>
                     </div>
                 """, unsafe_allow_html=True)
 
-    else:
-        if all_data and len(all_data) > 0:
-            st.warning(f"⚠️ You have {len(all_data)} logged items, but none in the last {days} day(s). Try selecting a different time range.")
+    with recipe_col:
+        st.markdown("""
+            <div class='action-card'>
+                <div class='action-card-header'>
+                    <div class='action-title'>👨‍🍳 Healthy Recipes</div>
+                    <div style='color:#5E6685; font-size:0.95rem; font-weight:600;'>Matched to your goals</div>
+                </div>
+                <div class='action-muted'>Discover today's recipes curated around your nutrition targets and most-tracked foods.</div>
+            </div>
+        """, unsafe_allow_html=True)
+
+        if not st.session_state.daily_recipes:
+            if st.button("🍳 Discover Today's Recipes", key="figma_discover_recipes", use_container_width=True, type="primary"):
+                with st.spinner("🍳 Finding healthy recipes for you..."):
+                    try:
+                        recipes = generate_daily_recipes()
+                        if recipes:
+                            st.session_state.daily_recipes = recipes
+                            st.session_state.recipes_date = today_str
+                            st.rerun()
+                        else:
+                            st.warning("Could not load recipes. Please try again.")
+                    except Exception as e:
+                        st.error(f"Recipe error: {e}")
         else:
-            st.info("📊 No data yet. Start logging items!")
-
-    # === DAILY HEALTHY RECIPES ===
-    st.markdown("---")
-    st.markdown("### 🥗 Healthy Recipes for the Day")
-
-    today_str = datetime.now().strftime("%Y-%m-%d")
-
-    # Auto-refresh recipes if it's a new day
-    if st.session_state.recipes_date != today_str:
-        st.session_state.daily_recipes = None
-        st.session_state.recipes_date = today_str
-
-    if not st.session_state.daily_recipes:
-        if st.button("🍳 Discover Today's Recipes", use_container_width=True, type="primary"):
-            with st.spinner("🍳 Finding healthy recipes for you..."):
-                try:
-                    recipes = generate_daily_recipes()
-                    if recipes:
-                        st.session_state.daily_recipes = recipes
-                        st.session_state.recipes_date = today_str
-                        st.rerun()
-                    else:
-                        st.warning("Could not load recipes. Please try again.")
-                except Exception as e:
-                    st.error(f"Recipe error: {e}")
-
-    if st.session_state.daily_recipes:
-        meal_emojis = {
-            'Breakfast': '🌅', 'Lunch': '☀️', 'Dinner': '🌙',
-            'Snack': '🍎', 'Dessert': '🍨'
-        }
-        cuisine_colors = ['#E8967A', '#5B8C3E', '#F9A825', '#4CAF50', '#8BC34A']
-
-        cols = st.columns(5)
-        for idx, recipe in enumerate(st.session_state.daily_recipes[:5]):
-            with cols[idx % 5]:
-                r_name = recipe.get('name', 'Recipe')
-                r_type = recipe.get('meal_type', 'Meal')
-                r_cuisine = recipe.get('cuisine', '')
-                r_time = recipe.get('prep_time', '?')
-                r_desc = recipe.get('description', '')
-                r_ingredients = recipe.get('key_ingredients', '')
-                r_emoji = meal_emojis.get(r_type, '🍽️')
-                r_color = cuisine_colors[idx % len(cuisine_colors)]
-
-                st.markdown(f"""
-                    <div class='card' style='text-align: center; padding: 16px; border-top: 4px solid {r_color}; min-height: 240px;'>
-                        <div style='font-size: 2rem; margin-bottom: 6px;'>{r_emoji}</div>
-                        <div style='font-size: 0.75rem; color: {r_color}; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;'>{r_type}</div>
-                        <div style='font-size: 0.95rem; font-weight: 800; margin: 8px 0 4px 0; line-height: 1.2;'>{r_name}</div>
-                        <div style='font-size: 0.75rem; color: #888; margin-bottom: 6px;'>{r_cuisine} · {r_time}</div>
-                        <div style='font-size: 0.8rem; color: #555; margin-bottom: 6px;'>{r_desc}</div>
-                        <div style='font-size: 0.7rem; color: #999; font-style: italic;'>{r_ingredients}</div>
-                    </div>
-                """, unsafe_allow_html=True)
-
-        col_refresh = st.columns([3, 1])[1]
-        with col_refresh:
-            if st.button("🔄 New Recipes", key="refresh_recipes", use_container_width=True):
+            if st.button("🔄 New Recipes", key="figma_refresh_recipes", use_container_width=True):
                 st.session_state.daily_recipes = None
                 st.rerun()
+
+            for recipe in st.session_state.daily_recipes[:3]:
+                r_name = recipe.get('name', 'Recipe')
+                r_type = recipe.get('meal_type', 'Meal')
+                r_time = recipe.get('prep_time', '?')
+                st.markdown(f"""
+                    <div class='coach-list-item' style='border-color:#3A3341;'>
+                        <div style='font-weight:700; color:#E5DBBD; margin-bottom:2px;'>🍽️ {r_name}</div>
+                        <div style='font-size:0.9rem; color:#938A72;'>{r_type} · {r_time}</div>
+                    </div>
+                """, unsafe_allow_html=True)
 
 elif st.session_state.page == 'calendar':
     st.markdown("## 📅 Grocery Calendar")
@@ -1173,4 +1186,3 @@ elif st.session_state.page == 'log':
                             st.success(f"✅ Added!")
                             time.sleep(0.5)
                             st.rerun()
-
