@@ -148,7 +148,7 @@ st.markdown(f"""
 
     .logo-text {{
         font-family: 'Source Serif 4', serif !important;
-        font-size: 2.0rem;
+        font-size: 1.95rem;
         text-align: left;
         font-weight: 700;
         letter-spacing: -0.6px;
