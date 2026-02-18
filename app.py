@@ -171,6 +171,7 @@ st.markdown(f"""
         font-weight: 600 !important;
         padding: 0.5rem 1.5rem !important;
         transition: all 0.2s ease !important;
+        letter-spacing: 0.1px;
     }}
     .stButton > button:hover {{
         box-shadow: 0 4px 16px rgba(91,155,157,0.3) !important;
@@ -181,6 +182,16 @@ st.markdown(f"""
         border: 1px solid {C['border']} !important;
     }}
 
+        .stButton > button[kind="secondary"] {{
+        background: #111827 !important;
+        color: #A9B6D0 !important;
+        border: 1px solid {COLORS['border']} !important;
+    }}
+
+    .stHorizontalBlock div[data-testid="column"] .stButton > button {{
+        border-radius: 12px !important;
+    }}
+    
     /* === METRICS === */
     [data-testid="stMetricValue"] {{
         color: {C['text']} !important;
@@ -395,6 +406,8 @@ st.markdown(f"""
     .trend-tabs-compact .stButton > button[kind="primary"] {{
         background: linear-gradient(135deg, {C['teal']} 0%, #4A8A8C 100%) !important;
         border: none !important;
+        border-radius: 14px !important;
+        min-height: 44px;
     }}
 
     /* === SCANNER RESULTS === */
