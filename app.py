@@ -137,10 +137,10 @@ st.markdown(f"""
         z-index: 0;
     }}
 
-    .block-container {{
+       .block-container {{
         padding-top: 2rem;
     }}
-
+    
     h1, h2, h3, h4, h5, h6, p, div, label {{
         font-family: 'Inter', sans-serif !important;
         color: #E7ECF8;
@@ -154,8 +154,8 @@ st.markdown(f"""
         letter-spacing: -0.6px;
         color: #F6F8FF;
         white-space: nowrap;
-        line-height: 1.1;
-    }}
+        line-height: 1.1;   
+        }}
 
     .logo-dot {{ color: {COLORS['olive']}; }}
 
@@ -166,7 +166,7 @@ st.markdown(f"""
         font-size: 1.35rem;
         font-weight: 500;
     }}
-
+    
     .card {{
         background: linear-gradient(145deg, #0E1220 0%, #0C101B 100%);
         padding: 24px;
@@ -180,7 +180,7 @@ st.markdown(f"""
         background: linear-gradient(135deg, #111626 0%, #111726 100%);
         height: 35px;
         border-radius: 14px;
-        border: 1px solid {COLORS['border']};
+        background: linear-gradient(135deg, #111626 0%, #111726 100%);
         margin-bottom: 25px;
     }}
 
@@ -228,7 +228,7 @@ st.markdown(f"""
         transform: translateY(-1px) !important;
     }}
 
-    .stButton > button[kind="secondary"] {{
+        .stButton > button[kind="secondary"] {{
         background: #111827 !important;
         color: #A9B6D0 !important;
         border: 1px solid {COLORS['border']} !important;
@@ -237,7 +237,7 @@ st.markdown(f"""
     .stHorizontalBlock div[data-testid="column"] .stButton > button {{
         border-radius: 12px !important;
     }}
-
+    
     /* === METRICS === */
     [data-testid="stMetricValue"] {{
         color: #EFF4FF !important;
@@ -339,36 +339,6 @@ st.markdown(f"""
         font-family: 'Inter', sans-serif;
     }}
 
-    /* === TREND & INSIGHTS PANELS === */
-    .trend-shell {{
-        background: linear-gradient(145deg, #0C101B 0%, #0A0F1A 100%);
-        border: 1px solid #1A2338;
-        border-radius: 26px;
-        padding: 22px 22px 12px 22px;
-        margin-top: 12px;
-        margin-bottom: 22px;
-    }}
-
-    .trend-title-row {{
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        margin-bottom: 6px;
-    }}
-
-    .trend-title {{
-        font-size: 2.15rem;
-        font-weight: 700;
-        letter-spacing: -0.4px;
-        color: #F2F6FF;
-    }}
-
-    .trend-sub {{
-        color: #5F6E8D;
-        font-size: 1.02rem;
-        margin-bottom: 8px;
-    }}
-
     .trend-tabs-container {{
         background: #121827;
         border: 1px solid #242F47;
@@ -378,69 +348,17 @@ st.markdown(f"""
     }}
 
     .trend-tabs-container .stButton > button {{
-        background-color: transparent !important;
-        color: #7D89A6 !important;
+        background-color: #141C30 !important;
+        color: #95A3BD !important;
         border: none !important;
         border-radius: 14px !important;
         min-height: 44px;
     }}
 
     .trend-tabs-container .stButton > button[kind="primary"] {{
-        background: #69AFC2 !important;
-        color: #F5FBFF !important;
-        font-weight: 700 !important;
-    }}
-
-    .trend-chart-note {{
-        color: #5E6B88;
-        font-size: 0.92rem;
-        margin-bottom: 10px;
-    }}
-
-    .action-card {{
-        background: linear-gradient(145deg, #0E1220 0%, #0C101A 100%);
-        border: 1px solid #1A2338;
-        border-radius: 26px;
-        padding: 22px;
-        min-height: 285px;
-    }}
-
-    .action-card-header {{
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        margin-bottom: 10px;
-    }}
-
-    .action-title {{
-        color: #EEF3FF;
-        font-size: 2.05rem;
-        font-weight: 700;
-    }}
-
-    .action-chip {{
-        color: #A998CF;
-        border: 1px solid #473B65;
-        background: rgba(51,40,75,0.45);
-        border-radius: 999px;
-        font-size: 0.9rem;
-        font-weight: 600;
-        padding: 4px 14px;
-    }}
-
-    .action-muted {{
-        color: #667593;
-        font-size: 1.02rem;
-        line-height: 1.65;
-        margin-bottom: 18px;
-    }}
-
-    .coach-list-item {{
-        background: #121827;
-        border: 1px solid #27324C;
-        border-radius: 14px;
-        padding: 10px 12px;
-        margin-bottom: 8px;
+        background-color: #6CA7B8 !important;
+        color: #F8FBFF !important;
+        font-weight: bold !important;
     }}
 
     /* === SIDEBAR === */
@@ -550,7 +468,7 @@ st.markdown(f"""
         font-size: 1.05rem;
         font-weight: 600;
     }}
-
+    
     .sidebar-streak-card {{
         margin-top: 24px;
         padding: 14px;
@@ -612,13 +530,13 @@ st.markdown(f"""
         font-size: 0.85rem;
         margin-top: 2px;
     }}
-
+    
     </style>
 """, unsafe_allow_html=True)
 
 def render_logo(size="3rem"):
     st.markdown(f"<div style='margin-bottom: 8px;'><div class='logo-text' style='font-size: {size};'>foodvantage<span class='logo-dot'>.</span></div></div>", unsafe_allow_html=True)
-
+    
 def create_html_calendar(year, month, selected_day=None):
     cal = cal_module.monthcalendar(year, month)
     html = "<table style='width:100%; text-align:center;'><thead><tr>"
@@ -669,16 +587,15 @@ def get_daily_streak_metrics(history_rows):
 # === MAIN APP (NO LOGIN PAGE) ===
 with st.sidebar:
     st.write("")
-    render_logo(size="1.85rem")
+    render_logo(size="2.35rem")
 
     st.markdown("<div class='kicker'>Search foods</div>", unsafe_allow_html=True)
-    sidebar_food_search = st.text_input("Food search", key="sidebar_food_search", placeholder="Search foods...", label_visibility="collapsed")
+    st.text_input("Food search", key="sidebar_food_search", placeholder="Search foods...", label_visibility="collapsed")
 
     st.markdown("<div class='kicker' style='margin-top:8px;'>Quick score check</div>", unsafe_allow_html=True)
     search_q = st.text_input("Quick score search", key="sidebar_search", placeholder="e.g. banana...", label_visibility="collapsed")
-    active_search = (search_q or sidebar_food_search or "").strip()
-    if active_search:
-        results = search_vantage_db(active_search, limit=20)
+    if search_q:
+        results = search_vantage_db(search_q, limit=20)
         filtered_results = [r for r in results if r['vms_score'] != 10.0] if results else []
 
         if filtered_results:
@@ -686,7 +603,7 @@ with st.sidebar:
             st.markdown('<div class="results-scroll-container">', unsafe_allow_html=True)
             for d in filtered_results:
                 c = COLORS['green'] if d['vms_score'] < 3.0 else COLORS['yellow'] if d['vms_score'] < 7.0 else COLORS['red']
-                portion_label = " /serving" if needs_portion_size(d['name']) else ""
+                portion_label = " per serving" if needs_portion_size(d['name']) else ""
 
                 st.markdown(f"""
                     <div class='list-row'>
@@ -707,32 +624,31 @@ with st.sidebar:
             """, unsafe_allow_html=True)
 
     st.markdown("---")
-    if st.button("▦ Dashboard", use_container_width=True, type="primary" if st.session_state.page == 'dashboard' else "secondary"):
+    if st.button("📊 Dashboard", use_container_width=True, type="primary" if st.session_state.page == 'dashboard' else "secondary"):
         st.session_state.page = 'dashboard'
         st.rerun()
-    if st.button("🗓 Calendar", use_container_width=True, type="primary" if st.session_state.page == 'calendar' else "secondary"):
+    if st.button("📅 Calendar", use_container_width=True, type="primary" if st.session_state.page == 'calendar' else "secondary"):
         st.session_state.page = 'calendar'
         st.rerun()
-    if st.button("↺ Meal Plan", use_container_width=True, type="primary" if st.session_state.page == 'log' else "secondary"):
+    if st.button("🕒 Meal Plan", use_container_width=True, type="primary" if st.session_state.page == 'log' else "secondary"):
         st.session_state.page = 'log'
         st.rerun()
 
     history_sidebar = get_log_history_db(st.session_state.user_id) or []
-    streak_metrics_sidebar = get_daily_streak_metrics(history_sidebar)
-    total_logged_sidebar = streak_metrics_sidebar["total_items"]
-    health_score_sidebar = streak_metrics_sidebar["avg_health_score"]
-    healthy_streak_days_sidebar = streak_metrics_sidebar["healthy_streak_days"]
-    days_logged_sidebar = streak_metrics_sidebar["days_logged"]
-    streak_pct = int((min(days_logged_sidebar, 10) / 10) * 100)
+    total_logged_sidebar = len(history_sidebar)
+    healthy_sidebar = sum(1 for _, _, score, _ in history_sidebar if float(score) < 3.0)
+    health_score_sidebar = int(round((healthy_sidebar / total_logged_sidebar) * 100)) if total_logged_sidebar else 78
+    streak_days = min(total_logged_sidebar, 10)
+    streak_pct = int((streak_days / 10) * 100)
 
     st.markdown(f"""
         <div class='sidebar-streak-card'>
-            <div class='sidebar-streak-title'>🔥 {healthy_streak_days_sidebar}-day streak</div>
+            <div class='sidebar-streak-title'>🔥 {max(1, min(streak_days, 7))}-day streak</div>
             <div class='sidebar-streak-sub'>Keep it going!</div>
             <div class='sidebar-progress-wrap'>
                 <div class='sidebar-progress-fill' style='width:{streak_pct}%;'></div>
             </div>
-            <div style='margin-top:8px; color:#556582; font-size:0.82rem;'>{days_logged_sidebar} / 10 days logged</div>
+            <div style='margin-top:8px; color:#556582; font-size:0.82rem;'>{streak_days} / 10 days to next milestone</div>
             <div class='sidebar-mini-stats'>
                 <div class='stat-tile'>
                     <div class='v'>{total_logged_sidebar:,}</div>
@@ -752,11 +668,10 @@ if st.session_state.page == 'dashboard':
     history_dashboard = get_log_history_db(st.session_state.user_id) or []
     today_key = datetime.now().strftime("%Y-%m-%d")
     items_today = sum(1 for d, *_ in history_dashboard if str(d) == today_key)
-    streak_metrics_dashboard = get_daily_streak_metrics(history_dashboard)
-    total_items_dashboard = streak_metrics_dashboard["total_items"]
+    total_items_dashboard = len(history_dashboard)
     healthy_items_dashboard = sum(1 for _, _, score, _ in history_dashboard if float(score) < 3.0)
     health_score_dashboard = int(round((healthy_items_dashboard / total_items_dashboard) * 100)) if total_items_dashboard else 78
-    day_streak_dashboard = streak_metrics_dashboard["healthy_streak_days"]
+    day_streak_dashboard = max(1, min(total_items_dashboard, 7))
 
     m1, m2, m3 = st.columns(3)
     with m1:
