@@ -53,19 +53,19 @@ else:
 
 # --- COLOR PALETTE (Grocery Template) ---
 COLORS = {
-    'olive': '#5B8C3E',          # Primary green from template
-    'terracotta': '#5B8C3E',     # Buttons now green (was terracotta)
-    'salmon': '#8BC34A',         # Light green accent
-    'beige': '#F5F0E8',          # Warm cream background from template
-    'dark_text': '#2C2C2C',
-    'green': '#4CAF50',          # Healthy score green
-    'yellow': '#F9A825',         # Moderate score amber
-    'red': '#E53935',            # Unhealthy score red
-    'camera_icon': '#444444',    # Dark grey camera icon
-    'toggle_button': '#E8967A',  # Salmon pink toggle buttons
-    'unhealthy_bar': '#EF9A9A',  # Softer red for chart bars
-    'card_bg': '#FFFFFF',
-    'border': '#E8E0D4',         # Warm border tone
+    'olive': '#7BD0E7',
+    'terracotta': '#7BD0E7',
+    'salmon': '#A7E8F5',
+    'beige': '#04060D',
+    'dark_text': '#E9EEF7',
+    'green': '#4CC38A',
+    'yellow': '#D8A66A',
+    'red': '#E87474',
+    'camera_icon': '#7BD0E7',
+    'toggle_button': '#8C74CC',
+    'unhealthy_bar': '#6B3240',
+    'card_bg': '#0C111D',
+    'border': '#1B2436',
 }
 
 # FIX 2 & 5: Helper function to determine if item needs portion size
@@ -111,14 +111,14 @@ def needs_portion_size(item_name):
 
 # --- CSS (Grocery Template Theme) ---
 st.markdown('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">', unsafe_allow_html=True)
-st.markdown('<link href="https://fonts.googleapis.com/css2?family=Josefin+Sans:wght@300;400;600;700&display=swap" rel="stylesheet">', unsafe_allow_html=True)
+st.markdown('<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Source+Serif+4:wght@600;700&display=swap" rel="stylesheet">', unsafe_allow_html=True)
 st.markdown(f"""
     <style>
     /* === GLOBAL === */
     .stApp {{
-        background-color: {COLORS['beige']};
-        color: #1A1A1A;
-        font-family: 'Josefin Sans', sans-serif;
+        background: radial-gradient(circle at top right, #0B1528 0%, #05070D 45%, #03050A 100%);
+        color: #E7ECF8;
+        font-family: 'Inter', sans-serif;
     }}
 
     .stApp::before {{
@@ -132,102 +132,134 @@ st.markdown(f"""
         background-size: cover;
         background-position: center;
         background-repeat: no-repeat;
-        opacity: 0.20;
+        opacity: 0.08;
         pointer-events: none;
         z-index: 0;
     }}
 
+       .block-container {{
+        padding-top: 2rem;
+    }}
+    
     h1, h2, h3, h4, h5, h6, p, div, label {{
-        font-family: 'Josefin Sans', sans-serif !important;
+        font-family: 'Inter', sans-serif !important;
+        color: #E7ECF8;
     }}
 
-    .logo-text {{ font-family: 'Josefin Sans', sans-serif; font-size: 3rem; text-align: center; font-weight: 700; }}
+    .logo-text {{
+        font-family: 'Source Serif 4', serif !important;
+        font-size: 2.25rem;
+        text-align: left;
+        font-weight: 700;
+        letter-spacing: -0.6px;
+        color: #F6F8FF;    
+        }}
+
     .logo-dot {{ color: {COLORS['olive']}; }}
 
+    .subtitle {{
+        color: #627090;
+        margin-top: -8px;
+        margin-bottom: 14px;
+        font-size: 1.35rem;
+        font-weight: 500;
+    }}
+    
     .card {{
-        background: white;
+        background: linear-gradient(145deg, #0E1220 0%, #0C101B 100%);
         padding: 24px;
         border-radius: 24px;
         border: 1px solid {COLORS['border']};
-        box-shadow: 0 4px 16px rgba(91,140,62,0.06);
+        box-shadow: 0 12px 30px rgba(2, 6, 15, 0.45);
         margin-bottom: 20px;
     }}
 
     .white-shelf {{
-        background: linear-gradient(135deg, #E8F5E9 0%, #F1F8E9 100%);
+        background: linear-gradient(135deg, #111626 0%, #111726 100%);
         height: 35px;
         border-radius: 14px;
-        border: 1px solid #C8E6C9;
+        background: linear-gradient(135deg, #111626 0%, #111726 100%);
         margin-bottom: 25px;
     }}
 
     .tomato-wrapper {{ width: 100%; text-align: center; padding: 30px 0; }}
-    .tomato-icon {{ font-size: 150px !important; color: {COLORS['camera_icon']} !important; }}
+    .tomato-icon {{ font-size: 150px !important; color: {COLORS['camera_icon']} !important; opacity: 0.8; }}
 
     /* === INPUTS === */
     input[type="text"], input[type="password"] {{
-        background-color: white !important;
-        color: #1A1A1A !important;
+        background-color: #141A2A !important;
+        color: #ECF3FF !important;
         border: 1.5px solid {COLORS['border']} !important;
         border-radius: 14px !important;
         padding: 12px 16px !important;
-        font-family: 'Josefin Sans', sans-serif !important;
+        font-family: 'Inter', sans-serif !important;
     }}
 
     input[type="text"]:focus, input[type="password"]:focus {{
         border-color: {COLORS['olive']} !important;
-        box-shadow: 0 0 0 2px rgba(91,140,62,0.15) !important;
+        box-shadow: 0 0 0 2px rgba(123,208,231,0.2) !important;
     }}
 
     .stTextInput > div > div > input {{
-        background-color: white !important;
-        color: #1A1A1A !important;
-        -webkit-text-fill-color: #1A1A1A !important;
-        font-family: 'Josefin Sans', sans-serif !important;
+        background-color: #141A2A !important;
+        color: #ECF3FF !important;
+        -webkit-text-fill-color: #ECF3FF !important;
+        font-family: 'Inter', sans-serif !important;
     }}
 
     /* === BUTTONS === */
     .stButton > button {{
-        background-color: {COLORS['olive']} !important;
-        color: white !important;
-        border: none !important;
-        border-radius: 50px !important;
-        font-family: 'Josefin Sans', sans-serif !important;
-        font-weight: 600 !important;
-        padding: 0.5rem 1.5rem !important;
+        background: linear-gradient(90deg, #5E95A6 0%, #6FAEBF 100%) !important;
+        color: #F5FBFF !important;
+        border: 1px solid rgba(123, 208, 231, 0.35) !important;
+        border-radius: 14px !important;
+        font-family: 'Inter', sans-serif !important;
+        font-weight: 700 !important;
+        padding: 0.62rem 1rem !important;
         transition: all 0.2s ease !important;
+        letter-spacing: 0.1px;
     }}
 
     .stButton > button:hover {{
-        background-color: #4A7A2E !important;
-        box-shadow: 0 4px 12px rgba(91,140,62,0.3) !important;
+        background: linear-gradient(90deg, #6CA7B8 0%, #7EB9C8 100%) !important;
+        box-shadow: 0 6px 18px rgba(76, 150, 173, 0.35) !important;
         transform: translateY(-1px) !important;
     }}
 
+        .stButton > button[kind="secondary"] {{
+        background: #111827 !important;
+        color: #A9B6D0 !important;
+        border: 1px solid {COLORS['border']} !important;
+    }}
+
+    .stHorizontalBlock div[data-testid="column"] .stButton > button {{
+        border-radius: 12px !important;
+    }}
+    
     /* === METRICS === */
     [data-testid="stMetricValue"] {{
-        color: #1A1A1A !important;
+        color: #EFF4FF !important;
         font-weight: 700 !important;
         font-size: 1.5rem !important;
-        font-family: 'Josefin Sans', sans-serif !important;
+        font-family: 'Inter', sans-serif !important;
     }}
 
     [data-testid="stMetricLabel"] {{
-        color: #2C2C2C !important;
+        color: #8B99B3 !important;
         font-weight: 600 !important;
-        font-family: 'Josefin Sans', sans-serif !important;
+        font-family: 'Inter', sans-serif !important;
     }}
 
     /* === EXPANDERS === */
     .stExpander {{
-        background: white !important;
-        color: #1A1A1A !important;
+        background: #0F1422 !important;
+        color: #E7ECF8 !important;
         border-radius: 16px !important;
         border: 1px solid {COLORS['border']} !important;
     }}
 
     .stExpander p, .stExpander div, .stExpander span {{
-        color: #1A1A1A !important;
+        color: #D7DEED !important;
     }}
 
     /* === HUD BUBBLE (Scanner Overlay) === */
@@ -236,15 +268,15 @@ st.markdown(f"""
         top: calc(50% - 200px);
         left: 50%;
         transform: translateX(-50%);
-        background: white;
+        background: rgba(13, 19, 34, 0.96);
         padding: 16px 28px;
         border-radius: 50px;
-        box-shadow: 0 10px 30px rgba(91,140,62,0.2);
-        border: 3px solid {COLORS['olive']};
+        box-shadow: 0 10px 30px rgba(0,0,0,0.45);
+        border: 1px solid rgba(123,208,231,0.4);
         z-index: 1000;
         text-align: center;
         min-width: 220px;
-        font-family: 'Josefin Sans', sans-serif;
+        font-family: 'Inter', sans-serif;
     }}
 
     /* === SCROLLABLE RESULTS === */
@@ -259,34 +291,34 @@ st.markdown(f"""
     }}
 
     .results-scroll-container::-webkit-scrollbar-track {{
-        background: #E8F5E9;
+        background: #0D1423;
         border-radius: 10px;
     }}
 
     .results-scroll-container::-webkit-scrollbar-thumb {{
-        background: {COLORS['olive']};
+        background: #2C3B57;
         border-radius: 10px;
     }}
 
     /* === SCANNER RESULTS === */
     .scanner-result {{
-        background: white;
+        background: #0F1525;
         padding: 16px;
         border-radius: 16px;
         margin: 12px 0;
         border-left: 4px solid {COLORS['olive']};
-        font-family: 'Josefin Sans', sans-serif;
+        font-family: 'Inter', sans-serif;
     }}
 
     .scanner-result-title {{
-        color: {COLORS['dark_text']};
+        color: #F1F5FF;
         font-weight: 700;
         font-size: 1.1rem;
         margin-bottom: 8px;
     }}
 
     .scanner-result-text {{
-        color: {COLORS['dark_text']};
+        color: #D9E2F5;
         font-weight: 600;
         font-size: 1.3rem;
         line-height: 1.6;
@@ -298,11 +330,11 @@ st.markdown(f"""
         justify-content: space-between;
         align-items: center;
         padding: 14px 16px;
-        background: #FFF;
+        background: #131A2D;
         border-radius: 16px;
         border: 1px solid {COLORS['border']};
         margin-bottom: 8px;
-        font-family: 'Josefin Sans', sans-serif;
+        font-family: 'Inter', sans-serif;
     }}
 
     /* === TREND TABS === */
@@ -312,14 +344,14 @@ st.markdown(f"""
     }}
 
     .trend-tabs-container .stButton > button {{
-        background-color: {COLORS['toggle_button']} !important;
-        color: white !important;
+        background-color: #141C30 !important;
+        color: #95A3BD !important;
         border: none !important;
     }}
 
     .trend-tabs-container .stButton > button[kind="primary"] {{
-        background-color: {COLORS['toggle_button']} !important;
-        color: white !important;
+        background-color: #6CA7B8 !important;
+        color: #F8FBFF !important;
         font-weight: bold !important;
     }}
 
@@ -329,34 +361,53 @@ st.markdown(f"""
     }}
 
     section[data-testid="stSidebar"] {{
-        background-color: #FAFAF5 !important;
-        border-right: 1px solid {COLORS['border']} !important;
+        background: linear-gradient(180deg, #080C16 0%, #050811 100%) !important;
+        border-right: 1px solid #1A2236 !important;
+    }}
+
+    section[data-testid="stSidebar"] .stMarkdown h4,
+    section[data-testid="stSidebar"] .stMarkdown h5,
+    section[data-testid="stSidebar"] p,
+    section[data-testid="stSidebar"] label {{
+        color: #8A97B3 !important;
+    }}
+
+    section[data-testid="stSidebar"] .stButton > button {{
+        justify-content: flex-start;
+        background: #0E1424 !important;
+        color: #A4B2CD !important;
+        border-radius: 16px !important;
+        border: 1px solid #1E2A42 !important;
+    }}
+
+    section[data-testid="stSidebar"] .stButton > button:hover {{
+        background: #101C2F !important;
     }}
 
     /* === FRIENDLY ERRORS === */
     .friendly-error {{
-        background: #F1F8E9;
-        border-left: 4px solid {COLORS['olive']};
+        background: #111726;
+        border-left: 4px solid #476A97;
         padding: 16px;
         border-radius: 12px;
         margin: 12px 0;
-        font-family: 'Josefin Sans', sans-serif;
+        font-family: 'Inter', sans-serif;
     }}
 
     .friendly-error-title {{
         font-weight: 700;
-        color: #33691E;
+        color: #BFD4F1;
         margin-bottom: 8px;
     }}
 
     .friendly-error-text {{
-        color: #558B2F;
+        color: #93A7C7;
         font-size: 0.9rem;
     }}
 
     /* === SCAN PROMPT BADGE === */
     .scan-prompt {{
-        background: linear-gradient(135deg, #E8F5E9 0%, #F1F8E9 100%);
+        background: #101A2A;
         padding: 12px 20px;
         border-radius: 14px;
         display: inline-block;
