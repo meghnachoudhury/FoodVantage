@@ -127,12 +127,6 @@ st.markdown(f"""
     section[data-testid="stSidebar"] * {{
         color: {C['text']} !important;
     }}
-    /* Sidebar toggle */
-    [data-testid="collapsedControl"] {{
-        visibility: visible !important;
-        color: {C['teal']} !important;
-    }}
-
     /* === INPUTS === */
     input[type="text"], input[type="password"], input[type="number"] {{
         background-color: {C['bg_input']} !important;
@@ -467,17 +461,11 @@ st.markdown(f"""
     }}
     .stAlert p {{ color: {C['text_sec']} !important; }}
 
-    /* Hide Streamlit branding but keep sidebar toggle visible */
+    /* Hide Streamlit branding — do NOT hide stToolbar, the sidebar toggle lives inside it in Streamlit 1.50 */
     #MainMenu {{ display: none !important; }}
     footer {{ display: none !important; }}
-    header [data-testid="stToolbar"] {{ display: none !important; }}
     [data-testid="stDecoration"] {{ display: none !important; }}
-    header [data-testid="stStatusWidget"] {{ display: none !important; }}
-    /* Make header itself transparent so only the sidebar toggle remains */
-    header {{
-        background: transparent !important;
-        border: none !important;
-    }}
+    [data-testid="stStatusWidget"] {{ display: none !important; }}
 
     /* === SIDEBAR NAV BUTTONS === */
     .sidebar-nav .stButton > button {{
