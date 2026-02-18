@@ -182,12 +182,6 @@ st.markdown(f"""
         border: 1px solid {C['border']} !important;
     }}
 
-        .stButton > button[kind="secondary"] {{
-        background: #111827 !important;
-        color: #A9B6D0 !important;
-        border: 1px solid {COLORS['border']} !important;
-    }}
-
     .stHorizontalBlock div[data-testid="column"] .stButton > button {{
         border-radius: 12px !important;
     }}
