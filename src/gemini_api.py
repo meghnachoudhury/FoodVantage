@@ -120,6 +120,51 @@ def calculate_vms_science(row):
         return max(-2.0, min(10.0, score))
     except: return 5.0
 
+def vms_to_health_score(vms_score):
+    """Convert VMS score (-2 to 10) to health score (0-100, higher is better)"""
+    return max(0, min(100, round((10 - vms_score) / 12 * 100)))
+
+def calculate_overall_health_score(username):
+    """Calculate the overall health score (0-100) from all logged items"""
+    con = get_db_connection()
+    try:
+        result = con.execute("""
+            SELECT AVG(score) as avg_score
+            FROM calendar
+            WHERE username = ?
+        """, [username]).fetchone()
+        if result and result[0] is not None:
+            return vms_to_health_score(result[0])
+        return 0
+    except Exception as e:
+        print(f"[HEALTH SCORE ERROR] {e}")
+        return 0
+
+def calculate_day_streak(username):
+    """
+    Calculate the number of logged dates where the average health score > 50/100.
+    Groups items by date, computes average VMS per date, converts to health score,
+    and counts dates where health score > 50.
+    """
+    con = get_db_connection()
+    try:
+        results = con.execute("""
+            SELECT date, AVG(score) as avg_score
+            FROM calendar
+            WHERE username = ?
+            GROUP BY date
+            ORDER BY date ASC
+        """, [username]).fetchall()
+        streak = 0
+        for date, avg_score in results:
+            health_score = vms_to_health_score(avg_score)
+            if health_score > 50:
+                streak += 1
+        return streak
+    except Exception as e:
+        print(f"[STREAK ERROR] {e}")
+        return 0
+
 # === 2. DATABASE ACCESS ===
 @st.cache_resource
 def get_scientific_db():
