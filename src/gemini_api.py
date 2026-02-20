@@ -651,8 +651,7 @@ def generate_health_insights(trend_data, history_data, days_range):
     """
     client = get_gemini_client()
     if not client:
-        print("[INSIGHTS] No Gemini API key configured")
-        return None
+        raise Exception("No API key found. Add GEMINI_API_KEY to Streamlit secrets (Settings → Secrets).")
 
     try:
         # Build summary statistics
@@ -723,8 +722,7 @@ Return ONLY valid JSON array, no other text:
         if insights:
             print(f"✅ [INSIGHTS] Generated {len(insights)} insights")
             return insights
-        print(f"❌ [INSIGHTS] Could not parse JSON from response")
-        return None
+        raise Exception(f"AI returned non-JSON response: {response_text[:300]}")
 
     except Exception as e:
         print(f"❌ [INSIGHTS ERROR] {e}")
@@ -747,8 +745,7 @@ def generate_meal_plan(user_history, user_id):
     """
     client = get_gemini_client()
     if not client:
-        print("[MEAL PLAN] No Gemini API key configured")
-        return None
+        raise Exception("No API key found. Add GEMINI_API_KEY to Streamlit secrets (Settings → Secrets).")
 
     try:
         # Analyze user's history for patterns
@@ -831,8 +828,7 @@ Return ONLY valid JSON, no other text:
             total_meals = sum(len(v) for v in meal_plan.values() if isinstance(v, list))
             print(f"✅ [MEAL PLAN] Generated plan with {total_meals} meals across {len(meal_plan)} days")
             return meal_plan
-        print(f"❌ [MEAL PLAN] Could not parse JSON from response")
-        return None
+        raise Exception(f"AI returned non-JSON response: {response_text[:300]}")
 
     except Exception as e:
         print(f"❌ [MEAL PLAN ERROR] {e}")
@@ -850,8 +846,7 @@ def generate_daily_recipes():
     """
     client = get_gemini_client()
     if not client:
-        print("[RECIPES] No Gemini API key configured")
-        return None
+        raise Exception("No API key found. Add GEMINI_API_KEY to Streamlit secrets (Settings → Secrets).")
 
     try:
         today = datetime.now()
@@ -904,8 +899,7 @@ Return ONLY valid JSON array, no other text:
         if recipes:
             print(f"✅ [RECIPES] Generated {len(recipes)} recipes")
             return recipes[:5]
-        print(f"❌ [RECIPES] Could not parse JSON from response")
-        return None
+        raise Exception(f"AI returned non-JSON response: {response_text[:300]}")
 
     except Exception as e:
         print(f"❌ [RECIPES ERROR] {e}")
@@ -971,42 +965,111 @@ def get_all_calendar_data_db(username):
         return []
 
 # === 5. AUTH HELPERS ===
-def get_gemini_api_key():
-    """Returns AI API key. Checks GEMINI_API_KEY first, falls back to OPENAI_API_KEY."""
-    # Preferred: Gemini
-    if hasattr(st, 'secrets') and "GEMINI_API_KEY" in st.secrets:
-        print("[AUTH] Found GEMINI_API_KEY in st.secrets")
-        return st.secrets["GEMINI_API_KEY"]
-    val = os.getenv("GEMINI_API_KEY")
-    if val:
-        print("[AUTH] Found GEMINI_API_KEY in env")
-        return val
-    # Fallback: OpenAI (for environments not yet migrated)
-    if hasattr(st, 'secrets') and "OPENAI_API_KEY" in st.secrets:
-        print("[AUTH] Found OPENAI_API_KEY in st.secrets (fallback)")
-        return st.secrets["OPENAI_API_KEY"]
-    val = os.getenv("OPENAI_API_KEY")
-    if val:
-        print("[AUTH] Found OPENAI_API_KEY in env (fallback)")
-        return val
-    # List available secret keys for debugging
-    if hasattr(st, 'secrets'):
-        available = [k for k in st.secrets if 'key' in k.lower() or 'api' in k.lower()]
-        print(f"[AUTH] WARNING: No API key found. Available secret keys containing 'key'/'api': {available}")
-    else:
-        print("[AUTH] WARNING: No API key found and st.secrets not available")
+def _find_secret(names):
+    """
+    Flexibly search st.secrets for any of the given key names.
+    Handles: flat keys, case-insensitive matches, and one level of TOML nesting.
+    Logs every secret key name found (not values) for debugging.
+    """
+    try:
+        # This line will raise FileNotFoundError locally if no secrets.toml exists
+        top_level = list(st.secrets.keys())
+        print(f"[AUTH] st.secrets top-level keys: {top_level}")
+    except Exception as e:
+        print(f"[AUTH] st.secrets not accessible: {e}")
+        return None
+
+    # Try exact match at top level
+    for name in names:
+        if name in st.secrets:
+            val = st.secrets[name]
+            if val:
+                print(f"[AUTH] Found '{name}' in st.secrets (exact)")
+                return val
+
+    # Try case-insensitive match at top level
+    secrets_lower = {k.lower(): k for k in top_level}
+    for name in names:
+        canonical = secrets_lower.get(name.lower())
+        if canonical:
+            val = st.secrets[canonical]
+            if val:
+                print(f"[AUTH] Found '{canonical}' (case-insensitive match for '{name}')")
+                return val
+
+    # Try one level of nesting (e.g. [api_keys] section in TOML)
+    for section_key in top_level:
+        try:
+            section = st.secrets[section_key]
+            if not isinstance(section, dict):
+                continue
+            section_lower = {k.lower(): k for k in section.keys()}
+            for name in names:
+                canonical = section_lower.get(name.lower())
+                if canonical:
+                    val = section[canonical]
+                    if val:
+                        print(f"[AUTH] Found '{name}' in st.secrets['{section_key}']['{canonical}'] (nested)")
+                        return val
+        except Exception:
+            continue
+
+    print(f"[AUTH] None of {names} found anywhere in st.secrets")
     return None
 
+
+def get_gemini_api_key():
+    """
+    Returns AI API key with flexible lookup — handles any casing, naming
+    variant, or TOML nesting the user may have used in Streamlit secrets.
+    Falls back to env vars and then to OPENAI_API_KEY for backward compat.
+    """
+    # 1. Gemini key — try all common name variants
+    gemini_names = ["GEMINI_API_KEY", "gemini_api_key", "GOOGLE_API_KEY", "google_api_key",
+                    "GOOGLE_GEMINI_API_KEY", "google_gemini_api_key", "GeminiApiKey",
+                    "GEMINI_KEY", "gemini_key"]
+    val = _find_secret(gemini_names)
+    if val:
+        return val
+
+    # 2. Env vars for Gemini
+    for name in gemini_names:
+        val = os.getenv(name)
+        if val:
+            print(f"[AUTH] Found '{name}' in environment")
+            return val
+
+    # 3. Fallback — OpenAI key (for environments not yet migrated)
+    openai_names = ["OPENAI_API_KEY", "openai_api_key", "OpenAiApiKey"]
+    val = _find_secret(openai_names)
+    if val:
+        print("[AUTH] Using OPENAI_API_KEY as fallback")
+        return val
+    for name in openai_names:
+        val = os.getenv(name)
+        if val:
+            print(f"[AUTH] Using '{name}' from env as fallback")
+            return val
+
+    print("[AUTH] ERROR: No API key found in secrets or environment")
+    return None
+
+
 def _using_gemini_key():
-    """True when a native GEMINI_API_KEY is available (not the OpenAI fallback)."""
-    if hasattr(st, 'secrets') and "GEMINI_API_KEY" in st.secrets:
+    """True when a Gemini/Google key is available (not the OpenAI fallback)."""
+    gemini_names = ["GEMINI_API_KEY", "gemini_api_key", "GOOGLE_API_KEY", "google_api_key",
+                    "GOOGLE_GEMINI_API_KEY", "google_gemini_api_key", "GeminiApiKey",
+                    "GEMINI_KEY", "gemini_key"]
+    # Use the same flexible lookup as get_gemini_api_key to stay in sync
+    if _find_secret(gemini_names):
         return True
-    return bool(os.getenv("GEMINI_API_KEY"))
+    return any(os.getenv(n) for n in gemini_names)
+
 
 def _active_model():
     """Return the model name matching whichever API key is configured."""
-    model = GEMINI_MODEL if _using_gemini_key() else "gpt-4o"
-    return model
+    return GEMINI_MODEL if _using_gemini_key() else "gpt-4o"
+
 
 def get_gemini_client():
     """OpenAI-compatible client — auto-detects Gemini or OpenAI key."""
@@ -1015,11 +1078,11 @@ def get_gemini_client():
         print("[CLIENT] ERROR: No API key available — all AI agents will be disabled")
         return None
     if _using_gemini_key():
-        print(f"[CLIENT] Using Gemini endpoint: model={GEMINI_MODEL}, base_url={GEMINI_BASE_URL}")
+        print(f"[CLIENT] Gemini endpoint active: model={GEMINI_MODEL}")
         return OpenAI(base_url=GEMINI_BASE_URL, api_key=api_key)
-    # Fallback: direct OpenAI (default base_url)
-    print("[CLIENT] Using OpenAI endpoint (fallback): model=gpt-4o")
+    print("[CLIENT] OpenAI fallback active: model=gpt-4o")
     return OpenAI(api_key=api_key)
+
 
 def authenticate_user(username, password):
     try:
