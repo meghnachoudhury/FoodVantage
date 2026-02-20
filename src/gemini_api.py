@@ -13,6 +13,15 @@ from datetime import datetime, timedelta
 
 load_dotenv()
 
+# === AI MODEL CONFIGURATION ===
+# Text + vision AI: Google Gemini 2.5 Flash via OpenAI-compatible endpoint
+GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
+GEMINI_MODEL = "gemini-2.5-flash"
+
+# === DIGITALOCEAN GRADIENT AI CONFIGURATION (for hackathon integration) ===
+GRADIENT_BASE_URL = "https://inference.do-ai.run/v1/"
+GRADIENT_MODEL = "llama3.3-70b-instruct"
+
 # === 1. VMS ALGORITHM (ENHANCED FOR FIX 5) ===
 # Serving size ratios (fraction of 100g that represents one serving)
 # Used to scale per-100g nutrition data to realistic portions
@@ -386,7 +395,7 @@ def vision_live_scan_dark(image_bytes):
         st.markdown("""
             <div class="scanner-result">
                 <div class="scanner-result-title">⚠️ Configuration Error</div>
-                <div class="scanner-result-text">No OpenAI API key configured</div>
+                <div class="scanner-result-text">No Gemini API key configured</div>
             </div>
         """, unsafe_allow_html=True)
         return None
@@ -460,21 +469,21 @@ Return a JSON array like: ["Apple", "Banana", "Banana", "Orange", "Coca Cola"]
 If you see 2 apples, list "Apple" twice.
 Be PRECISE. Return ONLY the JSON array, no other text."""
 
-        client = OpenAI(api_key=api_key)
+        client = get_gemini_client()
 
-        print("[DEBUG] Calling OpenAI GPT-4o API...")
+        print(f"[DEBUG] Calling Gemini {GEMINI_MODEL} Vision API...")
 
         # Analyzing message
-        st.markdown("""
+        st.markdown(f"""
             <div class="scanner-result">
                 <div class="scanner-result-title">🔍 Analyzing Image</div>
-                <div class="scanner-result-text">Processing with GPT-4o Vision...</div>
+                <div class="scanner-result-text">Processing with Gemini 2.5 Flash Vision...</div>
             </div>
         """, unsafe_allow_html=True)
 
         try:
             response = client.chat.completions.create(
-                model="gpt-4o",
+                model=GEMINI_MODEL,
                 messages=[
                     {
                         "role": "user",
@@ -494,7 +503,7 @@ Be PRECISE. Return ONLY the JSON array, no other text."""
             )
 
             response_text = response.choices[0].message.content.strip()
-            print(f"[GPT-4o] Raw response: {response_text}")
+            print(f"[Gemini] Raw response: {response_text}")
 
             # Parse JSON array of items
             import re
@@ -502,12 +511,12 @@ Be PRECISE. Return ONLY the JSON array, no other text."""
             if json_match:
                 import json
                 detected_items = json.loads(json_match.group(0))
-                print(f"✅ [GPT-4o] Detected {len(detected_items)} items: {detected_items}")
+                print(f"✅ [Gemini] Detected {len(detected_items)} items: {detected_items}")
             else:
                 # Fallback to single item
                 product_name = response_text.replace('"', '').replace('*', '').replace('.', '')
                 detected_items = [product_name]
-                print(f"✅ [GPT-4o] Single item detected: {product_name}")
+                print(f"✅ [Gemini] Single item detected: {product_name}")
 
             # Detection message
             items_display = ", ".join(detected_items[:3])
@@ -600,9 +609,9 @@ def generate_health_insights(trend_data, history_data, days_range):
     Returns:
         list of insight dicts or None on error
     """
-    api_key = get_gemini_api_key()
-    if not api_key:
-        print("[INSIGHTS] No OpenAI API key configured")
+    client = get_gemini_client()
+    if not client:
+        print("[INSIGHTS] No Gemini API key configured")
         return None
 
     try:
@@ -651,11 +660,10 @@ Return ONLY valid JSON array, no other text:
   {{"emoji": "🎯", "title": "Short Title", "insight": "Your personalized observation...", "action": "Specific action step..."}}
 ]"""
 
-        client = OpenAI(api_key=api_key)
-        print(f"[INSIGHTS] Calling OpenAI GPT-4o with {total_items} items over {days_range} days...")
+        print(f"[INSIGHTS] Calling Gemini {GEMINI_MODEL} with {total_items} items over {days_range} days...")
 
         response = client.chat.completions.create(
-            model="gpt-4o",
+            model=GEMINI_MODEL,
             messages=[{"role": "user", "content": prompt}],
             max_tokens=800
         )
@@ -694,9 +702,9 @@ def generate_meal_plan(user_history, user_id):
     Returns:
         dict with day names as keys, list of meal dicts as values, or None on error
     """
-    api_key = get_gemini_api_key()
-    if not api_key:
-        print("[MEAL PLAN] No OpenAI API key configured")
+    client = get_gemini_client()
+    if not client:
+        print("[MEAL PLAN] No Gemini API key configured")
         return None
 
     try:
@@ -756,11 +764,10 @@ Return ONLY valid JSON, no other text:
   "Sunday": [...]
 }}"""
 
-        client = OpenAI(api_key=api_key)
-        print(f"[MEAL PLAN] Calling OpenAI GPT-4o for user {user_id}...")
+        print(f"[MEAL PLAN] Calling Gemini {GEMINI_MODEL} for user {user_id}...")
 
         response = client.chat.completions.create(
-            model="gpt-4o",
+            model=GEMINI_MODEL,
             messages=[{"role": "user", "content": prompt}],
             max_tokens=2000
         )
@@ -791,14 +798,13 @@ Return ONLY valid JSON, no other text:
 # === 3D. DAILY HEALTHY RECIPES AGENT ===
 def generate_daily_recipes():
     """
-    Generates 5 unique healthy recipe tiles for the day.
-    Uses OpenAI to pick random healthy recipes inspired by BBC Food.
-    Caches per day so recipes rotate daily but stay consistent within a day.
+    Generates 5 unique healthy recipe tiles for the day using Gemini 2.5 Flash.
+    Recipes are inspired by BBC Food and rotate daily.
     Returns list of 5 recipe dicts or None on error.
     """
-    api_key = get_gemini_api_key()
-    if not api_key:
-        print("[RECIPES] No OpenAI API key configured")
+    client = get_gemini_client()
+    if not client:
+        print("[RECIPES] No Gemini API key configured")
         return None
 
     try:
@@ -829,11 +835,10 @@ Return ONLY valid JSON array, no other text:
   {{"name": "Recipe Name", "cuisine": "Cuisine Type", "meal_type": "Dessert", "prep_time": "15 min", "description": "One sentence description", "key_ingredients": "3-4 main ingredients"}}
 ]"""
 
-        client = OpenAI(api_key=api_key)
-        print(f"[RECIPES] Calling OpenAI GPT-4o for daily recipes (day {day_of_year})...")
+        print(f"[RECIPES] Calling Gemini {GEMINI_MODEL} for daily recipes (day {day_of_year})...")
 
         response = client.chat.completions.create(
-            model="gpt-4o",
+            model=GEMINI_MODEL,
             messages=[{"role": "user", "content": prompt}],
             max_tokens=1000
         )
@@ -917,10 +922,17 @@ def get_all_calendar_data_db(username):
 
 # === 5. AUTH HELPERS ===
 def get_gemini_api_key():
-    """Now returns OpenAI API key (function name kept for import compatibility)"""
-    if hasattr(st, 'secrets') and "OPENAI_API_KEY" in st.secrets:
-        return st.secrets["OPENAI_API_KEY"]
-    return os.getenv("OPENAI_API_KEY")
+    """Returns Gemini API key from Streamlit secrets or environment."""
+    if hasattr(st, 'secrets') and "GEMINI_API_KEY" in st.secrets:
+        return st.secrets["GEMINI_API_KEY"]
+    return os.getenv("GEMINI_API_KEY")
+
+def get_gemini_client():
+    """OpenAI-compatible client pointed at Google Gemini."""
+    api_key = get_gemini_api_key()
+    if not api_key:
+        return None
+    return OpenAI(base_url=GEMINI_BASE_URL, api_key=api_key)
 
 def authenticate_user(username, password):
     try:
