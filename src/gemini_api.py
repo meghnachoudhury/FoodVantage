@@ -25,6 +25,12 @@ GRADIENT_MODEL = "llama3.3-70b-instruct"
 # System prompt that forces Gemini to return raw JSON without markdown wrapping
 _JSON_SYSTEM = "You are a JSON API. Return ONLY valid JSON with no markdown, no code fences, no explanation. Start your response directly with { or [."
 
+# Gemini 2.5 Flash uses "thinking" by default — thinking tokens count toward
+# max_tokens, so we need a generous budget to avoid empty responses when the
+# model spends most of the budget on reasoning.
+_MAX_TOKENS_VISION = 4096
+_MAX_TOKENS_TEXT = 8192
+
 def safe_parse_json(text, expected='object'):
     """Robustly parse JSON from Gemini — strips code fences, fixes trailing commas."""
     import json, re
@@ -504,19 +510,19 @@ Be PRECISE. Return ONLY the JSON array, no other text."""
 
         client = get_gemini_client()
 
-        print(f"[DEBUG] Calling Gemini {GEMINI_MODEL} Vision API...")
+        print(f"[DEBUG] Calling {_active_model()} Vision API...")
 
         # Analyzing message
         st.markdown(f"""
             <div class="scanner-result">
                 <div class="scanner-result-title">🔍 Analyzing Image</div>
-                <div class="scanner-result-text">Processing with Gemini 2.5 Flash Vision...</div>
+                <div class="scanner-result-text">Processing with {_active_model()} Vision...</div>
             </div>
         """, unsafe_allow_html=True)
 
         try:
             response = client.chat.completions.create(
-                model=GEMINI_MODEL,
+                model=_active_model(),
                 messages=[
                     {
                         "role": "user",
@@ -532,10 +538,15 @@ Be PRECISE. Return ONLY the JSON array, no other text."""
                         ]
                     }
                 ],
-                max_tokens=500
+                max_tokens=_MAX_TOKENS_VISION
             )
 
-            response_text = response.choices[0].message.content.strip()
+            response_text = (response.choices[0].message.content or "").strip()
+            finish_reason = getattr(response.choices[0], 'finish_reason', None)
+            print(f"[Gemini] finish_reason={finish_reason}, response length={len(response_text)}")
+            if not response_text:
+                print(f"[Gemini] WARNING: Empty response (finish_reason={finish_reason}). Thinking may have consumed entire token budget.")
+                raise Exception(f"AI returned empty response (finish_reason={finish_reason}). Try again.")
             print(f"[Gemini] Raw response: {response_text}")
 
             detected_items = safe_parse_json(response_text, expected='array')
@@ -689,18 +700,23 @@ Return ONLY valid JSON array, no other text:
   {{"emoji": "🎯", "title": "Short Title", "insight": "Your personalized observation...", "action": "Specific action step..."}}
 ]"""
 
-        print(f"[INSIGHTS] Calling Gemini {GEMINI_MODEL} with {total_items} items over {days_range} days...")
+        print(f"[INSIGHTS] Calling {_active_model()} with {total_items} items over {days_range} days...")
 
         response = client.chat.completions.create(
-            model=GEMINI_MODEL,
+            model=_active_model(),
             messages=[
                 {"role": "system", "content": _JSON_SYSTEM},
                 {"role": "user", "content": prompt}
             ],
-            max_tokens=800
+            max_tokens=_MAX_TOKENS_TEXT
         )
 
-        response_text = response.choices[0].message.content.strip()
+        response_text = (response.choices[0].message.content or "").strip()
+        finish_reason = getattr(response.choices[0], 'finish_reason', None)
+        print(f"[INSIGHTS] finish_reason={finish_reason}, response length={len(response_text)}")
+        if not response_text:
+            print(f"[INSIGHTS] WARNING: Empty response — thinking may have consumed token budget")
+            raise Exception(f"AI returned empty response (finish_reason={finish_reason}). Try again.")
         print(f"[INSIGHTS] Raw response: {response_text[:200]}...")
 
         insights = safe_parse_json(response_text, expected='array')
@@ -791,18 +807,23 @@ Return ONLY valid JSON, no other text:
   "Sunday": [...]
 }}"""
 
-        print(f"[MEAL PLAN] Calling Gemini {GEMINI_MODEL} for user {user_id}...")
+        print(f"[MEAL PLAN] Calling {_active_model()} for user {user_id}...")
 
         response = client.chat.completions.create(
-            model=GEMINI_MODEL,
+            model=_active_model(),
             messages=[
                 {"role": "system", "content": _JSON_SYSTEM},
                 {"role": "user", "content": prompt}
             ],
-            max_tokens=2000
+            max_tokens=_MAX_TOKENS_TEXT
         )
 
-        response_text = response.choices[0].message.content.strip()
+        response_text = (response.choices[0].message.content or "").strip()
+        finish_reason = getattr(response.choices[0], 'finish_reason', None)
+        print(f"[MEAL PLAN] finish_reason={finish_reason}, response length={len(response_text)}")
+        if not response_text:
+            print(f"[MEAL PLAN] WARNING: Empty response — thinking may have consumed token budget")
+            raise Exception(f"AI returned empty response (finish_reason={finish_reason}). Try again.")
         print(f"[MEAL PLAN] Raw response: {response_text[:200]}...")
 
         meal_plan = safe_parse_json(response_text, expected='object')
@@ -860,18 +881,23 @@ Return ONLY valid JSON array, no other text:
   {{"name": "Recipe Name", "cuisine": "Cuisine Type", "meal_type": "Dessert", "prep_time": "15 min", "description": "One sentence description", "key_ingredients": "3-4 main ingredients"}}
 ]"""
 
-        print(f"[RECIPES] Calling Gemini {GEMINI_MODEL} for daily recipes (day {day_of_year})...")
+        print(f"[RECIPES] Calling {_active_model()} for daily recipes (day {day_of_year})...")
 
         response = client.chat.completions.create(
-            model=GEMINI_MODEL,
+            model=_active_model(),
             messages=[
                 {"role": "system", "content": _JSON_SYSTEM},
                 {"role": "user", "content": prompt}
             ],
-            max_tokens=1000
+            max_tokens=_MAX_TOKENS_TEXT
         )
 
-        response_text = response.choices[0].message.content.strip()
+        response_text = (response.choices[0].message.content or "").strip()
+        finish_reason = getattr(response.choices[0], 'finish_reason', None)
+        print(f"[RECIPES] finish_reason={finish_reason}, response length={len(response_text)}")
+        if not response_text:
+            print(f"[RECIPES] WARNING: Empty response — thinking may have consumed token budget")
+            raise Exception(f"AI returned empty response (finish_reason={finish_reason}). Try again.")
         print(f"[RECIPES] Raw response: {response_text[:200]}...")
 
         recipes = safe_parse_json(response_text, expected='array')
@@ -946,17 +972,54 @@ def get_all_calendar_data_db(username):
 
 # === 5. AUTH HELPERS ===
 def get_gemini_api_key():
-    """Returns Gemini API key from Streamlit secrets or environment."""
+    """Returns AI API key. Checks GEMINI_API_KEY first, falls back to OPENAI_API_KEY."""
+    # Preferred: Gemini
     if hasattr(st, 'secrets') and "GEMINI_API_KEY" in st.secrets:
+        print("[AUTH] Found GEMINI_API_KEY in st.secrets")
         return st.secrets["GEMINI_API_KEY"]
-    return os.getenv("GEMINI_API_KEY")
+    val = os.getenv("GEMINI_API_KEY")
+    if val:
+        print("[AUTH] Found GEMINI_API_KEY in env")
+        return val
+    # Fallback: OpenAI (for environments not yet migrated)
+    if hasattr(st, 'secrets') and "OPENAI_API_KEY" in st.secrets:
+        print("[AUTH] Found OPENAI_API_KEY in st.secrets (fallback)")
+        return st.secrets["OPENAI_API_KEY"]
+    val = os.getenv("OPENAI_API_KEY")
+    if val:
+        print("[AUTH] Found OPENAI_API_KEY in env (fallback)")
+        return val
+    # List available secret keys for debugging
+    if hasattr(st, 'secrets'):
+        available = [k for k in st.secrets if 'key' in k.lower() or 'api' in k.lower()]
+        print(f"[AUTH] WARNING: No API key found. Available secret keys containing 'key'/'api': {available}")
+    else:
+        print("[AUTH] WARNING: No API key found and st.secrets not available")
+    return None
+
+def _using_gemini_key():
+    """True when a native GEMINI_API_KEY is available (not the OpenAI fallback)."""
+    if hasattr(st, 'secrets') and "GEMINI_API_KEY" in st.secrets:
+        return True
+    return bool(os.getenv("GEMINI_API_KEY"))
+
+def _active_model():
+    """Return the model name matching whichever API key is configured."""
+    model = GEMINI_MODEL if _using_gemini_key() else "gpt-4o"
+    return model
 
 def get_gemini_client():
-    """OpenAI-compatible client pointed at Google Gemini."""
+    """OpenAI-compatible client — auto-detects Gemini or OpenAI key."""
     api_key = get_gemini_api_key()
     if not api_key:
+        print("[CLIENT] ERROR: No API key available — all AI agents will be disabled")
         return None
-    return OpenAI(base_url=GEMINI_BASE_URL, api_key=api_key)
+    if _using_gemini_key():
+        print(f"[CLIENT] Using Gemini endpoint: model={GEMINI_MODEL}, base_url={GEMINI_BASE_URL}")
+        return OpenAI(base_url=GEMINI_BASE_URL, api_key=api_key)
+    # Fallback: direct OpenAI (default base_url)
+    print("[CLIENT] Using OpenAI endpoint (fallback): model=gpt-4o")
+    return OpenAI(api_key=api_key)
 
 def authenticate_user(username, password):
     try:
