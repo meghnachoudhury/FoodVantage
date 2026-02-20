@@ -557,7 +557,7 @@ with st.sidebar:
     nav_items = [
         ('dashboard', '🏠', 'Dashboard'),
         ('calendar', '📅', 'Calendar'),
-        ('log',       '🍽', 'Meal Plan'),
+        ('log',       '🍳', 'Cook With It'),
     ]
     st.markdown('<div class="sidebar-nav">', unsafe_allow_html=True)
     for pg, icon, label in nav_items:
@@ -575,12 +575,12 @@ with st.sidebar:
     streak_pct = min(day_streak * 10, 100)
     st.markdown(f"""
         <div class='streak-card'>
-            <div class='streak-header'>&#128293; {day_streak}-day streak</div>
-            <div class='streak-sub'>{'Keep it going!' if day_streak > 0 else 'Start logging to build your streak!'}</div>
+            <div class='streak-header'>&#128722; {day_streak}-haul streak</div>
+            <div class='streak-sub'>{'Consecutive healthy hauls!' if day_streak > 0 else 'Start a haul to build your streak!'}</div>
             <div class='streak-bar-bg'>
                 <div class='streak-bar-fill' style='width:{streak_pct}%'></div>
             </div>
-            <div class='streak-milestone'>{day_streak} / 10 days to next milestone</div>
+            <div class='streak-milestone'>{day_streak} / 10 hauls to next milestone</div>
             <div class='streak-stats'>
                 <div class='streak-stat'>
                     <div class='streak-stat-val'>{total_items}</div>
@@ -604,7 +604,8 @@ if st.session_state.page == 'dashboard':
     st.markdown(f"""
         <div style='margin-bottom:4px;'>
             <h2 style='margin:0; font-weight:800; font-size:1.8rem;'>Dashboard</h2>
-            <div style='color:{C["text_muted"]}; font-size:0.85rem;'>{now.strftime('%A, %B %d, %Y')} &middot; Track smarter. Live better.</div>
+            <div style='color:{C["text_muted"]}; font-size:0.85rem;'>{now.strftime('%A, %B %d, %Y')}</div>
+            <div style='color:{C["teal"]}; font-size:0.95rem; font-weight:600; margin-top:2px;'>Plan your food before you buy. &middot; Track smarter. Live better.</div>
         </div>
     """, unsafe_allow_html=True)
 
@@ -627,15 +628,15 @@ if st.session_state.page == 'dashboard':
                 <div class='stat-sub'>overall average</div>
             </div>
             <div class='stat-card'>
-                <div class='stat-label'>Day Streak</div>
-                <div class='stat-value' style='color:{C["teal"]};'>{day_streak} <span class='stat-unit'>day{"s" if day_streak != 1 else ""}</span></div>
-                <div class='stat-sub'>of healthy eating</div>
+                <div class='stat-label'>Haul Streak</div>
+                <div class='stat-value' style='color:{C["teal"]};'>{day_streak} <span class='stat-unit'>haul{"s" if day_streak != 1 else ""}</span></div>
+                <div class='stat-sub'>healthy shopping hauls</div>
             </div>
         </div>
     """, unsafe_allow_html=True)
 
     # Active Focus Scanner
-    st.markdown(f"<h3 style='font-weight:700; margin-top:24px;'>Active Focus Scanner</h3>", unsafe_allow_html=True)
+    st.markdown(f"<h3 style='font-weight:700; margin-top:24px;'>&#128722; Grocery Scanner</h3>", unsafe_allow_html=True)
 
     if not st.session_state.camera_active:
         # Scanner viewfinder
@@ -769,7 +770,7 @@ if st.session_state.page == 'dashboard':
 
             col1, col2 = st.columns(2)
             with col1:
-                if st.button("Log to My Journey", use_container_width=True):
+                if st.button("Add to This Haul", use_container_width=True):
                     add_calendar_item_db(
                         st.session_state.user_id,
                         datetime.now().strftime("%Y-%m-%d"),
@@ -863,8 +864,8 @@ if st.session_state.page == 'dashboard':
                             <i class='fa-solid fa-heart-pulse' style='color:{C["teal"]}; font-size:1rem;'></i>
                         </div>
                         <div>
-                            <div style='font-weight:700; font-size:0.95rem;'>AI Health Coach</div>
-                            <div style='font-size:0.7rem; color:{C["text_muted"]};'>Personalized insights</div>
+                            <div style='font-weight:700; font-size:0.95rem;'>Grocery Health Coach</div>
+                            <div style='font-size:0.7rem; color:{C["text_muted"]};'>Score your shopping habits</div>
                         </div>
                     </div>
             """, unsafe_allow_html=True)
@@ -902,8 +903,8 @@ if st.session_state.page == 'dashboard':
                             <i class='fa-solid fa-utensils' style='color:{C["olive"]}; font-size:1rem;'></i>
                         </div>
                         <div>
-                            <div style='font-weight:700; font-size:0.95rem;'>Healthy Recipes</div>
-                            <div style='font-size:0.7rem; color:{C["text_muted"]};'>Daily meal inspiration</div>
+                            <div style='font-weight:700; font-size:0.95rem;'>Cook With Your Haul</div>
+                            <div style='font-size:0.7rem; color:{C["text_muted"]};'>Recipe ideas from what you buy</div>
                         </div>
                     </div>
             """, unsafe_allow_html=True)
@@ -934,7 +935,7 @@ if st.session_state.page == 'dashboard':
         if all_data and len(all_data) > 0:
             st.info(f"You have {len(all_data)} logged items, but none in the last {days} day(s). Try a different time range.")
         else:
-            st.info("No data yet. Start scanning and logging items!")
+            st.info("No grocery hauls yet. Use the Grocery Scanner or Grocery Planner to log your first haul!")
 
 
 # ============================
@@ -958,8 +959,9 @@ elif st.session_state.page == 'calendar':
 
     st.markdown(f"""
         <div style='margin-bottom:16px;'>
-            <h2 style='margin:0; font-weight:800; font-size:1.8rem;'><i class='fa-regular fa-calendar' style='color:{C["teal"]}; margin-right:8px;'></i>Grocery Calendar</h2>
-            <div style='color:{C["text_muted"]}; font-size:0.85rem;'>{len(unique_dates)} days tracked &middot; {total_logged} items logged total</div>
+            <h2 style='margin:0; font-weight:800; font-size:1.8rem;'><i class='fa-solid fa-cart-shopping' style='color:{C["teal"]}; margin-right:8px;'></i>Grocery Planner</h2>
+            <div style='color:{C["teal"]}; font-size:0.9rem; font-weight:600; margin-top:2px;'>Know your health score before it hits your cart.</div>
+            <div style='color:{C["text_muted"]}; font-size:0.8rem; margin-top:2px;'>{len(unique_dates)} hauls tracked &middot; {total_logged} items scanned total</div>
         </div>
     """, unsafe_allow_html=True)
 
@@ -980,12 +982,12 @@ elif st.session_state.page == 'calendar':
         st.markdown(f"""
             <div style='margin-bottom:16px;'>
                 <h4 style='font-weight:700; margin:0;'>{sel_date.strftime('%b %d, %Y')}</h4>
-                <div style='color:{C["text_muted"]}; font-size:0.8rem;'>{item_count} item{"s" if item_count != 1 else ""} logged</div>
+                <div style='color:{C["text_muted"]}; font-size:0.8rem;'>{item_count} item{"s" if item_count != 1 else ""} in haul</div>
             </div>
         """, unsafe_allow_html=True)
 
         # Add item
-        st.markdown(f"<div style='font-size:0.75rem; font-weight:600; color:{C['text_muted']}; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px;'>Add Item to This Day</div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='font-size:0.75rem; font-weight:600; color:{C['text_muted']}; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px;'>Add to This Haul</div>", unsafe_allow_html=True)
         search_item = st.text_input("Search for an item", key="calendar_search", placeholder="e.g., banana, avocado...", label_visibility="collapsed")
 
         if search_item:
@@ -1018,7 +1020,7 @@ elif st.session_state.page == 'calendar':
 
         # Items for this day
         st.markdown(f"<div style='height:12px;'></div>", unsafe_allow_html=True)
-        st.markdown(f"<div style='font-size:0.75rem; font-weight:600; color:{C['text_muted']}; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px;'>Items for This Day</div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='font-size:0.75rem; font-weight:600; color:{C['text_muted']}; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px;'>Items in This Haul</div>", unsafe_allow_html=True)
         if items:
             for iid, name, score_val, cat in items:
                 clr = score_color(score_val)
@@ -1038,7 +1040,7 @@ elif st.session_state.page == 'calendar':
                         delete_item_db(iid)
                         st.rerun()
         else:
-            st.markdown(f"<div style='color:{C['text_muted']}; font-size:0.85rem; padding:12px;'>No items for this date. Add items above!</div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='color:{C['text_muted']}; font-size:0.85rem; padding:12px;'>No grocery haul logged for this date. Search above to add items before you shop!</div>", unsafe_allow_html=True)
 
 
 # ============================
@@ -1065,12 +1067,13 @@ elif st.session_state.page == 'log':
 
     st.markdown(f"""
         <div style='margin-bottom:8px;'>
-            <h2 style='margin:0; font-weight:800; font-size:1.8rem;'><i class='fa-regular fa-clock' style='color:{C["teal"]}; margin-right:8px;'></i>Meal Plan</h2>
+            <h2 style='margin:0; font-weight:800; font-size:1.8rem;'><i class='fa-solid fa-bowl-food' style='color:{C["teal"]}; margin-right:8px;'></i>Cook With Your Groceries</h2>
             <div style='display:flex; gap:8px; margin-top:6px;'>
                 <span style='background:rgba(76,175,80,0.15); color:{C["green"]}; padding:3px 10px; border-radius:8px; font-size:0.75rem; font-weight:600;'>{healthy_count} healthy</span>
                 <span style='background:rgba(249,168,37,0.15); color:{C["yellow"]}; padding:3px 10px; border-radius:8px; font-size:0.75rem; font-weight:600;'>{watch_count} to watch</span>
             </div>
-            <div style='color:{C["text_muted"]}; font-size:0.8rem; margin-top:6px;'>{len(history) if history else 0} items &middot; {unique_days} days</div>
+            <div style='color:{C["teal"]}; font-size:0.85rem; font-weight:600; margin-top:4px;'>Turn your grocery hauls into a week of healthy meals.</div>
+            <div style='color:{C["text_muted"]}; font-size:0.8rem; margin-top:2px;'>{len(history) if history else 0} items scanned &middot; {unique_days} hauls</div>
         </div>
     """, unsafe_allow_html=True)
 
@@ -1126,7 +1129,7 @@ elif st.session_state.page == 'log':
                         st.rerun()
             st.markdown("</div>", unsafe_allow_html=True)
     else:
-        st.markdown(f"<div style='color:{C['text_muted']}; font-size:0.9rem; padding:20px;'>No history yet. Start scanning and logging items!</div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='color:{C['text_muted']}; font-size:0.9rem; padding:20px;'>No grocery hauls yet. Scan items in the Grocery Planner to get started!</div>", unsafe_allow_html=True)
 
     # AI Meal Planning Agent
     st.markdown(f"<div style='height:16px;'></div>", unsafe_allow_html=True)
@@ -1139,7 +1142,7 @@ elif st.session_state.page == 'log':
                 st.session_state.meal_plan = None; st.rerun()
 
     if not st.session_state.meal_plan:
-        st.markdown(f"<div style='color:{C['text_sec']}; font-size:0.85rem; margin-bottom:8px;'>Get a personalized 7-day meal plan based on your eating history.</div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='color:{C['text_sec']}; font-size:0.85rem; margin-bottom:8px;'>Based on what you've been buying, get a personalized 7-day meal plan tailored to your grocery hauls.</div>", unsafe_allow_html=True)
         if st.button("Generate AI Meal Plan", use_container_width=True, type="primary"):
             with st.spinner("Crafting your personalized meal plan..."):
                 try:

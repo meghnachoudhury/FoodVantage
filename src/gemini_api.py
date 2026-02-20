@@ -22,6 +22,36 @@ GEMINI_MODEL = "gemini-2.5-flash"
 GRADIENT_BASE_URL = "https://inference.do-ai.run/v1/"
 GRADIENT_MODEL = "llama3.3-70b-instruct"
 
+# System prompt that forces Gemini to return raw JSON without markdown wrapping
+_JSON_SYSTEM = "You are a JSON API. Return ONLY valid JSON with no markdown, no code fences, no explanation. Start your response directly with { or [."
+
+def safe_parse_json(text, expected='object'):
+    """Robustly parse JSON from Gemini — strips code fences, fixes trailing commas."""
+    import json, re
+    if not text:
+        return None
+    # Remove markdown code fences (```json ... ``` or ``` ... ```)
+    text = re.sub(r'```(?:json|python)?\s*', '', text)
+    text = re.sub(r'```', '', text)
+    text = text.strip()
+    # Fix trailing commas before ] or } — common LLM mistake
+    text = re.sub(r',\s*([}\]])', r'\1', text)
+    # Try full parse
+    try:
+        return json.loads(text)
+    except Exception:
+        pass
+    # Extract the first complete JSON block
+    pattern = r'\[[\s\S]*\]' if expected == 'array' else r'\{[\s\S]*\}'
+    match = re.search(pattern, text)
+    if match:
+        snippet = re.sub(r',\s*([}\]])', r'\1', match.group(0))
+        try:
+            return json.loads(snippet)
+        except Exception as e:
+            print(f"[JSON] Parse still failed: {e} | Snippet: {snippet[:300]}")
+    return None
+
 # === 1. VMS ALGORITHM (ENHANCED FOR FIX 5) ===
 # Serving size ratios (fraction of 100g that represents one serving)
 # Used to scale per-100g nutrition data to realistic portions
@@ -151,9 +181,10 @@ def calculate_overall_health_score(username):
 
 def calculate_day_streak(username):
     """
-    Calculate the number of logged dates where the average health score > 50/100.
-    Groups items by date, computes average VMS per date, converts to health score,
-    and counts dates where health score > 50.
+    Grocery Haul Streak: consecutive healthy shopping sessions counting back from
+    the most recent haul. A 'haul' is any day where items were logged.
+    Streak breaks on the first haul where avg health score < 50.
+    Gaps between hauls (days with no shopping) do NOT break the streak.
     """
     con = get_db_connection()
     try:
@@ -162,13 +193,15 @@ def calculate_day_streak(username):
             FROM calendar
             WHERE username = ?
             GROUP BY date
-            ORDER BY date ASC
+            ORDER BY date DESC
         """, [username]).fetchall()
         streak = 0
         for date, avg_score in results:
             health_score = vms_to_health_score(avg_score)
-            if health_score > 50:
+            if health_score >= 50:
                 streak += 1
+            else:
+                break  # Consecutive streak broken — stop counting
         return streak
     except Exception as e:
         print(f"[STREAK ERROR] {e}")
@@ -505,17 +538,13 @@ Be PRECISE. Return ONLY the JSON array, no other text."""
             response_text = response.choices[0].message.content.strip()
             print(f"[Gemini] Raw response: {response_text}")
 
-            # Parse JSON array of items
-            import re
-            json_match = re.search(r'\[.*?\]', response_text, re.DOTALL)
-            if json_match:
-                import json
-                detected_items = json.loads(json_match.group(0))
+            detected_items = safe_parse_json(response_text, expected='array')
+            if detected_items and isinstance(detected_items, list):
                 print(f"✅ [Gemini] Detected {len(detected_items)} items: {detected_items}")
             else:
-                # Fallback to single item
-                product_name = response_text.replace('"', '').replace('*', '').replace('.', '')
-                detected_items = [product_name]
+                # Fallback: treat whole response as single item name
+                product_name = response_text.replace('"', '').replace('`', '').replace('*', '').strip()
+                detected_items = [product_name] if product_name else ['food item']
                 print(f"✅ [Gemini] Single item detected: {product_name}")
 
             # Detection message
@@ -664,24 +693,22 @@ Return ONLY valid JSON array, no other text:
 
         response = client.chat.completions.create(
             model=GEMINI_MODEL,
-            messages=[{"role": "user", "content": prompt}],
+            messages=[
+                {"role": "system", "content": _JSON_SYSTEM},
+                {"role": "user", "content": prompt}
+            ],
             max_tokens=800
         )
 
         response_text = response.choices[0].message.content.strip()
         print(f"[INSIGHTS] Raw response: {response_text[:200]}...")
 
-        # Parse JSON response
-        import json
-        import re
-        json_match = re.search(r'\[.*\]', response_text, re.DOTALL)
-        if json_match:
-            insights = json.loads(json_match.group(0))
+        insights = safe_parse_json(response_text, expected='array')
+        if insights:
             print(f"✅ [INSIGHTS] Generated {len(insights)} insights")
             return insights
-        else:
-            print(f"❌ [INSIGHTS] Could not parse JSON from response")
-            return None
+        print(f"❌ [INSIGHTS] Could not parse JSON from response")
+        return None
 
     except Exception as e:
         print(f"❌ [INSIGHTS ERROR] {e}")
@@ -768,25 +795,23 @@ Return ONLY valid JSON, no other text:
 
         response = client.chat.completions.create(
             model=GEMINI_MODEL,
-            messages=[{"role": "user", "content": prompt}],
+            messages=[
+                {"role": "system", "content": _JSON_SYSTEM},
+                {"role": "user", "content": prompt}
+            ],
             max_tokens=2000
         )
 
         response_text = response.choices[0].message.content.strip()
         print(f"[MEAL PLAN] Raw response: {response_text[:200]}...")
 
-        # Parse JSON response
-        import json
-        import re
-        json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
-        if json_match:
-            meal_plan = json.loads(json_match.group(0))
-            total_meals = sum(len(v) for v in meal_plan.values())
+        meal_plan = safe_parse_json(response_text, expected='object')
+        if meal_plan:
+            total_meals = sum(len(v) for v in meal_plan.values() if isinstance(v, list))
             print(f"✅ [MEAL PLAN] Generated plan with {total_meals} meals across {len(meal_plan)} days")
             return meal_plan
-        else:
-            print(f"❌ [MEAL PLAN] Could not parse JSON from response")
-            return None
+        print(f"❌ [MEAL PLAN] Could not parse JSON from response")
+        return None
 
     except Exception as e:
         print(f"❌ [MEAL PLAN ERROR] {e}")
@@ -839,23 +864,22 @@ Return ONLY valid JSON array, no other text:
 
         response = client.chat.completions.create(
             model=GEMINI_MODEL,
-            messages=[{"role": "user", "content": prompt}],
+            messages=[
+                {"role": "system", "content": _JSON_SYSTEM},
+                {"role": "user", "content": prompt}
+            ],
             max_tokens=1000
         )
 
         response_text = response.choices[0].message.content.strip()
         print(f"[RECIPES] Raw response: {response_text[:200]}...")
 
-        import json
-        import re
-        json_match = re.search(r'\[.*\]', response_text, re.DOTALL)
-        if json_match:
-            recipes = json.loads(json_match.group(0))
+        recipes = safe_parse_json(response_text, expected='array')
+        if recipes:
             print(f"✅ [RECIPES] Generated {len(recipes)} recipes")
             return recipes[:5]
-        else:
-            print(f"❌ [RECIPES] Could not parse JSON from response")
-            return None
+        print(f"❌ [RECIPES] Could not parse JSON from response")
+        return None
 
     except Exception as e:
         print(f"❌ [RECIPES ERROR] {e}")
