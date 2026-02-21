@@ -563,6 +563,13 @@ with st.sidebar:
     for pg, icon, label in nav_items:
         btn_type = "primary" if page == pg else "secondary"
         if st.button(f"{icon}  {label}", key=f"nav_{pg}", use_container_width=True, type=btn_type):
+            # Reset scanner state on any navigation so dashboard always opens fresh
+            st.session_state.camera_active = False
+            st.session_state.scan_results = None
+            st.session_state.selected_result = None
+            st.session_state.scanning = False
+            st.session_state.scan_status = None
+            st.session_state.detected_items = []
             st.session_state.page = pg
             st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
@@ -662,30 +669,12 @@ if st.session_state.page == 'dashboard':
             st.rerun()
     else:
         # Scanner active - show HUD
-        if st.session_state.selected_result:
-            ls = st.session_state.selected_result
-            clr = score_color(ls['vms_score'])
-            portion_label = " /serving" if needs_portion_size(ls['name']) else ""
+        # Inline analyzing indicator - auto-dismisses when items are detected
+        if st.session_state.get('scan_status') == "analyzing":
             st.markdown(f"""
-                <div class="hud-bubble">
-                    <div style="font-size: 0.85rem; margin-bottom: 4px; color:{C['text_sec']};">{ls['name']}</div>
-                    <div style="color:{clr}; font-size:2rem; font-weight:900;">{round(ls['vms_score'], 1)}{portion_label}</div>
-                    <div style="font-size: 0.75rem; color:{clr};">{ls['rating']}</div>
-                </div>
-            """, unsafe_allow_html=True)
-        elif st.session_state.get('scan_status') == "analyzing":
-            st.markdown(f"""
-                <div class="hud-bubble">
-                    <div style="font-size: 1.1rem; font-weight: 700; color:{C['text']};">Analyzing Image...</div>
-                    <div style="font-size: 0.8rem; color:{C['text_muted']}; margin-top: 4px;">Processing with AI</div>
-                </div>
-            """, unsafe_allow_html=True)
-        elif st.session_state.get('detected_items'):
-            items_text = ", ".join(st.session_state.detected_items[:3])
-            st.markdown(f"""
-                <div class="hud-bubble">
-                    <div style="font-size: 1.1rem; font-weight: 700; color:{C['text']};">Items Detected</div>
-                    <div style="font-size: 0.9rem; color:{C['teal']}; margin-top: 4px;">{items_text}</div>
+                <div style="text-align:center; padding:16px; margin:12px 0; background:{C['bg_card']}; border-radius:14px; border:1px solid {C['teal']};">
+                    <div style="font-size:1.1rem; font-weight:700; color:{C['teal']};">Analyzing with Gemini...</div>
+                    <div style="font-size:0.8rem; color:{C['text_muted']}; margin-top:6px;">Processing your scan</div>
                 </div>
             """, unsafe_allow_html=True)
 
@@ -725,64 +714,100 @@ if st.session_state.page == 'dashboard':
                 st.session_state.scan_status = None
             st.rerun()
 
-    # Scan results
+    # Scan results with full item details, nutrition, and grocery list integration
     if st.session_state.scan_results:
-        st.markdown(f"<h4 style='font-weight:700;'>Select Your Item</h4>", unsafe_allow_html=True)
-        st.markdown(f"<div style='color:{C['text_sec']}; font-size:0.85rem; margin-bottom:8px;'>Found {len(st.session_state.scan_results)} items in frame</div>", unsafe_allow_html=True)
+        st.markdown(f"<h4 style='font-weight:700; margin-top:16px;'>Scan Results</h4>", unsafe_allow_html=True)
+        st.markdown(f"<div style='color:{C['text_sec']}; font-size:0.85rem; margin-bottom:12px;'>Found {len(st.session_state.scan_results)} item(s) in frame</div>", unsafe_allow_html=True)
 
-        st.markdown('<div class="results-scroll-container">', unsafe_allow_html=True)
         for i, result in enumerate(st.session_state.scan_results):
-            clr = score_color(result['vms_score'])
-            selected = st.session_state.selected_result == result
+            vms = result['vms_score']
+            clr = score_color(vms)
+            health_score = vms_to_health_score(vms)
+            health_clr = score_color(health_score, 'health')
+            rating = result['rating']
             portion_label = " /serving" if needs_portion_size(result['name']) else ""
-            col1, col2 = st.columns([4, 1])
-            with col1:
-                if st.button(f"{i+1}. {result['name']}", key=f"select_{i}",
-                             type="primary" if selected else "secondary", use_container_width=True):
-                    st.session_state.selected_result = result
-                    st.rerun()
-            with col2:
-                st.markdown(f"<div style='text-align:center; color:{clr}; font-size:1.3rem; font-weight:bold; padding-top:4px;'>{round(result['vms_score'], 1)}{portion_label}</div>", unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
+            raw = result['raw']
+            scale = get_serving_scale(result['name'])
 
-    # Deep dive
-    if st.session_state.selected_result:
-        with st.expander("Metabolic Nutrient Deep Dive", expanded=True):
-            ls_raw = st.session_state.selected_result['raw']
-            item_name = st.session_state.selected_result['name']
-            scale = get_serving_scale(item_name)
-            if scale < 1.0:
-                serving_g = int(scale * 100)
-                st.markdown(f"**Clinical Data** *(per serving ~{serving_g}g)*")
-            else:
-                st.markdown("**Clinical Data** *(per 100g)*")
+            # Extract nutrition data
+            cal = round(float(raw[2] or 0) * scale, 1)
+            sug = round(float(raw[3] or 0) * scale, 1)
+            fib = round(float(raw[4] or 0) * scale, 1)
+            prot = round(float(raw[5] or 0) * scale, 1)
+            fat_val = round(float(raw[6] or 0) * scale, 1)
+            sod = round(float(raw[7] or 0) * scale, 1)
+            serving_note = f"per ~{int(scale * 100)}g serving" if scale < 1.0 else "per 100g"
 
-            c1, c2, c3 = st.columns(3)
-            c1.metric("Calories", f"{round(float(ls_raw[2] or 0) * scale, 1)}")
-            c2.metric("Sugar", f"{round(float(ls_raw[3] or 0) * scale, 1)}g")
-            c3.metric("Fiber", f"{round(float(ls_raw[4] or 0) * scale, 1)}g")
-            c4, c5, c6 = st.columns(3)
-            c4.metric("Protein", f"{round(float(ls_raw[5] or 0) * scale, 1)}g")
-            c5.metric("Fat", f"{round(float(ls_raw[6] or 0) * scale, 1)}g")
-            c6.metric("Sodium", f"{round(float(ls_raw[7] or 0) * scale, 1)}mg")
+            st.markdown(f"""
+                <div class='card' style='padding:16px; margin-bottom:4px; border-left:4px solid {clr};'>
+                    <div style='display:flex; justify-content:space-between; align-items:flex-start;'>
+                        <div>
+                            <div style='font-weight:700; font-size:1rem; margin-bottom:4px;'>{i+1}. {result['name']}</div>
+                            <span style='color:{clr}; font-size:0.8rem; font-weight:600;'>{rating}</span>
+                        </div>
+                        <div style='text-align:right;'>
+                            <div style='color:{clr}; font-size:1.6rem; font-weight:900;'>{round(vms, 1)}{portion_label}</div>
+                            <div style='font-size:0.7rem; color:{C["text_muted"]};'>VMS Score</div>
+                        </div>
+                    </div>
+                    <div style='display:flex; align-items:center; gap:8px; margin-top:8px;'>
+                        <div style='background:rgba(91,155,157,0.12); padding:4px 12px; border-radius:20px;'>
+                            <span style='color:{health_clr}; font-weight:700; font-size:0.85rem;'>{health_score}</span>
+                            <span style='color:{C["text_muted"]}; font-size:0.7rem;'>/100 Health Score</span>
+                        </div>
+                    </div>
+                    <div style='margin-top:12px; padding-top:10px; border-top:1px solid {C["border"]};'>
+                        <div style='font-size:0.7rem; font-weight:600; color:{C["text_muted"]}; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px;'>Nutrition ({serving_note})</div>
+                        <div style='display:grid; grid-template-columns:repeat(3, 1fr); gap:8px;'>
+                            <div style='text-align:center; padding:6px; background:{C["bg"]}; border-radius:8px;'>
+                                <div style='font-weight:700; font-size:0.9rem; color:{C["text"]};'>{cal}</div>
+                                <div style='font-size:0.65rem; color:{C["text_muted"]};'>Calories</div>
+                            </div>
+                            <div style='text-align:center; padding:6px; background:{C["bg"]}; border-radius:8px;'>
+                                <div style='font-weight:700; font-size:0.9rem; color:{C["text"]};'>{sug}g</div>
+                                <div style='font-size:0.65rem; color:{C["text_muted"]};'>Sugar</div>
+                            </div>
+                            <div style='text-align:center; padding:6px; background:{C["bg"]}; border-radius:8px;'>
+                                <div style='font-weight:700; font-size:0.9rem; color:{C["text"]};'>{fib}g</div>
+                                <div style='font-size:0.65rem; color:{C["text_muted"]};'>Fiber</div>
+                            </div>
+                            <div style='text-align:center; padding:6px; background:{C["bg"]}; border-radius:8px;'>
+                                <div style='font-weight:700; font-size:0.9rem; color:{C["text"]};'>{prot}g</div>
+                                <div style='font-size:0.65rem; color:{C["text_muted"]};'>Protein</div>
+                            </div>
+                            <div style='text-align:center; padding:6px; background:{C["bg"]}; border-radius:8px;'>
+                                <div style='font-weight:700; font-size:0.9rem; color:{C["text"]};'>{fat_val}g</div>
+                                <div style='font-size:0.65rem; color:{C["text_muted"]};'>Fat</div>
+                            </div>
+                            <div style='text-align:center; padding:6px; background:{C["bg"]}; border-radius:8px;'>
+                                <div style='font-weight:700; font-size:0.9rem; color:{C["text"]};'>{sod}mg</div>
+                                <div style='font-size:0.65rem; color:{C["text_muted"]};'>Sodium</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
 
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.button("Add to This Haul", use_container_width=True):
-                    add_calendar_item_db(
-                        st.session_state.user_id,
-                        datetime.now().strftime("%Y-%m-%d"),
-                        st.session_state.selected_result['name'],
-                        round(st.session_state.selected_result['vms_score'], 1)
-                    )
-                    st.success("Added!")
-            with col2:
-                if st.button("Scan Again", use_container_width=True):
-                    st.session_state.scan_results = None
-                    st.session_state.selected_result = None
-                    st.session_state.scanning = True
-                    st.session_state.detected_items = []
-                    st.rerun()
+            # Add to Grocery List button for each scanned item
+            if st.button(f"+ Add to Grocery List", key=f"scan_add_{i}", use_container_width=True):
+                add_calendar_item_db(
+                    st.session_state.user_id,
+                    datetime.now().strftime("%Y-%m-%d"),
+                    result['name'],
+                    round(vms, 1)
+                )
+                st.success(f"Added {result['name']} to today's grocery list!")
+                time.sleep(0.5)
+                st.rerun()
+
+        # Scan Again button
+        st.markdown(f"<div style='height:8px;'></div>", unsafe_allow_html=True)
+        if st.button("Scan Again", use_container_width=True, key="scan_again_btn"):
+            st.session_state.scan_results = None
+            st.session_state.selected_result = None
+            st.session_state.scanning = True
+            st.session_state.detected_items = []
+            st.rerun()
 
     # Health Trends - header with tabs on the right
     col_trends_title, col_trends_tabs = st.columns([2, 1])
