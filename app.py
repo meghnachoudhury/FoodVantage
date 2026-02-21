@@ -19,7 +19,8 @@ from gemini_api import (
     add_calendar_item_db, get_calendar_items_db, delete_item_db,
     get_log_history_db, create_user,
     vms_to_health_score, calculate_overall_health_score, calculate_day_streak,
-    get_total_items_logged, get_items_today
+    get_total_items_logged, get_items_today,
+    get_user_allergies, save_user_allergies, check_item_allergies, ALLERGY_KEYWORDS
 )
 from streamlit_back_camera_input import back_camera_input
 
@@ -42,6 +43,11 @@ if 'ai_insights' not in st.session_state: st.session_state.ai_insights = None
 if 'meal_plan' not in st.session_state: st.session_state.meal_plan = None
 if 'daily_recipes' not in st.session_state: st.session_state.daily_recipes = None
 if 'recipes_date' not in st.session_state: st.session_state.recipes_date = None
+if 'user_allergies' not in st.session_state: st.session_state.user_allergies = None
+if 'allergy_popup_open' not in st.session_state: st.session_state.allergy_popup_open = False
+if '_loading_insights' not in st.session_state: st.session_state._loading_insights = False
+if '_loading_recipes' not in st.session_state: st.session_state._loading_recipes = False
+if '_loading_meal_plan' not in st.session_state: st.session_state._loading_meal_plan = False
 
 # --- DARK THEME COLOR PALETTE ---
 C = {
@@ -495,6 +501,86 @@ st.markdown(f"""
         font-weight: 600 !important;
         box-shadow: none !important;
     }}
+
+    /* === FOCUS SQUARE OVERLAY (scanner) === */
+    .focus-overlay {{
+        position: relative;
+        margin-top: -280px;
+        height: 260px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        pointer-events: none;
+        z-index: 10;
+    }}
+    .focus-square {{
+        width: 180px;
+        height: 180px;
+        position: relative;
+    }}
+    .focus-sq-corner {{
+        position: absolute;
+        width: 28px;
+        height: 28px;
+        border-color: {C['teal']};
+        border-style: solid;
+    }}
+    .fsq-tl {{ top:0; left:0; border-width:3px 0 0 3px; border-radius:6px 0 0 0; }}
+    .fsq-tr {{ top:0; right:0; border-width:3px 3px 0 0; border-radius:0 6px 0 0; }}
+    .fsq-bl {{ bottom:0; left:0; border-width:0 0 3px 3px; border-radius:0 0 0 6px; }}
+    .fsq-br {{ bottom:0; right:0; border-width:0 3px 3px 0; border-radius:0 0 6px 0; }}
+    .focus-label {{
+        position: absolute;
+        bottom: -22px;
+        left: 50%;
+        transform: translateX(-50%);
+        font-size: 0.65rem;
+        color: {C['teal']};
+        font-weight: 600;
+        white-space: nowrap;
+        text-shadow: 0 1px 3px rgba(0,0,0,0.6);
+    }}
+
+    /* === AI LOADING INDICATOR === */
+    @keyframes loading-pulse {{
+        0%, 100% {{ opacity: 0.5; }}
+        50% {{ opacity: 1; }}
+    }}
+    .ai-loading {{
+        text-align: center;
+        padding: 20px;
+        animation: loading-pulse 1.5s ease-in-out infinite;
+    }}
+    .ai-loading-text {{
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: {C['teal']};
+    }}
+    .ai-loading-sub {{
+        font-size: 0.75rem;
+        color: {C['text_muted']};
+        margin-top: 4px;
+    }}
+
+    /* === ALLERGY ALERT === */
+    .allergy-alert {{
+        background: rgba(229,57,53,0.1);
+        border: 1px solid rgba(229,57,53,0.3);
+        border-radius: 10px;
+        padding: 10px 14px;
+        margin-top: 8px;
+        margin-bottom: 4px;
+    }}
+    .allergy-alert-title {{
+        font-weight: 700;
+        font-size: 0.8rem;
+        color: {C['red']};
+    }}
+    .allergy-alert-text {{
+        font-size: 0.75rem;
+        color: {C['text_sec']};
+        margin-top: 2px;
+    }}
     </style>
 """, unsafe_allow_html=True)
 
@@ -608,6 +694,10 @@ with st.sidebar:
 # DASHBOARD PAGE
 # ============================
 if st.session_state.page == 'dashboard':
+    # Load user allergies if not cached
+    if st.session_state.user_allergies is None:
+        st.session_state.user_allergies = get_user_allergies(st.session_state.user_id)
+
     # Header
     now = datetime.now()
     st.markdown(f"""
@@ -618,11 +708,41 @@ if st.session_state.page == 'dashboard':
         </div>
     """, unsafe_allow_html=True)
 
+    # Allergy information button
+    if st.button("⚠️  Add Your Allergy Information", use_container_width=True, key="allergy_toggle_btn"):
+        st.session_state.allergy_popup_open = not st.session_state.allergy_popup_open
+        st.rerun()
+
+    if st.session_state.allergy_popup_open:
+        st.markdown(f"""
+            <div class='card' style='border:1px solid {C["yellow"]}; padding:16px;'>
+                <div style='font-weight:700; font-size:0.95rem; margin-bottom:10px;'>Select Your Allergies</div>
+                <div style='font-size:0.75rem; color:{C["text_muted"]}; margin-bottom:12px;'>Check all that apply. This helps us flag potential allergens in your scans and searches.</div>
+            </div>
+        """, unsafe_allow_html=True)
+        allergy_options = list(ALLERGY_KEYWORDS.keys())
+        current_allergies = st.session_state.user_allergies or []
+        selected_allergies = []
+        cols = st.columns(2)
+        for idx, allergy in enumerate(allergy_options):
+            with cols[idx % 2]:
+                checked = allergy in current_allergies
+                if st.checkbox(allergy, value=checked, key=f"allergy_cb_{idx}"):
+                    selected_allergies.append(allergy)
+        if st.button("Add to Your Allergy List", use_container_width=True, type="primary", key="save_allergies_btn"):
+            save_user_allergies(st.session_state.user_id, selected_allergies)
+            st.session_state.user_allergies = selected_allergies
+            st.session_state.allergy_popup_open = False
+            st.success(f"Saved {len(selected_allergies)} allergy/allergies!")
+            time.sleep(0.5)
+            st.rerun()
+
     # Stat cards
     overall_score = calculate_overall_health_score(st.session_state.user_id)
     day_streak = calculate_day_streak(st.session_state.user_id)
     items_today = get_items_today(st.session_state.user_id)
     sc = score_color(overall_score, 'health')
+    allergy_count = len(st.session_state.user_allergies) if st.session_state.user_allergies else 0
 
     st.markdown(f"""
         <div class='stat-cards'>
@@ -640,6 +760,11 @@ if st.session_state.page == 'dashboard':
                 <div class='stat-label'>Haul Streak</div>
                 <div class='stat-value' style='color:{C["teal"]};'>{day_streak} <span class='stat-unit'>haul{"s" if day_streak != 1 else ""}</span></div>
                 <div class='stat-sub'>healthy shopping hauls</div>
+            </div>
+            <div class='stat-card'>
+                <div class='stat-label'>Allergies</div>
+                <div class='stat-value' style='color:{C["yellow"] if allergy_count > 0 else C["text_muted"]};'>{allergy_count} <span class='stat-unit'>logged</span></div>
+                <div class='stat-sub'>allergens tracked</div>
             </div>
         </div>
     """, unsafe_allow_html=True)
@@ -698,6 +823,19 @@ if st.session_state.page == 'dashboard':
         """, unsafe_allow_html=True)
 
         image = back_camera_input(key="hud_cam")
+
+        # Focus square overlay - scrolls with the camera widget (no position:fixed)
+        st.markdown(f"""
+            <div class="focus-overlay">
+                <div class="focus-square">
+                    <div class="focus-sq-corner fsq-tl"></div>
+                    <div class="focus-sq-corner fsq-tr"></div>
+                    <div class="focus-sq-corner fsq-bl"></div>
+                    <div class="focus-sq-corner fsq-br"></div>
+                    <div class="focus-label">Focus here</div>
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
 
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
@@ -807,6 +945,18 @@ if st.session_state.page == 'dashboard':
                     </div>
                 </div>
             """, unsafe_allow_html=True)
+
+            # Allergy alert for scanned item
+            user_allergies = st.session_state.user_allergies or []
+            matched_allergies = check_item_allergies(result['name'], user_allergies)
+            if matched_allergies:
+                allergy_names = ", ".join(matched_allergies)
+                st.markdown(f"""
+                    <div class='allergy-alert'>
+                        <div class='allergy-alert-title'>⚠️ Potential Allergy Detected</div>
+                        <div class='allergy-alert-text'>This item may contain: <strong>{allergy_names}</strong>. Please verify ingredients.</div>
+                    </div>
+                """, unsafe_allow_html=True)
 
             # Add to Grocery List button for each scanned item
             if st.button(f"+ Add to Grocery List", key=f"scan_add_{i}", use_container_width=True):
@@ -921,15 +1071,23 @@ if st.session_state.page == 'dashboard':
                     st.markdown(f"<div style='font-size:0.8rem; margin-bottom:8px;'><strong>{emoji} {title}</strong><br><span style='color:{C['text_sec']};'>{body}</span></div>", unsafe_allow_html=True)
                 if st.button("Refresh Insights", key="refresh_insights", use_container_width=True):
                     st.session_state.ai_insights = None; st.rerun()
+            elif st.session_state._loading_insights:
+                st.markdown(f"""<div class='ai-loading'>
+                    <div class='ai-loading-text'>Hold on...fetching details</div>
+                    <div class='ai-loading-sub'>Analyzing your shopping patterns</div>
+                </div>""", unsafe_allow_html=True)
+                try:
+                    insights = generate_health_insights(raw, all_data, days)
+                    if insights:
+                        st.session_state.ai_insights = insights
+                    else: st.warning("Could not generate insights.")
+                except Exception as e: st.error(f"Error: {e}")
+                st.session_state._loading_insights = False
+                st.rerun()
             else:
                 if st.button("🧠  Get AI Insights", use_container_width=True, type="primary", key="get_insights_btn"):
-                    with st.spinner("Analyzing your patterns..."):
-                        try:
-                            insights = generate_health_insights(raw, all_data, days)
-                            if insights:
-                                st.session_state.ai_insights = insights; st.rerun()
-                            else: st.warning("Could not generate insights.")
-                        except Exception as e: st.error(f"Error: {e}")
+                    st.session_state._loading_insights = True
+                    st.rerun()
 
             st.markdown("</div>", unsafe_allow_html=True)
 
@@ -969,17 +1127,24 @@ if st.session_state.page == 'dashboard':
                     </div>""", unsafe_allow_html=True)
                 if st.button("New Recipes", key="refresh_recipes", use_container_width=True):
                     st.session_state.daily_recipes = None; st.rerun()
+            elif st.session_state._loading_recipes:
+                st.markdown(f"""<div class='ai-loading'>
+                    <div class='ai-loading-text'>Hold on...fetching details</div>
+                    <div class='ai-loading-sub'>Finding healthy BBC Food recipes</div>
+                </div>""", unsafe_allow_html=True)
+                try:
+                    recipes = generate_daily_recipes()
+                    if recipes:
+                        st.session_state.daily_recipes = recipes
+                        st.session_state.recipes_date = today_str
+                    else: st.warning("Could not load recipes.")
+                except Exception as e: st.error(f"Error: {e}")
+                st.session_state._loading_recipes = False
+                st.rerun()
             else:
                 if st.button("🌿  Discover Recipes", use_container_width=True, type="primary", key="discover_recipes_btn"):
-                    with st.spinner("Finding healthy recipes..."):
-                        try:
-                            recipes = generate_daily_recipes()
-                            if recipes:
-                                st.session_state.daily_recipes = recipes
-                                st.session_state.recipes_date = today_str
-                                st.rerun()
-                            else: st.warning("Could not load recipes.")
-                        except Exception as e: st.error(f"Error: {e}")
+                    st.session_state._loading_recipes = True
+                    st.rerun()
 
             st.markdown("</div>", unsafe_allow_html=True)
 
@@ -988,6 +1153,15 @@ if st.session_state.page == 'dashboard':
             st.info(f"You have {len(all_data)} logged items, but none in the last {days} day(s). Try a different time range.")
         else:
             st.info("No grocery hauls yet. Use the Grocery Scanner or Grocery Planner to log your first haul!")
+
+    # Disclaimer at bottom of dashboard
+    st.markdown(f"""
+        <div style='text-align:center; padding:20px 16px 8px; margin-top:24px; border-top:1px solid {C["border"]};'>
+            <div style='font-size:0.75rem; color:{C["text_muted"]}; line-height:1.5;'>
+                While we are consistently and sincerely updating our algorithm, note that this is a grocery scanning app and will work best with grocery items, but approximate prepared food items.
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
 
 
 # ============================
@@ -1047,11 +1221,15 @@ elif st.session_state.page == 'calendar':
             filtered_results = [r for r in search_results if r['vms_score'] != 10.0] if search_results else []
             if filtered_results:
                 st.markdown('<div class="results-scroll-container">', unsafe_allow_html=True)
+                cal_user_allergies = get_user_allergies(st.session_state.user_id)
                 for idx, result in enumerate(filtered_results):
                     clr = score_color(result['vms_score'])
                     col_a, col_b, col_c = st.columns([3, 1, 0.6])
                     with col_a:
                         st.markdown(f"<span style='font-size:0.9rem;'>{result['name']}</span>", unsafe_allow_html=True)
+                        cal_matched = check_item_allergies(result['name'], cal_user_allergies)
+                        if cal_matched:
+                            st.markdown(f"<div style='font-size:0.7rem; color:{C['red']}; font-weight:600;'>⚠️ Potential allergy: {', '.join(cal_matched)} — verify ingredients</div>", unsafe_allow_html=True)
                     with col_b:
                         st.markdown(f"<div style='text-align:center; color:{clr}; font-weight:bold;'>{round(result['vms_score'], 1)}</div>", unsafe_allow_html=True)
                     with col_c:
@@ -1129,6 +1307,17 @@ elif st.session_state.page == 'log':
         </div>
     """, unsafe_allow_html=True)
 
+    # Display user allergies at top of meal plan
+    mp_allergies = get_user_allergies(st.session_state.user_id)
+    if mp_allergies:
+        allergy_names = ", ".join(mp_allergies)
+        st.markdown(f"""
+            <div class='card' style='padding:12px 16px; margin-bottom:12px; border-left:4px solid {C["yellow"]};'>
+                <div style='font-size:0.7rem; font-weight:600; color:{C["text_muted"]}; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px;'>Allergies</div>
+                <div style='font-size:0.85rem; color:{C["yellow"]}; font-weight:600;'>{allergy_names}</div>
+            </div>
+        """, unsafe_allow_html=True)
+
     if history:
         # Group items by date (with IDs for delete)
         from collections import OrderedDict
@@ -1193,17 +1382,25 @@ elif st.session_state.page == 'log':
             if st.button("Clear", key="clear_meal_plan", use_container_width=True):
                 st.session_state.meal_plan = None; st.rerun()
 
-    if not st.session_state.meal_plan:
+    if st.session_state._loading_meal_plan:
+        st.markdown(f"""<div class='ai-loading' style='padding:24px;'>
+            <div class='ai-loading-text'>Hold on...fetching details</div>
+            <div class='ai-loading-sub'>Crafting your personalized 7-day meal plan</div>
+        </div>""", unsafe_allow_html=True)
+        try:
+            history_data = get_log_history_db(st.session_state.user_id)
+            plan = generate_meal_plan(history_data, st.session_state.user_id)
+            if plan:
+                st.session_state.meal_plan = plan
+            else: st.warning("Could not generate meal plan.")
+        except Exception as e: st.error(f"Error: {e}")
+        st.session_state._loading_meal_plan = False
+        st.rerun()
+    elif not st.session_state.meal_plan:
         st.markdown(f"<div style='color:{C['text_sec']}; font-size:0.85rem; margin-bottom:8px;'>Based on what you've been buying, get a personalized 7-day meal plan tailored to your grocery hauls.</div>", unsafe_allow_html=True)
         if st.button("Generate AI Meal Plan", use_container_width=True, type="primary"):
-            with st.spinner("Crafting your personalized meal plan..."):
-                try:
-                    history_data = get_log_history_db(st.session_state.user_id)
-                    plan = generate_meal_plan(history_data, st.session_state.user_id)
-                    if plan:
-                        st.session_state.meal_plan = plan; st.rerun()
-                    else: st.warning("Could not generate meal plan.")
-                except Exception as e: st.error(f"Error: {e}")
+            st.session_state._loading_meal_plan = True
+            st.rerun()
 
     if st.session_state.meal_plan:
         day_order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
