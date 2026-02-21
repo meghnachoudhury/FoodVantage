@@ -840,10 +840,37 @@ Return ONLY valid JSON, no other text:
 
 
 # === 3D. DAILY HEALTHY RECIPES AGENT ===
+
+def fetch_bbc_food_url(recipe_name):
+    """
+    Search BBC Food for a real recipe matching the given name.
+    Returns the direct recipe URL if found, otherwise the search page URL.
+    """
+    import re
+    try:
+        query = recipe_name.replace(' ', '+')
+        search_url = f"https://www.bbc.co.uk/food/search?q={query}"
+        response = requests.get(search_url, timeout=5, headers={
+            'User-Agent': 'Mozilla/5.0 (compatible; FoodVantage/1.0)'
+        })
+        if response.status_code == 200:
+            # Extract the first recipe link from BBC Food search results
+            matches = re.findall(r'href="(/food/recipes/[^"]+)"', response.text)
+            if matches:
+                url = f"https://www.bbc.co.uk{matches[0]}"
+                print(f"[BBC FOOD] Found recipe URL for '{recipe_name}': {url}")
+                return url
+        print(f"[BBC FOOD] No direct match for '{recipe_name}', using search page")
+        return search_url
+    except Exception as e:
+        print(f"[BBC FOOD] Error fetching URL for '{recipe_name}': {e}")
+        return f"https://www.bbc.co.uk/food/search?q={recipe_name.replace(' ', '+')}"
+
+
 def generate_daily_recipes():
     """
     Generates 5 unique healthy recipe tiles for the day using Gemini 2.5 Flash.
-    Recipes are inspired by BBC Food and rotate daily.
+    Each recipe is matched to a real BBC Food page with a clickable link.
     Returns list of 5 recipe dicts or None on error.
     """
     client = get_gemini_client()
@@ -856,9 +883,9 @@ def generate_daily_recipes():
         day_of_year = today.timetuple().tm_yday
         week_number = today.isocalendar()[1]
 
-        prompt = f"""You are a healthy recipe curator inspired by BBC Food recipes. Today is {day_of_week}, day {day_of_year} of the year, week {week_number}.
+        prompt = f"""You are a healthy recipe curator. Today is {day_of_week}, day {day_of_year} of the year, week {week_number}.
 
-Generate exactly 5 unique, healthy food recipes for today. These should be real, practical recipes that someone could actually make.
+Suggest exactly 5 REAL recipes that exist on BBC Food (bbc.co.uk/food). Use actual recipe names as they appear on the BBC Food website so we can link to them.
 
 RULES:
 1. Each recipe must be DIFFERENT - no repeating ingredients or themes
@@ -868,6 +895,7 @@ RULES:
 5. Use the day number ({day_of_year}) as a seed - generate DIFFERENT recipes than you would for day {day_of_year - 1} or {day_of_year + 1}
 6. Include estimated prep time
 7. Keep recipe names concise (max 6 words)
+8. Use REAL BBC Food recipe names that actually exist on their website
 
 Return ONLY valid JSON array, no other text:
 [
@@ -899,8 +927,12 @@ Return ONLY valid JSON array, no other text:
 
         recipes = safe_parse_json(response_text, expected='array')
         if recipes:
-            print(f"✅ [RECIPES] Generated {len(recipes)} recipes")
-            return recipes[:5]
+            recipes = recipes[:5]
+            # Enrich each recipe with a real BBC Food URL
+            for recipe in recipes:
+                recipe['recipe_url'] = fetch_bbc_food_url(recipe.get('name', ''))
+            print(f"✅ [RECIPES] Generated {len(recipes)} recipes with BBC Food links")
+            return recipes
         raise Exception(f"AI returned non-JSON response: {response_text[:300]}")
 
     except Exception as e:

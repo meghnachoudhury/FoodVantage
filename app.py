@@ -912,9 +912,14 @@ if st.session_state.page == 'dashboard':
                     r_name = recipe.get('name', 'Recipe')
                     r_type = recipe.get('meal_type', '')
                     r_time = recipe.get('prep_time', '')
-                    r_query = r_name.replace(' ', '+').replace('&', '%26')
-                    r_url = f"https://www.google.com/search?q={r_query}+healthy+recipe"
-                    st.markdown(f"<div style='font-size:0.8rem; margin-bottom:8px;'><strong><a href='{r_url}' target='_blank' style='color:{C[\"text\"]}; text-decoration:underline;'>{r_name} ↗</a></strong><br><span style='color:{C[\"text_muted\"]}; font-size:0.7rem;'>{r_type} &middot; {r_time}</span></div>", unsafe_allow_html=True)
+                    r_desc = recipe.get('description', '')
+                    r_url = recipe.get('recipe_url', f"https://www.bbc.co.uk/food/search?q={r_name.replace(' ', '+')}")
+                    st.markdown(f"""<div style='font-size:0.8rem; margin-bottom:10px;'>
+                        <strong>{r_name}</strong><br>
+                        <span style='color:{C["text_sec"]}; font-size:0.75rem;'>{r_desc}</span><br>
+                        <span style='color:{C["text_muted"]}; font-size:0.7rem;'>{r_type} &middot; {r_time}</span><br>
+                        <a href='{r_url}' target='_blank' style='color:{C["teal"]}; font-size:0.75rem; text-decoration:none; font-weight:600;'>View full recipe on BBC Food &rarr;</a>
+                    </div>""", unsafe_allow_html=True)
                 if st.button("New Recipes", key="refresh_recipes", use_container_width=True):
                     st.session_state.daily_recipes = None; st.rerun()
             else:
