@@ -39,6 +39,7 @@ if 'trends_view' not in st.session_state: st.session_state.trends_view = 'weekly
 if 'scan_status' not in st.session_state: st.session_state.scan_status = None
 if 'detected_items' not in st.session_state: st.session_state.detected_items = []
 if '_captured_image' not in st.session_state: st.session_state._captured_image = None
+if 'scan_error' not in st.session_state: st.session_state.scan_error = None
 if 'ai_insights' not in st.session_state: st.session_state.ai_insights = None
 if 'meal_plan' not in st.session_state: st.session_state.meal_plan = None
 if 'daily_recipes' not in st.session_state: st.session_state.daily_recipes = None
@@ -502,45 +503,6 @@ st.markdown(f"""
         box-shadow: none !important;
     }}
 
-    /* === FOCUS SQUARE OVERLAY (scanner) === */
-    .focus-overlay {{
-        position: relative;
-        margin-top: -280px;
-        height: 260px;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        pointer-events: none;
-        z-index: 10;
-    }}
-    .focus-square {{
-        width: 180px;
-        height: 180px;
-        position: relative;
-    }}
-    .focus-sq-corner {{
-        position: absolute;
-        width: 28px;
-        height: 28px;
-        border-color: {C['teal']};
-        border-style: solid;
-    }}
-    .fsq-tl {{ top:0; left:0; border-width:3px 0 0 3px; border-radius:6px 0 0 0; }}
-    .fsq-tr {{ top:0; right:0; border-width:3px 3px 0 0; border-radius:0 6px 0 0; }}
-    .fsq-bl {{ bottom:0; left:0; border-width:0 0 3px 3px; border-radius:0 0 0 6px; }}
-    .fsq-br {{ bottom:0; right:0; border-width:0 3px 3px 0; border-radius:0 0 6px 0; }}
-    .focus-label {{
-        position: absolute;
-        bottom: -22px;
-        left: 50%;
-        transform: translateX(-50%);
-        font-size: 0.65rem;
-        color: {C['teal']};
-        font-weight: 600;
-        white-space: nowrap;
-        text-shadow: 0 1px 3px rgba(0,0,0,0.6);
-    }}
-
     /* === AI LOADING INDICATOR === */
     @keyframes loading-pulse {{
         0%, 100% {{ opacity: 0.5; }}
@@ -813,32 +775,35 @@ if st.session_state.page == 'dashboard':
                 </div>
             """, unsafe_allow_html=True)
 
+        # Show persistent scan error if one occurred
+        if st.session_state.get('scan_error'):
+            st.markdown(f"""
+                <div style="text-align:center; padding:14px; margin:12px 0; background:rgba(229,57,53,0.08); border-radius:14px; border:1px solid rgba(229,57,53,0.3);">
+                    <div style="font-size:1rem; font-weight:700; color:{C['red']};">{st.session_state.scan_error}</div>
+                    <div style="font-size:0.8rem; color:{C['text_muted']}; margin-top:6px;">Tap "Scan Again" below to retry</div>
+                </div>
+            """, unsafe_allow_html=True)
+
         st.markdown(f"""
             <div style="text-align: center; margin: 16px 0;">
                 <div style='background:{C["bg_card"]}; padding:10px 20px; border-radius:12px; display:inline-block; border:1px solid {C["border"]};'>
                     <i class='fa-solid fa-camera' style='color:{C["teal"]};'></i>
-                    <span style='color:{C["text_sec"]}; margin-left:8px; font-weight:500;'>Point camera at item and tap to scan</span>
+                    <span style='color:{C["text_sec"]}; margin-left:8px; font-weight:500;'>Place item anywhere in frame and tap to scan</span>
                 </div>
             </div>
         """, unsafe_allow_html=True)
 
         image = back_camera_input(key="hud_cam")
 
-        # Focus square overlay - scrolls with the camera widget (no position:fixed)
-        st.markdown(f"""
-            <div class="focus-overlay">
-                <div class="focus-square">
-                    <div class="focus-sq-corner fsq-tl"></div>
-                    <div class="focus-sq-corner fsq-tr"></div>
-                    <div class="focus-sq-corner fsq-bl"></div>
-                    <div class="focus-sq-corner fsq-br"></div>
-                    <div class="focus-label">Focus here</div>
-                </div>
-            </div>
-        """, unsafe_allow_html=True)
-
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
+            if st.session_state.get('scan_error'):
+                if st.button("Scan Again", use_container_width=True):
+                    st.session_state.scan_error = None
+                    st.session_state.scan_status = None
+                    st.session_state.scanning = True
+                    st.session_state._captured_image = None
+                    st.rerun()
             if st.button("Stop Scanning", use_container_width=True):
                 st.session_state.camera_active = False
                 st.session_state.scan_results = None
@@ -847,6 +812,7 @@ if st.session_state.page == 'dashboard':
                 st.session_state.scan_status = None
                 st.session_state.detected_items = []
                 st.session_state._captured_image = None
+                st.session_state.scan_error = None
                 st.rerun()
 
         # Scanning logic - two-phase: capture acknowledgement, then analyze
@@ -860,16 +826,27 @@ if st.session_state.page == 'dashboard':
         # Phase 2: Process captured image (runs on next rerun after acknowledgement shown)
         if st.session_state.get('scan_status') == "captured" and st.session_state.get('_captured_image'):
             st.session_state.scan_status = "analyzing"
-            results = vision_live_scan_dark(st.session_state._captured_image)
-            st.session_state._captured_image = None
-            if results:
-                st.session_state.scan_results = results
-                st.session_state.selected_result = results[0]
-                st.session_state.detected_items = [r['name'] for r in results[:5]]
+            try:
+                results = vision_live_scan_dark(st.session_state._captured_image)
+                st.session_state._captured_image = None
+                if results:
+                    st.session_state.scan_results = results
+                    st.session_state.selected_result = results[0]
+                    st.session_state.detected_items = [r['name'] for r in results[:5]]
+                    st.session_state.scan_status = None
+                    st.session_state.scan_error = None
+                else:
+                    st.session_state.scan_status = None
+                    st.session_state.scanning = True  # Allow retry on failure
+            except Exception as e:
+                error_msg = str(e)
+                if "429" in error_msg or "quota" in error_msg.lower() or "RESOURCE_EXHAUSTED" in error_msg:
+                    st.session_state.scan_error = "API limit reached — please try again in a moment"
+                else:
+                    st.session_state.scan_error = "Scan failed — please try again"
                 st.session_state.scan_status = None
-            else:
-                st.session_state.scan_status = None
-                st.session_state.scanning = True  # Allow retry on failure
+                st.session_state._captured_image = None
+                st.session_state.scanning = False
             st.rerun()
 
     # Scan results with full item details, nutrition, and grocery list integration

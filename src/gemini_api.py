@@ -3,6 +3,7 @@ import os
 import zipfile
 import streamlit as st
 import hashlib
+import threading
 from openai import OpenAI
 from dotenv import load_dotenv
 from PIL import Image
@@ -952,14 +953,21 @@ Return ONLY valid JSON array, no other text:
 
 
 # === 4. USER DB & TRENDS ===
-@st.cache_resource
+# Thread-local storage: each Streamlit worker thread gets its own DuckDB connection.
+# A single shared connection (e.g. @st.cache_resource) is NOT thread-safe — concurrent
+# writes from two simultaneous users cause race conditions and silent data corruption.
+_db_thread_local = threading.local()
+
 def get_db_connection():
-    con = duckdb.connect('/tmp/user_data.db', read_only=False)
-    con.execute("CREATE TABLE IF NOT EXISTS users (username VARCHAR PRIMARY KEY, password_hash VARCHAR)")
-    try: con.execute("CREATE SEQUENCE IF NOT EXISTS seq_cal_id START 1")
-    except: pass
-    con.execute("CREATE TABLE IF NOT EXISTS calendar (id INTEGER DEFAULT nextval('seq_cal_id'), username VARCHAR, date DATE, item_name VARCHAR, score FLOAT, category VARCHAR)")
-    return con
+    """Return a per-thread DuckDB connection to the user data store."""
+    if not getattr(_db_thread_local, 'con', None):
+        con = duckdb.connect('/tmp/user_data.db', read_only=False)
+        con.execute("CREATE TABLE IF NOT EXISTS users (username VARCHAR PRIMARY KEY, password_hash VARCHAR)")
+        try: con.execute("CREATE SEQUENCE IF NOT EXISTS seq_cal_id START 1")
+        except: pass
+        con.execute("CREATE TABLE IF NOT EXISTS calendar (id INTEGER DEFAULT nextval('seq_cal_id'), username VARCHAR, date DATE, item_name VARCHAR, score FLOAT, category VARCHAR)")
+        _db_thread_local.con = con
+    return _db_thread_local.con
 
 def _ensure_allergies_table():
     """Create allergies table if it doesn't exist (called outside cache)"""
