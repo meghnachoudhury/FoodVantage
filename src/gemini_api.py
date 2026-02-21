@@ -844,7 +844,7 @@ Return ONLY valid JSON, no other text:
 def fetch_bbc_food_url(recipe_name):
     """
     Search BBC Food for a real recipe matching the given name.
-    Returns the direct recipe URL if found, otherwise the search page URL.
+    Returns the direct recipe URL if found, otherwise None (recipe doesn't exist).
     """
     import re
     try:
@@ -860,11 +860,11 @@ def fetch_bbc_food_url(recipe_name):
                 url = f"https://www.bbc.co.uk{matches[0]}"
                 print(f"[BBC FOOD] Found recipe URL for '{recipe_name}': {url}")
                 return url
-        print(f"[BBC FOOD] No direct match for '{recipe_name}', using search page")
-        return search_url
+        print(f"[BBC FOOD] No match for '{recipe_name}' — skipping (no BBC Food page)")
+        return None
     except Exception as e:
         print(f"[BBC FOOD] Error fetching URL for '{recipe_name}': {e}")
-        return f"https://www.bbc.co.uk/food/search?q={recipe_name.replace(' ', '+')}"
+        return None
 
 
 def generate_daily_recipes():
@@ -928,11 +928,20 @@ Return ONLY valid JSON array, no other text:
         recipes = safe_parse_json(response_text, expected='array')
         if recipes:
             recipes = recipes[:5]
-            # Enrich each recipe with a real BBC Food URL
+            # Enrich each recipe with a real BBC Food URL and filter out missing ones
+            validated = []
             for recipe in recipes:
-                recipe['recipe_url'] = fetch_bbc_food_url(recipe.get('name', ''))
-            print(f"✅ [RECIPES] Generated {len(recipes)} recipes with BBC Food links")
-            return recipes
+                url = fetch_bbc_food_url(recipe.get('name', ''))
+                if url:
+                    recipe['recipe_url'] = url
+                    validated.append(recipe)
+                else:
+                    print(f"[RECIPES] Dropped '{recipe.get('name', '')}' — no BBC Food page found")
+            if validated:
+                print(f"✅ [RECIPES] {len(validated)} of {len(recipes)} recipes validated with BBC Food links")
+                return validated
+            print(f"[RECIPES] No recipes had valid BBC Food links, returning None")
+            return None
         raise Exception(f"AI returned non-JSON response: {response_text[:300]}")
 
     except Exception as e:

@@ -37,6 +37,7 @@ if 'scan_count' not in st.session_state: st.session_state.scan_count = 0
 if 'trends_view' not in st.session_state: st.session_state.trends_view = 'weekly'
 if 'scan_status' not in st.session_state: st.session_state.scan_status = None
 if 'detected_items' not in st.session_state: st.session_state.detected_items = []
+if '_captured_image' not in st.session_state: st.session_state._captured_image = None
 if 'ai_insights' not in st.session_state: st.session_state.ai_insights = None
 if 'meal_plan' not in st.session_state: st.session_state.meal_plan = None
 if 'daily_recipes' not in st.session_state: st.session_state.daily_recipes = None
@@ -570,6 +571,7 @@ with st.sidebar:
             st.session_state.scanning = False
             st.session_state.scan_status = None
             st.session_state.detected_items = []
+            st.session_state._captured_image = None
             st.session_state.page = pg
             st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
@@ -666,11 +668,19 @@ if st.session_state.page == 'dashboard':
             st.session_state.selected_result = None
             st.session_state.scan_status = None
             st.session_state.detected_items = []
+            st.session_state._captured_image = None
             st.rerun()
     else:
         # Scanner active - show HUD
-        # Inline analyzing indicator - auto-dismisses when items are detected
-        if st.session_state.get('scan_status') == "analyzing":
+        # Inline scan status indicator - auto-dismisses when items are detected
+        if st.session_state.get('scan_status') == "captured":
+            st.markdown(f"""
+                <div style="text-align:center; padding:16px; margin:12px 0; background:{C['bg_card']}; border-radius:14px; border:1px solid {C['teal']};">
+                    <div style="font-size:1.2rem; font-weight:700; color:{C['green']};">Image Captured!</div>
+                    <div style="font-size:0.85rem; color:{C['teal']}; margin-top:6px;">Analyzing with Gemini...</div>
+                </div>
+            """, unsafe_allow_html=True)
+        elif st.session_state.get('scan_status') == "analyzing":
             st.markdown(f"""
                 <div style="text-align:center; padding:16px; margin:12px 0; background:{C['bg_card']}; border-radius:14px; border:1px solid {C['teal']};">
                     <div style="font-size:1.1rem; font-weight:700; color:{C['teal']};">Analyzing with Gemini...</div>
@@ -698,20 +708,30 @@ if st.session_state.page == 'dashboard':
                 st.session_state.scanning = False
                 st.session_state.scan_status = None
                 st.session_state.detected_items = []
+                st.session_state._captured_image = None
                 st.rerun()
 
-        # Scanning logic - process every captured image immediately
+        # Scanning logic - two-phase: capture acknowledgement, then analyze
+        # Phase 1: Image captured - show acknowledgement and prevent duplicate scans
         if image and st.session_state.scanning:
+            st.session_state.scanning = False  # Prevent duplicate scans immediately
+            st.session_state.scan_status = "captured"
+            st.session_state._captured_image = image
+            st.rerun()
+
+        # Phase 2: Process captured image (runs on next rerun after acknowledgement shown)
+        if st.session_state.get('scan_status') == "captured" and st.session_state.get('_captured_image'):
             st.session_state.scan_status = "analyzing"
-            results = vision_live_scan_dark(image)
+            results = vision_live_scan_dark(st.session_state._captured_image)
+            st.session_state._captured_image = None
             if results:
                 st.session_state.scan_results = results
                 st.session_state.selected_result = results[0]
                 st.session_state.detected_items = [r['name'] for r in results[:5]]
-                st.session_state.scanning = False
                 st.session_state.scan_status = None
             else:
                 st.session_state.scan_status = None
+                st.session_state.scanning = True  # Allow retry on failure
             st.rerun()
 
     # Scan results with full item details, nutrition, and grocery list integration
@@ -938,7 +958,9 @@ if st.session_state.page == 'dashboard':
                     r_type = recipe.get('meal_type', '')
                     r_time = recipe.get('prep_time', '')
                     r_desc = recipe.get('description', '')
-                    r_url = recipe.get('recipe_url', f"https://www.bbc.co.uk/food/search?q={r_name.replace(' ', '+')}")
+                    r_url = recipe.get('recipe_url', '')
+                    if not r_url:
+                        continue
                     st.markdown(f"""<div style='font-size:0.8rem; margin-bottom:10px;'>
                         <strong>{r_name}</strong><br>
                         <span style='color:{C["text_sec"]}; font-size:0.75rem;'>{r_desc}</span><br>
