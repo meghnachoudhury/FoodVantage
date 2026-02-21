@@ -959,7 +959,61 @@ def get_db_connection():
     try: con.execute("CREATE SEQUENCE IF NOT EXISTS seq_cal_id START 1")
     except: pass
     con.execute("CREATE TABLE IF NOT EXISTS calendar (id INTEGER DEFAULT nextval('seq_cal_id'), username VARCHAR, date DATE, item_name VARCHAR, score FLOAT, category VARCHAR)")
+    con.execute("CREATE TABLE IF NOT EXISTS allergies (username VARCHAR, allergy_name VARCHAR)")
     return con
+
+# --- Allergy DB Functions ---
+ALLERGY_KEYWORDS = {
+    "Peanuts": ["peanut", "groundnut", "arachis"],
+    "Tree Nuts": ["almond", "cashew", "walnut", "pecan", "pistachio", "hazelnut", "macadamia", "brazil nut", "chestnut"],
+    "Milk / Dairy": ["milk", "cheese", "yogurt", "yoghurt", "butter", "cream", "dairy", "whey", "casein", "lactose", "ghee", "paneer", "curd"],
+    "Eggs": ["egg"],
+    "Wheat / Gluten": ["wheat", "bread", "pasta", "flour", "gluten", "cereal", "biscuit", "cookie", "cake", "cracker", "noodle", "couscous"],
+    "Soy": ["soy", "soya", "tofu", "edamame", "tempeh", "miso"],
+    "Fish": ["fish", "cod", "salmon", "tuna", "haddock", "sardine", "anchovy", "mackerel", "trout", "bass", "tilapia"],
+    "Shellfish": ["shrimp", "prawn", "crab", "lobster", "oyster", "mussel", "clam", "scallop", "crawfish", "crayfish"],
+    "Sesame": ["sesame", "tahini"],
+    "Celery": ["celery", "celeriac"],
+    "Mustard": ["mustard"],
+    "Lupin": ["lupin", "lupini"],
+    "Molluscs": ["mollusc", "squid", "octopus", "snail", "calamari"],
+    "Sulphites": ["sulphite", "sulfite"],
+    "Corn": ["corn", "maize", "polenta", "cornmeal", "cornstarch"],
+}
+
+def get_user_allergies(username):
+    """Get list of allergy names for a user"""
+    con = get_db_connection()
+    try:
+        result = con.execute("SELECT allergy_name FROM allergies WHERE username = ?", [username]).fetchall()
+        return [r[0] for r in result]
+    except:
+        return []
+
+def save_user_allergies(username, allergy_list):
+    """Save user's allergies (replaces existing)"""
+    con = get_db_connection()
+    try:
+        con.execute("DELETE FROM allergies WHERE username = ?", [username])
+        for allergy in allergy_list:
+            con.execute("INSERT INTO allergies VALUES (?, ?)", [username, allergy])
+    except Exception as e:
+        print(f"[ALLERGY DB] Error saving allergies: {e}")
+
+def check_item_allergies(item_name, user_allergies):
+    """Check if an item name matches any of the user's allergies.
+    Returns list of matched allergy names."""
+    if not user_allergies or not item_name:
+        return []
+    item_lower = item_name.lower()
+    matched = []
+    for allergy in user_allergies:
+        keywords = ALLERGY_KEYWORDS.get(allergy, [allergy.lower()])
+        for kw in keywords:
+            if kw in item_lower:
+                matched.append(allergy)
+                break
+    return matched
 
 def get_trend_data_db(username, days=30):
     """Use DuckDB-compatible date math"""
