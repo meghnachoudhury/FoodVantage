@@ -711,21 +711,19 @@ if st.session_state.page == 'dashboard':
                 st.session_state.detected_items = []
                 st.rerun()
 
-        # Scanning logic
+        # Scanning logic - process every captured image immediately
         if image and st.session_state.scanning:
-            st.session_state.scan_count += 1
-            if st.session_state.scan_count % 2 == 0:
-                st.session_state.scan_status = "analyzing"
-                results = vision_live_scan_dark(image)
-                if results:
-                    st.session_state.scan_results = results
-                    st.session_state.selected_result = results[0]
-                    st.session_state.detected_items = [r['name'] for r in results[:5]]
-                    st.session_state.scanning = False
-                    st.session_state.scan_status = None
-                else:
-                    st.session_state.scan_status = None
-                st.rerun()
+            st.session_state.scan_status = "analyzing"
+            results = vision_live_scan_dark(image)
+            if results:
+                st.session_state.scan_results = results
+                st.session_state.selected_result = results[0]
+                st.session_state.detected_items = [r['name'] for r in results[:5]]
+                st.session_state.scanning = False
+                st.session_state.scan_status = None
+            else:
+                st.session_state.scan_status = None
+            st.rerun()
 
     # Scan results
     if st.session_state.scan_results:
@@ -871,11 +869,11 @@ if st.session_state.page == 'dashboard':
             """, unsafe_allow_html=True)
 
             if st.session_state.ai_insights:
-                for i, insight in enumerate(st.session_state.ai_insights[:2]):
+                for i, insight in enumerate(st.session_state.ai_insights[:5]):
                     emoji = insight.get('emoji', '')
                     title = insight.get('title', 'Insight')
                     body = insight.get('insight', '')
-                    st.markdown(f"<div style='font-size:0.8rem; margin-bottom:8px;'><strong>{emoji} {title}</strong><br><span style='color:{C['text_sec']};'>{body[:120]}</span></div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='font-size:0.8rem; margin-bottom:8px;'><strong>{emoji} {title}</strong><br><span style='color:{C['text_sec']};'>{body}</span></div>", unsafe_allow_html=True)
                 if st.button("Refresh Insights", key="refresh_insights", use_container_width=True):
                     st.session_state.ai_insights = None; st.rerun()
             else:
@@ -914,7 +912,9 @@ if st.session_state.page == 'dashboard':
                     r_name = recipe.get('name', 'Recipe')
                     r_type = recipe.get('meal_type', '')
                     r_time = recipe.get('prep_time', '')
-                    st.markdown(f"<div style='font-size:0.8rem; margin-bottom:8px;'><strong>{r_name}</strong><br><span style='color:{C['text_muted']}; font-size:0.7rem;'>{r_type} &middot; {r_time}</span></div>", unsafe_allow_html=True)
+                    r_query = r_name.replace(' ', '+').replace('&', '%26')
+                    r_url = f"https://www.google.com/search?q={r_query}+healthy+recipe"
+                    st.markdown(f"<div style='font-size:0.8rem; margin-bottom:8px;'><strong><a href='{r_url}' target='_blank' style='color:{C[\"text\"]}; text-decoration:underline;'>{r_name} ↗</a></strong><br><span style='color:{C[\"text_muted\"]}; font-size:0.7rem;'>{r_type} &middot; {r_time}</span></div>", unsafe_allow_html=True)
                 if st.button("New Recipes", key="refresh_recipes", use_container_width=True):
                     st.session_state.daily_recipes = None; st.rerun()
             else:

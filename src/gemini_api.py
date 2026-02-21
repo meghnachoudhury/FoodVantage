@@ -668,7 +668,7 @@ def generate_health_insights(trend_data, history_data, days_range):
 
         items_str = "\n".join(recent_items) if recent_items else "No items logged yet."
 
-        prompt = f"""You are a friendly, expert nutritionist AI health coach. Analyze this user's eating data and provide exactly 3 personalized, specific, actionable insights.
+        prompt = f"""You are a friendly, expert nutritionist AI health coach. Analyze this user's eating data and provide exactly 5 personalized, specific, actionable insights.
 
 USER'S EATING DATA (last {days_range} days):
 - Total items logged: {total_items}
@@ -689,14 +689,16 @@ RULES:
 1. Be encouraging and positive, not judgmental
 2. Reference SPECIFIC items from their history
 3. Give ACTIONABLE swaps or suggestions
-4. Keep each insight to 2-3 sentences max
+4. Write complete, thorough insights — do not cut off mid-sentence
 5. If they have few items logged, encourage them to log more
 
 Return ONLY valid JSON array, no other text:
 [
   {{"emoji": "🥗", "title": "Short Title", "insight": "Your personalized observation...", "action": "Specific action step..."}},
   {{"emoji": "💪", "title": "Short Title", "insight": "Your personalized observation...", "action": "Specific action step..."}},
-  {{"emoji": "🎯", "title": "Short Title", "insight": "Your personalized observation...", "action": "Specific action step..."}}
+  {{"emoji": "🎯", "title": "Short Title", "insight": "Your personalized observation...", "action": "Specific action step..."}},
+  {{"emoji": "🌱", "title": "Short Title", "insight": "Your personalized observation...", "action": "Specific action step..."}},
+  {{"emoji": "✨", "title": "Short Title", "insight": "Your personalized observation...", "action": "Specific action step..."}}
 ]"""
 
         print(f"[INSIGHTS] Calling {_active_model()} with {total_items} items over {days_range} days...")
