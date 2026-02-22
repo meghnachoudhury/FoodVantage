@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import sys
 import os
 import base64
@@ -53,33 +54,6 @@ if 'cal_date' not in st.session_state: st.session_state.cal_date = datetime.now(
 if 'cal_year' not in st.session_state: st.session_state.cal_year = datetime.now().year
 if 'cal_month' not in st.session_state: st.session_state.cal_month = datetime.now().month
 
-# --- DEEP-LINK / QUERY PARAM HANDLERS ---
-# Run before rendering so they work on brand-new sessions (after a link-click page reload).
-_q = st.query_params
-if 'sel_date' in _q:
-    try:
-        _d = datetime.strptime(_q['sel_date'], '%Y-%m-%d').date()
-        st.session_state.cal_date = _d
-        st.session_state.cal_year = _d.year
-        st.session_state.cal_month = _d.month
-        st.session_state.page = 'calendar'
-    except Exception:
-        pass
-    del _q['sel_date']   # silently updates URL, no browser reload
-    st.rerun()
-
-if 'start_scan' in _q:
-    st.session_state.camera_active = True
-    st.session_state.scanning = True
-    st.session_state.scan_count = 0
-    st.session_state.scan_results = None
-    st.session_state.selected_result = None
-    st.session_state.scan_status = None
-    st.session_state.detected_items = []
-    st.session_state._captured_image = None
-    st.session_state.page = 'dashboard'
-    del _q['start_scan']
-    st.rerun()
 
 # --- DARK THEME COLOR PALETTE ---
 C = {
@@ -619,11 +593,13 @@ def render_logo(size="1.6rem"):
     </div>""", unsafe_allow_html=True)
 
 def create_html_calendar(year, month, selected_day=None, logged_days=None):
+    """Returns inner HTML (table + header) for embedding inside a components.html() iframe.
+    Day cells use onclick='pickDate(...)' which is handled by JS defined in that iframe."""
     logged_days = logged_days or set()
     cal = cal_module.monthcalendar(year, month)
     month_name = cal_module.month_name[month]
     html = f"<div style='text-align:center; font-weight:700; font-size:0.95rem; color:{C['text']}; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid {C['border']};'>{month_name} {year}</div>"
-    html += "<table style='width:100%; text-align:center; border-collapse: separate; border-spacing: 2px;'><thead><tr>"
+    html += "<table style='width:100%; text-align:center; border-collapse:separate; border-spacing:2px;'><thead><tr>"
     for day in ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"]:
         html += f"<th style='color:{C['text_muted']}; font-size:0.75rem; font-weight:600; padding:6px;'>{day}</th>"
     html += "</tr></thead><tbody>"
@@ -636,18 +612,19 @@ def create_html_calendar(year, month, selected_day=None, logged_days=None):
                 is_selected = day == selected_day
                 is_logged = day in logged_days
                 date_str = f"{year:04d}-{month:02d}-{day:02d}"
-                # Style applied to the <a> tag so the entire cell area is the link
                 if is_selected:
-                    a_style = f"background:{C['teal']}; color:white; border-radius:10px; font-weight:700;"
+                    cell_style = f"background:{C['teal']}; color:white; border-radius:10px; font-weight:700;"
                 elif is_logged:
-                    a_style = f"color:{C['text']}; font-weight:600; border-radius:8px;"
+                    cell_style = f"color:{C['text']}; font-weight:600; border-radius:8px;"
                 else:
-                    a_style = f"color:{C['text_sec']}; border-radius:8px;"
-                dot = f"<div style='width:4px;height:4px;border-radius:50%;background:{'white' if is_selected else C['teal']};margin:1px auto 0;'></div>" if is_logged else ""
-                # <a href> is allowed by Streamlit's sanitizer; onclick is not.
+                    cell_style = f"color:{C['text_sec']}; border-radius:8px;"
+                dot_color = 'white' if is_selected else C['teal']
+                dot = f"<div style='width:4px;height:4px;border-radius:50%;background:{dot_color};margin:1px auto 0;'></div>" if is_logged else ""
+                # onclick works here because this HTML is embedded inside a components.html() iframe
                 html += (f"<td style='padding:2px; font-size:0.85rem;'>"
-                         f"<a href='?sel_date={date_str}' style='display:block; padding:7px 4px; text-decoration:none; {a_style}'>"
-                         f"{day}{dot}</a></td>")
+                         f"<div onclick=\"pickDate('{date_str}')\" "
+                         f"style='padding:7px 4px; cursor:pointer; {cell_style}'>"
+                         f"{day}{dot}</div></td>")
         html += "</tr>"
     return html + "</tbody></table>"
 
@@ -821,22 +798,44 @@ if st.session_state.page == 'dashboard':
     st.markdown(f"<h3 style='font-weight:700; margin-top:24px;'>&#128722; Grocery Scanner</h3>", unsafe_allow_html=True)
 
     if not st.session_state.camera_active:
-        # Scanner viewfinder
-        st.markdown(f"""
-            <div class='scanner-viewfinder'>
-                <div class='scanner-corner corner-tl'></div>
-                <div class='scanner-corner corner-tr'></div>
-                <div class='scanner-corner corner-bl'></div>
-                <div class='scanner-corner corner-br'></div>
-                <a href='?start_scan=1' style='text-decoration:none; color:inherit; display:block;'>
-                    <div class='scanner-icon'>
-                        <i class='fa-solid fa-camera'></i>
-                    </div>
-                </a>
-                <div style='font-size:1rem; font-weight:600; color:{C["text"]}; margin-bottom:4px;'>Scanner ready</div>
-                <div style='font-size:0.8rem; color:{C["text_muted"]};'>Tap the camera icon or the button below</div>
-            </div>
-        """, unsafe_allow_html=True)
+        # Scanner viewfinder rendered in components.html() so onclick works
+        # (st.markdown strips all event handlers; components.html() does not)
+        components.html(f"""<!DOCTYPE html><html><head>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<style>
+*{{box-sizing:border-box;margin:0;padding:0;}}
+body{{background:{C['bg_card']};font-family:'Inter',sans-serif;overflow:hidden;}}
+@keyframes jitter-tl{{0%{{transform:translate(0,0);opacity:.4}}5%{{transform:translate(-5px,-5px);opacity:1}}10%{{transform:translate(-3px,-3px);opacity:1}}15%{{transform:translate(-5px,-5px);opacity:1}}20%{{transform:translate(0,0);opacity:.4}}100%{{transform:translate(0,0);opacity:.4}}}}
+@keyframes jitter-tr{{0%,25%{{transform:translate(0,0);opacity:.4}}30%{{transform:translate(5px,-5px);opacity:1}}35%{{transform:translate(3px,-3px);opacity:1}}40%{{transform:translate(5px,-5px);opacity:1}}45%{{transform:translate(0,0);opacity:.4}}100%{{transform:translate(0,0);opacity:.4}}}}
+@keyframes jitter-bl{{0%,50%{{transform:translate(0,0);opacity:.4}}55%{{transform:translate(-5px,5px);opacity:1}}60%{{transform:translate(-3px,3px);opacity:1}}65%{{transform:translate(-5px,5px);opacity:1}}70%{{transform:translate(0,0);opacity:.4}}100%{{transform:translate(0,0);opacity:.4}}}}
+@keyframes jitter-br{{0%,75%{{transform:translate(0,0);opacity:.4}}80%{{transform:translate(5px,5px);opacity:1}}85%{{transform:translate(3px,3px);opacity:1}}90%{{transform:translate(5px,5px);opacity:1}}95%{{transform:translate(0,0);opacity:.4}}100%{{transform:translate(0,0);opacity:.4}}}}
+.vf{{position:relative;height:190px;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:20px;overflow:hidden;}}
+.corner{{position:absolute;width:45px;height:45px;border-color:{C['teal']};border-style:solid;}}
+.tl{{top:28px;left:28px;border-width:3px 0 0 3px;border-radius:6px 0 0 0;animation:jitter-tl 5s ease-in-out infinite;}}
+.tr{{top:28px;right:28px;border-width:3px 3px 0 0;border-radius:0 6px 0 0;animation:jitter-tr 5s ease-in-out infinite;}}
+.bl{{bottom:28px;left:28px;border-width:0 0 3px 3px;border-radius:0 0 0 6px;animation:jitter-bl 5s ease-in-out infinite;}}
+.br{{bottom:28px;right:28px;border-width:0 3px 3px 0;border-radius:0 0 6px 0;animation:jitter-br 5s ease-in-out infinite;}}
+.icon-btn{{width:64px;height:64px;border-radius:50%;background:rgba(91,155,157,0.15);display:flex;align-items:center;justify-content:center;margin-bottom:14px;cursor:pointer;transition:background .2s,transform .1s;}}
+.icon-btn:hover{{background:rgba(91,155,157,0.3);transform:scale(1.1);}}
+.icon-btn i{{font-size:28px;color:{C['teal']};}}
+.rt{{font-size:1rem;font-weight:600;color:{C['text']};margin-bottom:4px;}}
+.ht{{font-size:0.8rem;color:{C['text_muted']};}}
+</style></head><body>
+<div class="vf">
+  <div class="corner tl"></div><div class="corner tr"></div>
+  <div class="corner bl"></div><div class="corner br"></div>
+  <div class="icon-btn" onclick="startScan()"><i class="fa-solid fa-camera"></i></div>
+  <div class="rt">Scanner ready</div>
+  <div class="ht">Tap the camera icon or the button below</div>
+</div>
+<script>
+function startScan(){{
+  var btns=window.parent.document.querySelectorAll('button');
+  for(var i=0;i<btns.length;i++){{
+    if(btns[i].innerText.trim().includes('Start Live Scan')){{btns[i].click();return;}}
+  }}
+}}
+</script></body></html>""", height=200, scrolling=False)
         if st.button("Start Live Scan", type="primary", use_container_width=True):
             st.session_state.camera_active = True
             st.session_state.scanning = True
@@ -1286,7 +1285,56 @@ elif st.session_state.page == 'calendar':
                 logged_days_in_month.add(d.day)
         # Highlight selected day only if it's in the displayed month
         shown_selected = sel_date.day if (sel_date.year == st.session_state.cal_year and sel_date.month == st.session_state.cal_month) else None
-        st.markdown(f"<div class='card'>{create_html_calendar(st.session_state.cal_year, st.session_state.cal_month, shown_selected, logged_days_in_month)}</div>", unsafe_allow_html=True)
+        # Render calendar inside components.html() so onclick="pickDate(...)" works.
+        # (st.markdown strips event handlers; components.html() runs in a same-origin
+        #  iframe where JS can reach window.parent.document.)
+        cal_inner = create_html_calendar(
+            st.session_state.cal_year, st.session_state.cal_month,
+            shown_selected, logged_days_in_month)
+        components.html(f"""<!DOCTYPE html><html><head><style>
+*{{box-sizing:border-box;margin:0;padding:0;}}
+body{{background:{C['bg_card']};font-family:'Inter',sans-serif;padding:14px;}}
+div[onclick]:hover{{opacity:0.7;}}
+</style></head><body>
+{cal_inner}
+<script>
+function pickDate(dateStr){{
+  try{{
+    var inputs=window.parent.document.querySelectorAll('input');
+    for(var i=0;i<inputs.length;i++){{
+      if(inputs[i].placeholder==='_cal_channel_xyz_'){{
+        var setter=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;
+        setter.call(inputs[i],dateStr);
+        inputs[i].dispatchEvent(new Event('input',{{bubbles:true}}));
+        return;
+      }}
+    }}
+  }}catch(e){{console.error(e);}}
+}}
+</script></body></html>""", height=285, scrolling=False)
+
+        # Hidden channel input — JS in the iframe above writes to this when
+        # a day is clicked; Streamlit detects the change and reruns Python.
+        st.markdown("""<style>
+input[placeholder="_cal_channel_xyz_"]{
+  position:fixed!important;left:-9999px!important;
+  width:1px!important;height:1px!important;opacity:0!important;
+  pointer-events:none!important;
+}</style>""", unsafe_allow_html=True)
+        cal_channel_val = st.text_input(
+            "", key="cal_channel_input",
+            placeholder="_cal_channel_xyz_",
+            label_visibility="collapsed")
+        if cal_channel_val:
+            try:
+                new_d = datetime.strptime(cal_channel_val, '%Y-%m-%d').date()
+                st.session_state.cal_date = new_d
+                st.session_state.cal_year = new_d.year
+                st.session_state.cal_month = new_d.month
+                st.session_state['cal_channel_input'] = ''
+                st.rerun()
+            except Exception:
+                pass
 
     with c2:
         items = get_calendar_items_db(st.session_state.user_id, sel_date.strftime("%Y-%m-%d"))
