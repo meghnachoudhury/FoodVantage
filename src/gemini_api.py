@@ -10,6 +10,7 @@ from PIL import Image
 import io
 import base64
 import requests
+import re
 from datetime import datetime, timedelta
 
 load_dotenv()
@@ -186,13 +187,23 @@ def _sodium_per_100g(nutriments, serving_g):
 def calculate_vms_science(row):
     try:
         name, _, cal, sug, fib, prot, fat, sod, _, nova = row
+        cal_f = _safe_float(cal)
+        sug_f = _safe_float(sug)
+        fat_f = _safe_float(fat)
+        sod_f = _safe_float(sod)
+        prot_f = _safe_float(prot)
+
         present_risk_fields = sum(
-            _safe_float(v) is not None
+            _safe_float(v) is not None and _safe_float(v) > 0
             for v in [cal, sug, fat, sod]
         )
 
         # Guardrail: avoid over-confident "perfect" scores when OFF/local nutrition is sparse.
         if present_risk_fields < 2:
+            return 5.0
+
+        # Data-quality guardrail for packaged foods where key risk fields are zeroed/missing.
+        if (cal_f or 0) >= 120 and (prot_f or 0) >= 5 and (fat_f or 0) == 0 and (sod_f or 0) == 0:
             return 5.0
 
         cal, sug, fib, prot, fat, sod = [float(x or 0) for x in [cal, sug, fib, prot, fat, sod]]
@@ -226,6 +237,10 @@ def calculate_vms_science(row):
         ]
         
         is_heavily_processed = any(word in n for word in processed_indicators) or nova_val >= 3
+
+        # If likely processed food is missing a key risk field, avoid overly optimistic scores.
+        if is_heavily_processed and (sod_f is None or fat_f is None):
+            return 5.0
         
         # Only mark as superfood if NOT heavily processed
         if not is_heavily_processed:
@@ -327,6 +342,30 @@ def get_items_today(username):
     except:
         return 0
 
+
+def _normalized_tokens(text: str):
+    cleaned = re.sub(r'[^a-z0-9\s]', ' ', (text or '').lower())
+    return [t for t in cleaned.split() if len(t) > 1]
+
+
+def _scanner_match_confidence(query: str, result: dict) -> float:
+    """Heuristic confidence used to pick scanner matches from search candidates."""
+    q_tokens = set(_normalized_tokens(query))
+    name_tokens = set(_normalized_tokens(result.get('name', '')))
+    brand_tokens = set(_normalized_tokens(result.get('brand', '')))
+    all_tokens = name_tokens | brand_tokens
+
+    if not q_tokens or not all_tokens:
+        return 0.0
+
+    overlap = len(q_tokens & all_tokens) / len(q_tokens)
+    jaccard = len(q_tokens & all_tokens) / len(q_tokens | all_tokens)
+    q_text = " ".join(_normalized_tokens(query))
+    n_text = " ".join(_normalized_tokens(result.get('name', '')))
+    exact_bonus = 0.35 if q_text and (q_text == n_text or q_text in n_text) else 0.0
+
+    return (0.65 * overlap) + (0.35 * jaccard) + exact_bonus
+
 # === 2. DATABASE ACCESS ===
 @st.cache_resource
 def get_scientific_db():
@@ -337,7 +376,7 @@ def get_scientific_db():
             zip_ref.extractall('/tmp/')
     return duckdb.connect(db_path, read_only=True)
 
-def search_vantage_db(product_name: str, limit=5):
+def search_vantage_db(product_name: str, limit=5, fast_mode=False):
     """
     FIX 3: Returns up to 20 results (increased from 5)
     Returns top results with full product names
@@ -367,7 +406,7 @@ def search_vantage_db(product_name: str, limit=5):
         # If no results in local DB, try Open Food Facts API
         if not results or len(results) == 0:
             print(f"[DB] No results in local database, trying Open Food Facts...")
-            return search_open_food_facts(product_name, limit)
+            return search_open_food_facts(product_name, limit, fast_mode=fast_mode)
         
         output = []
         for r in results:
@@ -398,7 +437,7 @@ def search_vantage_db(product_name: str, limit=5):
         traceback.print_exc()
         return None
 
-def search_open_food_facts(product_name: str, limit=5):
+def search_open_food_facts(product_name: str, limit=5, fast_mode=False):
     """
     FIX 7: Fallback to Open Food Facts API with better error handling
     """
@@ -418,8 +457,10 @@ def search_open_food_facts(product_name: str, limit=5):
         ]
         
         all_products = []
-        
-        for attempt_num, term in enumerate(search_attempts):
+        attempts_to_try = search_attempts[:1] if fast_mode else search_attempts
+        request_timeout_s = 4 if fast_mode else 10
+
+        for attempt_num, term in enumerate(attempts_to_try):
             if not term or len(term) < 3:
                 continue
                 
@@ -434,7 +475,7 @@ def search_open_food_facts(product_name: str, limit=5):
             }
             
             try:
-                response = requests.get(url, params=params, timeout=10)
+                response = requests.get(url, params=params, timeout=request_timeout_s)
                 print(f"[OPEN FOOD FACTS] Status code: {response.status_code}")
                 
                 if response.status_code == 200:
@@ -586,20 +627,13 @@ def vision_live_scan_dark(image_bytes):
         bottom = int(h * 0.95)
         img_cropped = img.crop((left, top, right, bottom))
 
-        # Enhance image
-        from PIL import ImageEnhance
-        enhancer = ImageEnhance.Contrast(img_cropped)
-        img_cropped = enhancer.enhance(1.5)
-        enhancer = ImageEnhance.Brightness(img_cropped)
-        img_cropped = enhancer.enhance(1.2)
-
         # Final RGB check
         if img_cropped.mode != 'RGB':
             img_cropped = img_cropped.convert('RGB')
 
         # Convert to base64
         buf = io.BytesIO()
-        img_cropped.save(buf, format="JPEG", quality=95)
+        img_cropped.save(buf, format="JPEG", quality=80)
         buf.seek(0)
         img_bytes = buf.read()
         img_b64 = base64.b64encode(img_bytes).decode('utf-8')
@@ -623,14 +657,6 @@ Be PRECISE. Return ONLY the JSON array, no other text."""
 
         print(f"[DEBUG] Calling {_active_model('scanner')} Vision API...")
 
-        # Analyzing message
-        st.markdown(f"""
-            <div class="scanner-result">
-                <div class="scanner-result-title">🔍 Analyzing Image</div>
-                <div class="scanner-result-text">Processing with {_active_model('scanner')} Vision...</div>
-            </div>
-        """, unsafe_allow_html=True)
-
         try:
             response = client.chat.completions.create(
                 model=_active_model('scanner'),
@@ -643,13 +669,13 @@ Be PRECISE. Return ONLY the JSON array, no other text."""
                                 "type": "image_url",
                                 "image_url": {
                                     "url": f"data:image/jpeg;base64,{img_b64}",
-                                    "detail": "high"
+                                    "detail": "low"
                                 }
                             }
                         ]
                     }
                 ],
-                max_tokens=_MAX_TOKENS_VISION
+                max_tokens=700
             )
 
             response_text = (response.choices[0].message.content or "").strip()
@@ -669,18 +695,6 @@ Be PRECISE. Return ONLY the JSON array, no other text."""
                 detected_items = [product_name] if product_name else ['food item']
                 print(f"✅ [Gemini] Single item detected: {product_name}")
 
-            # Detection message
-            items_display = ", ".join(detected_items[:3])
-            if len(detected_items) > 3:
-                items_display += f" +{len(detected_items) - 3} more"
-
-            st.markdown(f"""
-                <div class="scanner-result">
-                    <div class="scanner-result-title">👁️ Items Detected</div>
-                    <div class="scanner-result-text">{items_display}</div>
-                </div>
-            """, unsafe_allow_html=True)
-
         except Exception as api_error:
             print(f"[GPT-4o ERROR] {api_error}")
             raise api_error
@@ -688,36 +702,23 @@ Be PRECISE. Return ONLY the JSON array, no other text."""
         # FIX 3: Search for ALL detected items
         all_results = []
         for item in detected_items:
-            results = search_vantage_db(item, limit=1)
+            results = search_vantage_db(item, limit=8, fast_mode=True)
             if results and len(results) > 0:
-                for r in results:
-                    all_results.append(r)
+                scored = sorted(
+                    results,
+                    key=lambda r: _scanner_match_confidence(item, r),
+                    reverse=True
+                )
+                best = scored[0]
+                if _scanner_match_confidence(item, best) >= 0.45:
+                    all_results.append(best)
         
         if all_results:
             print(f"✅ [DATABASE] Found {len(all_results)} total matches")
             
-            # DARK themed success message
-            st.markdown(f"""
-                <div class="scanner-result">
-                    <div class="scanner-result-title">✅ Database Match</div>
-                    <div class="scanner-result-text">Found {len(all_results)} item(s)</div>
-                </div>
-            """, unsafe_allow_html=True)
-            
             return all_results
         else:
             print(f"❌ [DATABASE] No matches found")
-            
-            # FIX 7: Friendly error message
-            st.markdown(f"""
-                <div class="scanner-result" style="border-left-color: #D4765E;">
-                    <div class="scanner-result-title">🔍 Item Not Found Yet</div>
-                    <div class="scanner-result-text">We're constantly expanding our database with new products.</div>
-                    <div style="font-size: 0.9rem; color: #666; margin-top: 8px;">
-                        Try: Repositioning • Better lighting • Different angle
-                    </div>
-                </div>
-            """, unsafe_allow_html=True)
             
             return None
         
@@ -726,22 +727,6 @@ Be PRECISE. Return ONLY the JSON array, no other text."""
         print(f"❌ [SCAN ERROR] {error_msg}")
         import traceback
         traceback.print_exc()
-        
-        # Better error handling for API quota
-        if "429" in error_msg or "quota" in error_msg.lower() or "RESOURCE_EXHAUSTED" in error_msg:
-            st.markdown(f"""
-                <div class="scanner-result" style="border-left-color: #D4765E;">
-                    <div class="scanner-result-title">⚠️ API Limit Reached</div>
-                    <div class="scanner-result-text">High demand detected. Please try again in a few moments.</div>
-                </div>
-            """, unsafe_allow_html=True)
-        else:
-            st.markdown(f"""
-                <div class="scanner-result" style="border-left-color: #D4765E;">
-                    <div class="scanner-result-title">⚠️ Scan Error</div>
-                    <div class="scanner-result-text">{error_msg[:150]}</div>
-                </div>
-            """, unsafe_allow_html=True)
         
         return None
 

@@ -880,7 +880,16 @@ function startScan(){{
             </div>
         """, unsafe_allow_html=True)
 
-        image = back_camera_input(key="hud_cam")
+        if st.session_state.get('detected_items') and not st.session_state.get('scan_results'):
+            preview = ", ".join(st.session_state.detected_items[:3])
+            st.markdown(f"""
+                <div class="scanner-result">
+                    <div class="scanner-result-title">👁️ Items Detected</div>
+                    <div class="scanner-result-text">{preview}</div>
+                </div>
+            """, unsafe_allow_html=True)
+
+        image = back_camera_input(key=f"hud_cam_{st.session_state.scan_count}")
 
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
@@ -890,6 +899,7 @@ function startScan(){{
                     st.session_state.scan_status = None
                     st.session_state.scanning = True
                     st.session_state._captured_image = None
+                    st.session_state.scan_count += 1
                     st.rerun()
             if st.button("Stop Scanning", use_container_width=True):
                 st.session_state.camera_active = False
@@ -900,6 +910,7 @@ function startScan(){{
                 st.session_state.detected_items = []
                 st.session_state._captured_image = None
                 st.session_state.scan_error = None
+                st.session_state.scan_count += 1
                 st.rerun()
 
         # Scanning logic - two-phase: capture acknowledgement, then analyze
@@ -922,9 +933,13 @@ function startScan(){{
                     st.session_state.detected_items = [r['name'] for r in results[:5]]
                     st.session_state.scan_status = None
                     st.session_state.scan_error = None
+                    st.session_state.scanning = True
+                    st.session_state.scan_count += 1
                 else:
                     st.session_state.scan_status = None
+                    st.session_state.scan_error = "Item not found in database — try a clearer angle or different wording"
                     st.session_state.scanning = True  # Allow retry on failure
+                    st.session_state.scan_count += 1
             except Exception as e:
                 error_msg = str(e)
                 if "429" in error_msg or "quota" in error_msg.lower() or "RESOURCE_EXHAUSTED" in error_msg:
@@ -933,7 +948,8 @@ function startScan(){{
                     st.session_state.scan_error = "Scan failed — please try again"
                 st.session_state.scan_status = None
                 st.session_state._captured_image = None
-                st.session_state.scanning = False
+                st.session_state.scanning = True
+                st.session_state.scan_count += 1
             st.rerun()
 
     # Scan results with full item details, nutrition, and grocery list integration
@@ -1047,6 +1063,7 @@ function startScan(){{
                 st.session_state.scan_status = None
                 st.session_state._captured_image = None
                 st.session_state.scan_error = None
+                st.session_state.scan_count += 1
                 time.sleep(0.5)
                 st.rerun()
 
@@ -1057,6 +1074,7 @@ function startScan(){{
             st.session_state.selected_result = None
             st.session_state.scanning = True
             st.session_state.detected_items = []
+            st.session_state.scan_count += 1
             st.rerun()
 
     # Health Trends - header with tabs on the right
