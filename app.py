@@ -12,7 +12,7 @@ import plotly.graph_objects as go
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "src"))
 from gemini_api import (
-    calculate_vms_science, get_serving_scale, get_scientific_db,
+    calculate_vms_science, get_scientific_db,
     search_vantage_db, search_open_food_facts, vision_live_scan_dark,
     generate_health_insights, generate_meal_plan, generate_daily_recipes,
     get_db_connection, get_trend_data_db, get_all_calendar_data_db,
@@ -640,9 +640,8 @@ with st.sidebar:
     search_q = st.text_input("Search any food item", key="sidebar_search", placeholder="Type a food name...", label_visibility="collapsed")
     if search_q:
         results = search_vantage_db(search_q, limit=5)
-        filtered_results = [r for r in results if r['vms_score'] != 10.0] if results else []
-        if filtered_results:
-            for d in filtered_results[:3]:
+        if results:
+            for d in results[:3]:
                 h_score = vms_to_health_score(d['vms_score'])
                 d_score = vms_to_display_score(d['vms_score'])
                 clr = score_color(h_score, 'health')
@@ -881,7 +880,16 @@ function startScan(){{
             </div>
         """, unsafe_allow_html=True)
 
-        image = back_camera_input(key="hud_cam")
+        if st.session_state.get('detected_items') and not st.session_state.get('scan_results'):
+            preview = ", ".join(st.session_state.detected_items[:3])
+            st.markdown(f"""
+                <div class="scanner-result">
+                    <div class="scanner-result-title">👁️ Items Detected</div>
+                    <div class="scanner-result-text">{preview}</div>
+                </div>
+            """, unsafe_allow_html=True)
+
+        image = back_camera_input(key=f"hud_cam_{st.session_state.scan_count}")
 
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
@@ -891,6 +899,7 @@ function startScan(){{
                     st.session_state.scan_status = None
                     st.session_state.scanning = True
                     st.session_state._captured_image = None
+                    st.session_state.scan_count += 1
                     st.rerun()
             if st.button("Stop Scanning", use_container_width=True):
                 st.session_state.camera_active = False
@@ -901,6 +910,7 @@ function startScan(){{
                 st.session_state.detected_items = []
                 st.session_state._captured_image = None
                 st.session_state.scan_error = None
+                st.session_state.scan_count += 1
                 st.rerun()
 
         # Scanning logic - two-phase: capture acknowledgement, then analyze
@@ -923,9 +933,13 @@ function startScan(){{
                     st.session_state.detected_items = [r['name'] for r in results[:5]]
                     st.session_state.scan_status = None
                     st.session_state.scan_error = None
+                    st.session_state.scanning = True
+                    st.session_state.scan_count += 1
                 else:
                     st.session_state.scan_status = None
+                    st.session_state.scan_error = "Item not found in database — try a clearer angle or different wording"
                     st.session_state.scanning = True  # Allow retry on failure
+                    st.session_state.scan_count += 1
             except Exception as e:
                 error_msg = str(e)
                 if "429" in error_msg or "quota" in error_msg.lower() or "RESOURCE_EXHAUSTED" in error_msg:
@@ -934,7 +948,8 @@ function startScan(){{
                     st.session_state.scan_error = "Scan failed — please try again"
                 st.session_state.scan_status = None
                 st.session_state._captured_image = None
-                st.session_state.scanning = False
+                st.session_state.scanning = True
+                st.session_state.scan_count += 1
             st.rerun()
 
     # Scan results with full item details, nutrition, and grocery list integration
@@ -952,15 +967,16 @@ function startScan(){{
             portion_label = " /serving" if needs_portion_size(result['name']) else ""
             raw = result['raw']
 
-            # Use actual serving size from API if available, otherwise fallback to keyword scale
+            # If API provides serving size, scale per-100g values to that serving.
+            # Otherwise, display per-100g directly (no heuristic scaling).
             if 'serving_g' in result:
                 scale = result['serving_g'] / 100.0
                 serving_note = f"per {int(result['serving_g'])}g serving"
             else:
-                scale = get_serving_scale(result['name'])
-                serving_note = f"per ~{int(scale * 100)}g serving" if scale < 1.0 else "per 100g"
+                scale = 1.0
+                serving_note = "per 100g"
 
-            # Extract nutrition data (raw values are per 100g, scale to serving)
+            # Extract nutrition data (raw values are normalized to per 100g in backend)
             cal = round(float(raw[2] or 0) * scale, 1)
             sug = round(float(raw[3] or 0) * scale, 1)
             fib = round(float(raw[4] or 0) * scale, 1)
@@ -1047,6 +1063,7 @@ function startScan(){{
                 st.session_state.scan_status = None
                 st.session_state._captured_image = None
                 st.session_state.scan_error = None
+                st.session_state.scan_count += 1
                 time.sleep(0.5)
                 st.rerun()
 
@@ -1057,6 +1074,7 @@ function startScan(){{
             st.session_state.selected_result = None
             st.session_state.scanning = True
             st.session_state.detected_items = []
+            st.session_state.scan_count += 1
             st.rerun()
 
     # Health Trends - header with tabs on the right
@@ -1367,11 +1385,10 @@ function pickDate(day){{
 
         if search_item:
             search_results = search_vantage_db(search_item, limit=10)
-            filtered_results = [r for r in search_results if r['vms_score'] != 10.0] if search_results else []
-            if filtered_results:
+            if search_results:
                 st.markdown('<div class="results-scroll-container">', unsafe_allow_html=True)
                 cal_user_allergies = get_user_allergies(st.session_state.user_id)
-                for idx, result in enumerate(filtered_results):
+                for idx, result in enumerate(search_results):
                     h_sc = vms_to_health_score(result['vms_score'])
                     clr = score_color(h_sc, 'health')
                     d_sc = vms_to_display_score(result['vms_score'])
