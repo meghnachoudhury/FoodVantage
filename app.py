@@ -593,8 +593,8 @@ def render_logo(size="1.6rem"):
     </div>""", unsafe_allow_html=True)
 
 def create_html_calendar(year, month, selected_day=None, logged_days=None):
-    """Returns inner HTML (table + header) for embedding inside a components.html() iframe.
-    Day cells use onclick='pickDate(...)' which is handled by JS defined in that iframe."""
+    """Returns inner HTML for embedding inside a components.html() iframe.
+    onclick='pickDate(N)' passes the integer day to JS in that iframe."""
     logged_days = logged_days or set()
     cal = cal_module.monthcalendar(year, month)
     month_name = cal_module.month_name[month]
@@ -611,7 +611,6 @@ def create_html_calendar(year, month, selected_day=None, logged_days=None):
             else:
                 is_selected = day == selected_day
                 is_logged = day in logged_days
-                date_str = f"{year:04d}-{month:02d}-{day:02d}"
                 if is_selected:
                     cell_style = f"background:{C['teal']}; color:white; border-radius:10px; font-weight:700;"
                 elif is_logged:
@@ -620,9 +619,9 @@ def create_html_calendar(year, month, selected_day=None, logged_days=None):
                     cell_style = f"color:{C['text_sec']}; border-radius:8px;"
                 dot_color = 'white' if is_selected else C['teal']
                 dot = f"<div style='width:4px;height:4px;border-radius:50%;background:{dot_color};margin:1px auto 0;'></div>" if is_logged else ""
-                # onclick works here because this HTML is embedded inside a components.html() iframe
+                # Pass integer day — JS in the iframe will find+click the matching hidden button
                 html += (f"<td style='padding:2px; font-size:0.85rem;'>"
-                         f"<div onclick=\"pickDate('{date_str}')\" "
+                         f"<div onclick='pickDate({day})' "
                          f"style='padding:7px 4px; cursor:pointer; {cell_style}'>"
                          f"{day}{dot}</div></td>")
         html += "</tr>"
@@ -1260,6 +1259,32 @@ elif st.session_state.page == 'calendar':
 
     sel_date = st.session_state.cal_date
 
+    # --- Hidden day-trigger buttons (same technique as camera icon) ---
+    # 31 real Streamlit buttons, one per day. The calendar iframe JS calls
+    # pickDate(N) which finds the button labelled "d0N" and .click()s it —
+    # identical to how the camera icon clicks "Start Live Scan".
+    # CSS moves the entire 31-column block off-screen; pointer-events:none
+    # prevents accidental mouse clicks while JS .click() still works.
+    st.markdown("""<style>
+div.stHorizontalBlock:has(> div.stColumn:nth-child(31)){
+  position:fixed!important;left:-9999px!important;
+  top:0!important;opacity:0!important;pointer-events:none!important;
+}
+</style>""", unsafe_allow_html=True)
+    _tcols = st.columns(31)
+    _day_triggered = None
+    for _i, _col in enumerate(_tcols):
+        with _col:
+            if st.button(f"d{_i+1:02d}", key=f"cal_trig_{_i+1}"):
+                _day_triggered = _i + 1
+    if _day_triggered is not None:
+        try:
+            _nd = datetime(st.session_state.cal_year, st.session_state.cal_month, _day_triggered).date()
+            st.session_state.cal_date = _nd
+            st.rerun()
+        except ValueError:
+            pass  # e.g. day 31 clicked in a 30-day month — ignore
+
     c1, c2 = st.columns([1, 1.5])
 
     with c1:
@@ -1285,9 +1310,9 @@ elif st.session_state.page == 'calendar':
                 logged_days_in_month.add(d.day)
         # Highlight selected day only if it's in the displayed month
         shown_selected = sel_date.day if (sel_date.year == st.session_state.cal_year and sel_date.month == st.session_state.cal_month) else None
-        # Render calendar inside components.html() so onclick="pickDate(...)" works.
-        # (st.markdown strips event handlers; components.html() runs in a same-origin
-        #  iframe where JS can reach window.parent.document.)
+        # Render calendar inside components.html() — onclick works here.
+        # pickDate(N) finds the hidden "d0N" Streamlit button in the parent
+        # page and calls .click() on it, identical to how the camera icon works.
         cal_inner = create_html_calendar(
             st.session_state.cal_year, st.session_state.cal_month,
             shown_selected, logged_days_in_month)
@@ -1298,43 +1323,14 @@ div[onclick]:hover{{opacity:0.7;}}
 </style></head><body>
 {cal_inner}
 <script>
-function pickDate(dateStr){{
-  try{{
-    var inputs=window.parent.document.querySelectorAll('input');
-    for(var i=0;i<inputs.length;i++){{
-      if(inputs[i].placeholder==='_cal_channel_xyz_'){{
-        var setter=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;
-        setter.call(inputs[i],dateStr);
-        inputs[i].dispatchEvent(new Event('input',{{bubbles:true}}));
-        return;
-      }}
-    }}
-  }}catch(e){{console.error(e);}}
+function pickDate(day){{
+  var label='d'+(day<10?'0':'')+day;
+  var btns=window.parent.document.querySelectorAll('button');
+  for(var i=0;i<btns.length;i++){{
+    if(btns[i].innerText.trim()===label){{btns[i].click();return;}}
+  }}
 }}
 </script></body></html>""", height=285, scrolling=False)
-
-        # Hidden channel input — JS in the iframe above writes to this when
-        # a day is clicked; Streamlit detects the change and reruns Python.
-        st.markdown("""<style>
-input[placeholder="_cal_channel_xyz_"]{
-  position:fixed!important;left:-9999px!important;
-  width:1px!important;height:1px!important;opacity:0!important;
-  pointer-events:none!important;
-}</style>""", unsafe_allow_html=True)
-        cal_channel_val = st.text_input(
-            "", key="cal_channel_input",
-            placeholder="_cal_channel_xyz_",
-            label_visibility="collapsed")
-        if cal_channel_val:
-            try:
-                new_d = datetime.strptime(cal_channel_val, '%Y-%m-%d').date()
-                st.session_state.cal_date = new_d
-                st.session_state.cal_year = new_d.year
-                st.session_state.cal_month = new_d.month
-                st.session_state['cal_channel_input'] = ''
-                st.rerun()
-            except Exception:
-                pass
 
     with c2:
         items = get_calendar_items_db(st.session_state.user_id, sel_date.strftime("%Y-%m-%d"))
