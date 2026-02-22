@@ -87,6 +87,18 @@ SERVING_SCALE = {
     # Nuts & seeds (~30g serving)
     'nuts': 0.30, 'almonds': 0.30, 'walnuts': 0.30, 'cashews': 0.30,
     'peanuts': 0.30, 'seeds': 0.30, 'chia': 0.15, 'flax': 0.10,
+    # Mints, gum, candy (~1-3g per piece)
+    'mint': 0.02, 'mints': 0.02, 'gum': 0.03, 'lozenge': 0.03,
+    'breath': 0.02, 'tic tac': 0.02,
+    # Small candy/sweets (~10-15g per piece)
+    'candy': 0.10, 'hard candy': 0.05, 'caramel': 0.10, 'toffee': 0.10,
+    'lollipop': 0.10, 'jellybean': 0.05,
+    # Chocolate bars (~40-50g serving)
+    'chocolate': 0.40, 'chocolate bar': 0.40,
+    # Supplements/vitamins (~1-5g per serving)
+    'supplement': 0.03, 'vitamin': 0.02, 'probiotic': 0.02,
+    # Tea, coffee (dry, ~2-3g per serving)
+    'tea': 0.02, 'coffee': 0.08, 'espresso': 0.07,
 }
 
 def get_serving_scale(name):
@@ -336,7 +348,7 @@ def search_open_food_facts(product_name: str, limit=5):
                 "search_terms": term,
                 "page_size": limit * 3,
                 "json": 1,
-                "fields": "product_name,brands,nutriments,nova_group"
+                "fields": "product_name,brands,nutriments,nova_group,serving_quantity,serving_size"
             }
             
             try:
@@ -388,19 +400,32 @@ def search_open_food_facts(product_name: str, limit=5):
                 nova = int(p.get('nova_group', 3) or 3)
                 
                 row = [name, brand, calories, sugar, fiber, protein, fat, sodium, None, nova]
-                
+
+                # Extract actual serving size from Open Food Facts (in grams)
+                serving_g = None
+                try:
+                    sq = p.get('serving_quantity')
+                    if sq and float(sq) > 0:
+                        serving_g = float(sq)
+                except (ValueError, TypeError):
+                    pass
+
                 score = round(calculate_vms_science(row), 1)
                 rating = "Metabolic Green" if score < 3.0 else "Metabolic Yellow" if score < 7.0 else "Metabolic Red"
 
                 display_name = f"{brand.title()} {name.title()}" if brand else name.title()
 
-                output.append({
+                result_entry = {
                     "name": display_name,
                     "brand": brand.title() if brand else "",
                     "vms_score": score,
                     "rating": rating,
                     "raw": row
-                })
+                }
+                # Include actual serving size when available from the API
+                if serving_g:
+                    result_entry["serving_g"] = serving_g
+                output.append(result_entry)
                 
                 print(f"[OPEN FOOD FACTS] ✅ Added: {display_name} (Score: {score})")
                 
