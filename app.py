@@ -951,16 +951,22 @@ function startScan(){{
             rating = result['rating']
             portion_label = " /serving" if needs_portion_size(result['name']) else ""
             raw = result['raw']
-            scale = get_serving_scale(result['name'])
 
-            # Extract nutrition data
+            # Use actual serving size from API if available, otherwise fallback to keyword scale
+            if 'serving_g' in result:
+                scale = result['serving_g'] / 100.0
+                serving_note = f"per {int(result['serving_g'])}g serving"
+            else:
+                scale = get_serving_scale(result['name'])
+                serving_note = f"per ~{int(scale * 100)}g serving" if scale < 1.0 else "per 100g"
+
+            # Extract nutrition data (raw values are per 100g, scale to serving)
             cal = round(float(raw[2] or 0) * scale, 1)
             sug = round(float(raw[3] or 0) * scale, 1)
             fib = round(float(raw[4] or 0) * scale, 1)
             prot = round(float(raw[5] or 0) * scale, 1)
             fat_val = round(float(raw[6] or 0) * scale, 1)
             sod = round(float(raw[7] or 0) * scale, 1)
-            serving_note = f"per ~{int(scale * 100)}g serving" if scale < 1.0 else "per 100g"
 
             st.markdown(f"""
                 <div class='card' style='padding:16px; margin-bottom:4px; border-left:4px solid {clr};'>
@@ -1033,6 +1039,14 @@ function startScan(){{
                     round(vms, 1)
                 )
                 st.success(f"Added {result['name']} to today's grocery list!")
+                # Auto-reset scanner for continuous scanning — no need to close & reopen
+                st.session_state.scan_results = None
+                st.session_state.selected_result = None
+                st.session_state.scanning = True
+                st.session_state.detected_items = []
+                st.session_state.scan_status = None
+                st.session_state._captured_image = None
+                st.session_state.scan_error = None
                 time.sleep(0.5)
                 st.rerun()
 
