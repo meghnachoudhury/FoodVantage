@@ -15,9 +15,10 @@ from datetime import datetime, timedelta
 load_dotenv()
 
 # === AI MODEL CONFIGURATION ===
-# Text + vision AI: Google Gemini 2.5 Flash via OpenAI-compatible endpoint
+# Text + vision AI via OpenAI-compatible endpoint
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
-GEMINI_MODEL = "gemini-2.5-flash"
+GEMINI_AGENT_MODEL = "gemini-2.5-flash"
+GEMINI_SCANNER_MODEL = "gemini-2.5-flash-lite"
 
 # === DIGITALOCEAN GRADIENT AI CONFIGURATION (for hackathon integration) ===
 GRADIENT_BASE_URL = "https://inference.do-ai.run/v1/"
@@ -110,9 +111,90 @@ def get_serving_scale(name):
             return SERVING_SCALE[keyword]
     return 1.0  # Default: use full per-100g values
 
+
+def _safe_float(value):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _extract_serving_grams(product):
+    """Best-effort extraction of serving size in grams from Open Food Facts product payload."""
+    sq = _safe_float(product.get('serving_quantity'))
+    if sq and sq > 0:
+        return sq
+
+    serving_size = str(product.get('serving_size', '') or '').lower()
+    import re
+    match = re.search(r'(\d+(?:\.\d+)?)\s*g\b', serving_size)
+    if match:
+        grams = _safe_float(match.group(1))
+        if grams and grams > 0:
+            return grams
+    return None
+
+
+def _nutrient_per_100g(nutriments, key_base, serving_g):
+    """
+    Normalize Open Food Facts nutrient values to a per-100g basis.
+    Returns (value_per_100g, source_basis) where source_basis is one of:
+    - 'per_100g' when *_100g is present
+    - 'per_serving' when converted from *_serving using serving_g
+    - 'missing' when neither path is usable
+    """
+    per_100_key = f"{key_base}_100g"
+    per_serving_key = f"{key_base}_serving"
+
+    per_100 = _safe_float(nutriments.get(per_100_key))
+    if per_100 is not None:
+        return per_100, 'per_100g'
+
+    per_serving = _safe_float(nutriments.get(per_serving_key))
+    if per_serving is None or not serving_g:
+        return None, 'missing'
+
+    return per_serving * (100.0 / serving_g), 'per_serving'
+
+
+def _calories_per_100g(nutriments, serving_g):
+    """Return kcal per 100g from OFF nutriments, with kJ fallback."""
+    calories, basis = _nutrient_per_100g(nutriments, 'energy-kcal', serving_g)
+    if calories is not None:
+        return calories, basis
+
+    energy_kj, kj_basis = _nutrient_per_100g(nutriments, 'energy', serving_g)
+    if energy_kj is None:
+        return None, 'missing'
+
+    return energy_kj / 4.184, f"{kj_basis}_kj"
+
+
+def _sodium_per_100g(nutriments, serving_g):
+    """Return sodium (g/100g) from OFF, with salt-based fallback."""
+    sodium, basis = _nutrient_per_100g(nutriments, 'sodium', serving_g)
+    if sodium is not None:
+        return sodium, basis
+
+    salt, salt_basis = _nutrient_per_100g(nutriments, 'salt', serving_g)
+    if salt is None:
+        return None, 'missing'
+
+    # OFF salt is grams NaCl; sodium is ~39.3% of salt by mass.
+    return salt * 0.393, f"{salt_basis}_from_salt"
+
 def calculate_vms_science(row):
     try:
         name, _, cal, sug, fib, prot, fat, sod, _, nova = row
+        present_risk_fields = sum(
+            _safe_float(v) is not None
+            for v in [cal, sug, fat, sod]
+        )
+
+        # Guardrail: avoid over-confident "perfect" scores when OFF/local nutrition is sparse.
+        if present_risk_fields < 2:
+            return 5.0
+
         cal, sug, fib, prot, fat, sod = [float(x or 0) for x in [cal, sug, fib, prot, fat, sod]]
         nova_val = int(nova or 1)
 
@@ -391,24 +473,19 @@ def search_open_food_facts(product_name: str, limit=5):
                 
                 brand = p.get('brands', '').split(',')[0].strip() if p.get('brands') else ''
                 
-                calories = float(nutriments.get('energy-kcal_100g', 0) or 0)
-                sugar = float(nutriments.get('sugars_100g', 0) or 0)
-                fiber = float(nutriments.get('fiber_100g', 0) or 0)
-                protein = float(nutriments.get('proteins_100g', 0) or 0)
-                fat = float(nutriments.get('fat_100g', 0) or 0)
-                sodium = float(nutriments.get('sodium_100g', 0) or 0) * 1000
-                nova = int(p.get('nova_group', 3) or 3)
-                
-                row = [name, brand, calories, sugar, fiber, protein, fat, sodium, None, nova]
-
                 # Extract actual serving size from Open Food Facts (in grams)
-                serving_g = None
-                try:
-                    sq = p.get('serving_quantity')
-                    if sq and float(sq) > 0:
-                        serving_g = float(sq)
-                except (ValueError, TypeError):
-                    pass
+                serving_g = _extract_serving_grams(p)
+
+                calories, calories_basis = _calories_per_100g(nutriments, serving_g)
+                sugar, sugar_basis = _nutrient_per_100g(nutriments, 'sugars', serving_g)
+                fiber, fiber_basis = _nutrient_per_100g(nutriments, 'fiber', serving_g)
+                protein, protein_basis = _nutrient_per_100g(nutriments, 'proteins', serving_g)
+                fat, fat_basis = _nutrient_per_100g(nutriments, 'fat', serving_g)
+                sodium_per_100g, sodium_basis = _sodium_per_100g(nutriments, serving_g)
+                sodium = (sodium_per_100g or 0) * 1000
+                nova = int(p.get('nova_group', 3) or 3)
+
+                row = [name, brand, calories, sugar, fiber, protein, fat, sodium, None, nova]
 
                 score = round(calculate_vms_science(row), 1)
                 rating = "Metabolic Green" if score < 3.0 else "Metabolic Yellow" if score < 7.0 else "Metabolic Red"
@@ -425,6 +502,14 @@ def search_open_food_facts(product_name: str, limit=5):
                 # Include actual serving size when available from the API
                 if serving_g:
                     result_entry["serving_g"] = serving_g
+                result_entry["nutrition_basis"] = {
+                    "calories": calories_basis,
+                    "sugar": sugar_basis,
+                    "fiber": fiber_basis,
+                    "protein": protein_basis,
+                    "fat": fat_basis,
+                    "sodium": sodium_basis,
+                }
                 output.append(result_entry)
                 
                 print(f"[OPEN FOOD FACTS] ✅ Added: {display_name} (Score: {score})")
@@ -536,19 +621,19 @@ Be PRECISE. Return ONLY the JSON array, no other text."""
 
         client = get_gemini_client()
 
-        print(f"[DEBUG] Calling {_active_model()} Vision API...")
+        print(f"[DEBUG] Calling {_active_model('scanner')} Vision API...")
 
         # Analyzing message
         st.markdown(f"""
             <div class="scanner-result">
                 <div class="scanner-result-title">🔍 Analyzing Image</div>
-                <div class="scanner-result-text">Processing with {_active_model()} Vision...</div>
+                <div class="scanner-result-text">Processing with {_active_model('scanner')} Vision...</div>
             </div>
         """, unsafe_allow_html=True)
 
         try:
             response = client.chat.completions.create(
-                model=_active_model(),
+                model=_active_model('scanner'),
                 messages=[
                     {
                         "role": "user",
@@ -605,10 +690,8 @@ Be PRECISE. Return ONLY the JSON array, no other text."""
         for item in detected_items:
             results = search_vantage_db(item, limit=1)
             if results and len(results) > 0:
-                # FIX: Filter 10.0 default scores
                 for r in results:
-                    if r['vms_score'] != 10.0:
-                        all_results.append(r)
+                    all_results.append(r)
         
         if all_results:
             print(f"✅ [DATABASE] Found {len(all_results)} total matches")
@@ -727,10 +810,10 @@ Return ONLY valid JSON array, no other text:
   {{"emoji": "✨", "title": "Short Title", "insight": "Your personalized observation...", "action": "Specific action step..."}}
 ]"""
 
-        print(f"[INSIGHTS] Calling {_active_model()} with {total_items} items over {days_range} days...")
+        print(f"[INSIGHTS] Calling {_active_model('agent')} with {total_items} items over {days_range} days...")
 
         response = client.chat.completions.create(
-            model=_active_model(),
+            model=_active_model('agent'),
             messages=[
                 {"role": "system", "content": _JSON_SYSTEM},
                 {"role": "user", "content": prompt}
@@ -832,10 +915,10 @@ Return ONLY valid JSON, no other text:
   "Sunday": [...]
 }}"""
 
-        print(f"[MEAL PLAN] Calling {_active_model()} for user {user_id}...")
+        print(f"[MEAL PLAN] Calling {_active_model('agent')} for user {user_id}...")
 
         response = client.chat.completions.create(
-            model=_active_model(),
+            model=_active_model('agent'),
             messages=[
                 {"role": "system", "content": _JSON_SYSTEM},
                 {"role": "user", "content": prompt}
@@ -932,10 +1015,10 @@ Return ONLY valid JSON array, no other text:
   {{"name": "Recipe Name", "cuisine": "Cuisine Type", "meal_type": "Dessert", "prep_time": "15 min", "description": "One sentence description", "key_ingredients": "3-4 main ingredients"}}
 ]"""
 
-        print(f"[RECIPES] Calling {_active_model()} for daily recipes (day {day_of_year})...")
+        print(f"[RECIPES] Calling {_active_model('agent')} for daily recipes (day {day_of_year})...")
 
         response = client.chat.completions.create(
-            model=_active_model(),
+            model=_active_model('agent'),
             messages=[
                 {"role": "system", "content": _JSON_SYSTEM},
                 {"role": "user", "content": prompt}
@@ -1205,9 +1288,11 @@ def _using_gemini_key():
     return any(os.getenv(n) for n in gemini_names)
 
 
-def _active_model():
-    """Return the model name matching whichever API key is configured."""
-    return GEMINI_MODEL if _using_gemini_key() else "gpt-4o"
+def _active_model(mode='agent'):
+    """Return model name for the requested mode and configured provider."""
+    if not _using_gemini_key():
+        return "gpt-4o"
+    return GEMINI_SCANNER_MODEL if mode == 'scanner' else GEMINI_AGENT_MODEL
 
 
 def get_gemini_client():
@@ -1217,7 +1302,7 @@ def get_gemini_client():
         print("[CLIENT] ERROR: No API key available — all AI agents will be disabled")
         return None
     if _using_gemini_key():
-        print(f"[CLIENT] Gemini endpoint active: model={GEMINI_MODEL}")
+        print(f"[CLIENT] Gemini endpoint active: agent={GEMINI_AGENT_MODEL}, scanner={GEMINI_SCANNER_MODEL}")
         return OpenAI(base_url=GEMINI_BASE_URL, api_key=api_key)
     print("[CLIENT] OpenAI fallback active: model=gpt-4o")
     return OpenAI(api_key=api_key)
