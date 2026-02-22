@@ -151,13 +151,49 @@ def _nutrient_per_100g(nutriments, key_base, serving_g):
 
     per_serving = _safe_float(nutriments.get(per_serving_key))
     if per_serving is None or not serving_g:
-        return 0.0, 'missing'
+        return None, 'missing'
 
     return per_serving * (100.0 / serving_g), 'per_serving'
+
+
+def _calories_per_100g(nutriments, serving_g):
+    """Return kcal per 100g from OFF nutriments, with kJ fallback."""
+    calories, basis = _nutrient_per_100g(nutriments, 'energy-kcal', serving_g)
+    if calories is not None:
+        return calories, basis
+
+    energy_kj, kj_basis = _nutrient_per_100g(nutriments, 'energy', serving_g)
+    if energy_kj is None:
+        return None, 'missing'
+
+    return energy_kj / 4.184, f"{kj_basis}_kj"
+
+
+def _sodium_per_100g(nutriments, serving_g):
+    """Return sodium (g/100g) from OFF, with salt-based fallback."""
+    sodium, basis = _nutrient_per_100g(nutriments, 'sodium', serving_g)
+    if sodium is not None:
+        return sodium, basis
+
+    salt, salt_basis = _nutrient_per_100g(nutriments, 'salt', serving_g)
+    if salt is None:
+        return None, 'missing'
+
+    # OFF salt is grams NaCl; sodium is ~39.3% of salt by mass.
+    return salt * 0.393, f"{salt_basis}_from_salt"
 
 def calculate_vms_science(row):
     try:
         name, _, cal, sug, fib, prot, fat, sod, _, nova = row
+        present_risk_fields = sum(
+            _safe_float(v) is not None
+            for v in [cal, sug, fat, sod]
+        )
+
+        # Guardrail: avoid over-confident "perfect" scores when OFF/local nutrition is sparse.
+        if present_risk_fields < 2:
+            return 5.0
+
         cal, sug, fib, prot, fat, sod = [float(x or 0) for x in [cal, sug, fib, prot, fat, sod]]
         nova_val = int(nova or 1)
 
@@ -439,13 +475,13 @@ def search_open_food_facts(product_name: str, limit=5):
                 # Extract actual serving size from Open Food Facts (in grams)
                 serving_g = _extract_serving_grams(p)
 
-                calories, calories_basis = _nutrient_per_100g(nutriments, 'energy-kcal', serving_g)
+                calories, calories_basis = _calories_per_100g(nutriments, serving_g)
                 sugar, sugar_basis = _nutrient_per_100g(nutriments, 'sugars', serving_g)
                 fiber, fiber_basis = _nutrient_per_100g(nutriments, 'fiber', serving_g)
                 protein, protein_basis = _nutrient_per_100g(nutriments, 'proteins', serving_g)
                 fat, fat_basis = _nutrient_per_100g(nutriments, 'fat', serving_g)
-                sodium_per_100g, sodium_basis = _nutrient_per_100g(nutriments, 'sodium', serving_g)
-                sodium = sodium_per_100g * 1000
+                sodium_per_100g, sodium_basis = _sodium_per_100g(nutriments, serving_g)
+                sodium = (sodium_per_100g or 0) * 1000
                 nova = int(p.get('nova_group', 3) or 3)
 
                 row = [name, brand, calories, sugar, fiber, protein, fat, sodium, None, nova]
@@ -653,10 +689,8 @@ Be PRECISE. Return ONLY the JSON array, no other text."""
         for item in detected_items:
             results = search_vantage_db(item, limit=1)
             if results and len(results) > 0:
-                # FIX: Filter 10.0 default scores
                 for r in results:
-                    if r['vms_score'] != 10.0:
-                        all_results.append(r)
+                    all_results.append(r)
         
         if all_results:
             print(f"✅ [DATABASE] Found {len(all_results)} total matches")
