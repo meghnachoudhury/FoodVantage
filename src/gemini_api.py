@@ -110,6 +110,51 @@ def get_serving_scale(name):
             return SERVING_SCALE[keyword]
     return 1.0  # Default: use full per-100g values
 
+
+def _safe_float(value):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _extract_serving_grams(product):
+    """Best-effort extraction of serving size in grams from Open Food Facts product payload."""
+    sq = _safe_float(product.get('serving_quantity'))
+    if sq and sq > 0:
+        return sq
+
+    serving_size = str(product.get('serving_size', '') or '').lower()
+    import re
+    match = re.search(r'(\d+(?:\.\d+)?)\s*g\b', serving_size)
+    if match:
+        grams = _safe_float(match.group(1))
+        if grams and grams > 0:
+            return grams
+    return None
+
+
+def _nutrient_per_100g(nutriments, key_base, serving_g):
+    """
+    Normalize Open Food Facts nutrient values to a per-100g basis.
+    Returns (value_per_100g, source_basis) where source_basis is one of:
+    - 'per_100g' when *_100g is present
+    - 'per_serving' when converted from *_serving using serving_g
+    - 'missing' when neither path is usable
+    """
+    per_100_key = f"{key_base}_100g"
+    per_serving_key = f"{key_base}_serving"
+
+    per_100 = _safe_float(nutriments.get(per_100_key))
+    if per_100 is not None:
+        return per_100, 'per_100g'
+
+    per_serving = _safe_float(nutriments.get(per_serving_key))
+    if per_serving is None or not serving_g:
+        return 0.0, 'missing'
+
+    return per_serving * (100.0 / serving_g), 'per_serving'
+
 def calculate_vms_science(row):
     try:
         name, _, cal, sug, fib, prot, fat, sod, _, nova = row
@@ -391,24 +436,19 @@ def search_open_food_facts(product_name: str, limit=5):
                 
                 brand = p.get('brands', '').split(',')[0].strip() if p.get('brands') else ''
                 
-                calories = float(nutriments.get('energy-kcal_100g', 0) or 0)
-                sugar = float(nutriments.get('sugars_100g', 0) or 0)
-                fiber = float(nutriments.get('fiber_100g', 0) or 0)
-                protein = float(nutriments.get('proteins_100g', 0) or 0)
-                fat = float(nutriments.get('fat_100g', 0) or 0)
-                sodium = float(nutriments.get('sodium_100g', 0) or 0) * 1000
-                nova = int(p.get('nova_group', 3) or 3)
-                
-                row = [name, brand, calories, sugar, fiber, protein, fat, sodium, None, nova]
-
                 # Extract actual serving size from Open Food Facts (in grams)
-                serving_g = None
-                try:
-                    sq = p.get('serving_quantity')
-                    if sq and float(sq) > 0:
-                        serving_g = float(sq)
-                except (ValueError, TypeError):
-                    pass
+                serving_g = _extract_serving_grams(p)
+
+                calories, calories_basis = _nutrient_per_100g(nutriments, 'energy-kcal', serving_g)
+                sugar, sugar_basis = _nutrient_per_100g(nutriments, 'sugars', serving_g)
+                fiber, fiber_basis = _nutrient_per_100g(nutriments, 'fiber', serving_g)
+                protein, protein_basis = _nutrient_per_100g(nutriments, 'proteins', serving_g)
+                fat, fat_basis = _nutrient_per_100g(nutriments, 'fat', serving_g)
+                sodium_per_100g, sodium_basis = _nutrient_per_100g(nutriments, 'sodium', serving_g)
+                sodium = sodium_per_100g * 1000
+                nova = int(p.get('nova_group', 3) or 3)
+
+                row = [name, brand, calories, sugar, fiber, protein, fat, sodium, None, nova]
 
                 score = round(calculate_vms_science(row), 1)
                 rating = "Metabolic Green" if score < 3.0 else "Metabolic Yellow" if score < 7.0 else "Metabolic Red"
@@ -425,6 +465,14 @@ def search_open_food_facts(product_name: str, limit=5):
                 # Include actual serving size when available from the API
                 if serving_g:
                     result_entry["serving_g"] = serving_g
+                result_entry["nutrition_basis"] = {
+                    "calories": calories_basis,
+                    "sugar": sugar_basis,
+                    "fiber": fiber_basis,
+                    "protein": protein_basis,
+                    "fat": fat_basis,
+                    "sodium": sodium_basis,
+                }
                 output.append(result_entry)
                 
                 print(f"[OPEN FOOD FACTS] ✅ Added: {display_name} (Score: {score})")

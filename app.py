@@ -12,7 +12,7 @@ import plotly.graph_objects as go
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "src"))
 from gemini_api import (
-    calculate_vms_science, get_serving_scale, get_scientific_db,
+    calculate_vms_science, get_scientific_db,
     search_vantage_db, search_open_food_facts, vision_live_scan_dark,
     generate_health_insights, generate_meal_plan, generate_daily_recipes,
     get_db_connection, get_trend_data_db, get_all_calendar_data_db,
@@ -952,15 +952,16 @@ function startScan(){{
             portion_label = " /serving" if needs_portion_size(result['name']) else ""
             raw = result['raw']
 
-            # Use actual serving size from API if available, otherwise fallback to keyword scale
+            # If API provides serving size, scale per-100g values to that serving.
+            # Otherwise, display per-100g directly (no heuristic scaling).
             if 'serving_g' in result:
                 scale = result['serving_g'] / 100.0
                 serving_note = f"per {int(result['serving_g'])}g serving"
             else:
-                scale = get_serving_scale(result['name'])
-                serving_note = f"per ~{int(scale * 100)}g serving" if scale < 1.0 else "per 100g"
+                scale = 1.0
+                serving_note = "per 100g"
 
-            # Extract nutrition data (raw values are per 100g, scale to serving)
+            # Extract nutrition data (raw values are normalized to per 100g in backend)
             cal = round(float(raw[2] or 0) * scale, 1)
             sug = round(float(raw[3] or 0) * scale, 1)
             fib = round(float(raw[4] or 0) * scale, 1)
