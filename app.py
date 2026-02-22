@@ -53,6 +53,34 @@ if 'cal_date' not in st.session_state: st.session_state.cal_date = datetime.now(
 if 'cal_year' not in st.session_state: st.session_state.cal_year = datetime.now().year
 if 'cal_month' not in st.session_state: st.session_state.cal_month = datetime.now().month
 
+# --- DEEP-LINK / QUERY PARAM HANDLERS ---
+# Run before rendering so they work on brand-new sessions (after a link-click page reload).
+_q = st.query_params
+if 'sel_date' in _q:
+    try:
+        _d = datetime.strptime(_q['sel_date'], '%Y-%m-%d').date()
+        st.session_state.cal_date = _d
+        st.session_state.cal_year = _d.year
+        st.session_state.cal_month = _d.month
+        st.session_state.page = 'calendar'
+    except Exception:
+        pass
+    del _q['sel_date']   # silently updates URL, no browser reload
+    st.rerun()
+
+if 'start_scan' in _q:
+    st.session_state.camera_active = True
+    st.session_state.scanning = True
+    st.session_state.scan_count = 0
+    st.session_state.scan_results = None
+    st.session_state.selected_result = None
+    st.session_state.scan_status = None
+    st.session_state.detected_items = []
+    st.session_state._captured_image = None
+    st.session_state.page = 'dashboard'
+    del _q['start_scan']
+    st.rerun()
+
 # --- DARK THEME COLOR PALETTE ---
 C = {
     'bg': '#0F1117',
@@ -594,9 +622,8 @@ def create_html_calendar(year, month, selected_day=None, logged_days=None):
     logged_days = logged_days or set()
     cal = cal_module.monthcalendar(year, month)
     month_name = cal_module.month_name[month]
-    # Month name header (navigation is handled by Streamlit buttons above)
     html = f"<div style='text-align:center; font-weight:700; font-size:0.95rem; color:{C['text']}; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid {C['border']};'>{month_name} {year}</div>"
-    html += "<table style='width:100%; text-align:center; border-collapse: separate; border-spacing: 4px;'><thead><tr>"
+    html += "<table style='width:100%; text-align:center; border-collapse: separate; border-spacing: 2px;'><thead><tr>"
     for day in ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"]:
         html += f"<th style='color:{C['text_muted']}; font-size:0.75rem; font-weight:600; padding:6px;'>{day}</th>"
     html += "</tr></thead><tbody>"
@@ -604,20 +631,23 @@ def create_html_calendar(year, month, selected_day=None, logged_days=None):
         html += "<tr>"
         for day in week:
             if day == 0:
-                html += "<td></td>"
+                html += "<td style='padding:2px;'></td>"
             else:
                 is_selected = day == selected_day
                 is_logged = day in logged_days
                 date_str = f"{year:04d}-{month:02d}-{day:02d}"
-                onclick = f"onclick=\"var u=new URL(window.location);u.searchParams.set('sel_date','{date_str}');window.location.href=u.toString();\""
+                # Style applied to the <a> tag so the entire cell area is the link
                 if is_selected:
-                    style = f"background:{C['teal']}; color:white; border-radius:10px; font-weight:700; cursor:pointer;"
+                    a_style = f"background:{C['teal']}; color:white; border-radius:10px; font-weight:700;"
                 elif is_logged:
-                    style = f"color:{C['text']}; font-weight:600; position:relative; cursor:pointer; border-radius:8px;"
+                    a_style = f"color:{C['text']}; font-weight:600; border-radius:8px;"
                 else:
-                    style = f"color:{C['text_sec']}; cursor:pointer; border-radius:8px;"
-                dot = f"<div style='width:4px;height:4px;border-radius:50%;background:{C['teal']};margin:2px auto 0;'></div>" if is_logged and not is_selected else ""
-                html += f"<td {onclick} style='padding:8px; font-size:0.85rem; {style}'>{day}{dot}</td>"
+                    a_style = f"color:{C['text_sec']}; border-radius:8px;"
+                dot = f"<div style='width:4px;height:4px;border-radius:50%;background:{'white' if is_selected else C['teal']};margin:1px auto 0;'></div>" if is_logged else ""
+                # <a href> is allowed by Streamlit's sanitizer; onclick is not.
+                html += (f"<td style='padding:2px; font-size:0.85rem;'>"
+                         f"<a href='?sel_date={date_str}' style='display:block; padding:7px 4px; text-decoration:none; {a_style}'>"
+                         f"{day}{dot}</a></td>")
         html += "</tr>"
     return html + "</tbody></table>"
 
@@ -798,12 +828,11 @@ if st.session_state.page == 'dashboard':
                 <div class='scanner-corner corner-tr'></div>
                 <div class='scanner-corner corner-bl'></div>
                 <div class='scanner-corner corner-br'></div>
-                <div class='scanner-icon' style='cursor:pointer;'
-                     onclick="var btns=Array.from(document.querySelectorAll('button'));
-                              var b=btns.find(function(x){{return x.innerText.includes('Start Live Scan');}});
-                              if(b)b.click();">
-                    <i class='fa-solid fa-camera'></i>
-                </div>
+                <a href='?start_scan=1' style='text-decoration:none; color:inherit; display:block;'>
+                    <div class='scanner-icon'>
+                        <i class='fa-solid fa-camera'></i>
+                    </div>
+                </a>
                 <div style='font-size:1rem; font-weight:600; color:{C["text"]}; margin-bottom:4px;'>Scanner ready</div>
                 <div style='font-size:0.8rem; color:{C["text_muted"]};'>Tap the camera icon or the button below</div>
             </div>
@@ -1229,18 +1258,6 @@ elif st.session_state.page == 'calendar':
             <div style='color:{C["text_muted"]}; font-size:0.8rem; margin-top:2px;'>{len(unique_dates)} hauls tracked &middot; {total_logged} items scanned total</div>
         </div>
     """, unsafe_allow_html=True)
-
-    # Handle date selection from clickable calendar (JS sets URL query param)
-    if 'sel_date' in st.query_params:
-        try:
-            _qd = datetime.strptime(st.query_params['sel_date'], '%Y-%m-%d').date()
-            st.session_state.cal_date = _qd
-            st.session_state.cal_year = _qd.year
-            st.session_state.cal_month = _qd.month
-            del st.query_params['sel_date']
-            st.rerun()
-        except:
-            pass
 
     sel_date = st.session_state.cal_date
 
