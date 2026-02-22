@@ -256,9 +256,38 @@ st.markdown(f"""
     .results-scroll-container::-webkit-scrollbar-thumb {{ background: {C['teal']}; border-radius: 10px; }}
 
     /* === SCANNER VIEWFINDER === */
-    @keyframes scanner-flicker {{
-        0%, 100% {{ opacity: 0.35; }}
-        50% {{ opacity: 1; }}
+    /* Sequential corner jitter: TL → TR → BL → BR, one at a time, 5s cycle */
+    @keyframes jitter-tl {{
+        0%   {{ transform: translate(0,0);       opacity: 0.4; }}
+        5%   {{ transform: translate(-5px,-5px); opacity: 1;   }}
+        10%  {{ transform: translate(-3px,-3px); opacity: 1;   }}
+        15%  {{ transform: translate(-5px,-5px); opacity: 1;   }}
+        20%  {{ transform: translate(0,0);       opacity: 0.4; }}
+        100% {{ transform: translate(0,0);       opacity: 0.4; }}
+    }}
+    @keyframes jitter-tr {{
+        0%,  25% {{ transform: translate(0,0);      opacity: 0.4; }}
+        30%  {{ transform: translate(5px,-5px);  opacity: 1;   }}
+        35%  {{ transform: translate(3px,-3px);  opacity: 1;   }}
+        40%  {{ transform: translate(5px,-5px);  opacity: 1;   }}
+        45%  {{ transform: translate(0,0);       opacity: 0.4; }}
+        100% {{ transform: translate(0,0);       opacity: 0.4; }}
+    }}
+    @keyframes jitter-bl {{
+        0%,  50% {{ transform: translate(0,0);      opacity: 0.4; }}
+        55%  {{ transform: translate(-5px,5px);  opacity: 1;   }}
+        60%  {{ transform: translate(-3px,3px);  opacity: 1;   }}
+        65%  {{ transform: translate(-5px,5px);  opacity: 1;   }}
+        70%  {{ transform: translate(0,0);       opacity: 0.4; }}
+        100% {{ transform: translate(0,0);       opacity: 0.4; }}
+    }}
+    @keyframes jitter-br {{
+        0%,  75% {{ transform: translate(0,0);     opacity: 0.4; }}
+        80%  {{ transform: translate(5px,5px);  opacity: 1;   }}
+        85%  {{ transform: translate(3px,3px);  opacity: 1;   }}
+        90%  {{ transform: translate(5px,5px);  opacity: 1;   }}
+        95%  {{ transform: translate(0,0);      opacity: 0.4; }}
+        100% {{ transform: translate(0,0);      opacity: 0.4; }}
     }}
     .scanner-viewfinder {{
         background: {C['bg_card']};
@@ -279,12 +308,15 @@ st.markdown(f"""
         height: 45px;
         border-color: {C['teal']};
         border-style: solid;
-        animation: scanner-flicker 2.5s ease-in-out infinite;
     }}
-    .corner-tl {{ top: 28px; left: 28px; border-width: 3px 0 0 3px; border-radius: 6px 0 0 0; }}
-    .corner-tr {{ top: 28px; right: 28px; border-width: 3px 3px 0 0; border-radius: 0 6px 0 0; }}
-    .corner-bl {{ bottom: 28px; left: 28px; border-width: 0 0 3px 3px; border-radius: 0 0 0 6px; }}
-    .corner-br {{ bottom: 28px; right: 28px; border-width: 0 3px 3px 0; border-radius: 0 0 6px 0; }}
+    .corner-tl {{ top: 28px; left: 28px; border-width: 3px 0 0 3px; border-radius: 6px 0 0 0;
+                  animation: jitter-tl 5s ease-in-out infinite; }}
+    .corner-tr {{ top: 28px; right: 28px; border-width: 3px 3px 0 0; border-radius: 0 6px 0 0;
+                  animation: jitter-tr 5s ease-in-out infinite; }}
+    .corner-bl {{ bottom: 28px; left: 28px; border-width: 0 0 3px 3px; border-radius: 0 0 0 6px;
+                  animation: jitter-bl 5s ease-in-out infinite; }}
+    .corner-br {{ bottom: 28px; right: 28px; border-width: 0 3px 3px 0; border-radius: 0 0 6px 0;
+                  animation: jitter-br 5s ease-in-out infinite; }}
     .scanner-icon {{
         width: 64px; height: 64px;
         border-radius: 50%;
@@ -660,13 +692,24 @@ if st.session_state.page == 'dashboard':
     if st.session_state.user_allergies is None:
         st.session_state.user_allergies = get_user_allergies(st.session_state.user_id)
 
+    # Centred brand hero — logo + tagline
+    st.markdown(f"""
+        <div style='text-align:center; padding:32px 0 24px; border-bottom:1px solid {C["border"]}; margin-bottom:28px;'>
+            <div style='font-size:2.4rem; font-weight:800; letter-spacing:-0.5px; line-height:1;'>
+                <span style='color:{C["text"]};'>foodvantage</span><span style='color:{C["teal"]};'>.</span>
+            </div>
+            <div style='font-size:0.95rem; font-weight:500; color:#C4A35A; margin-top:10px; letter-spacing:0.2px;'>
+                Know what's in your cart before it's in your body.
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
+
     # Header
     now = datetime.now()
     st.markdown(f"""
         <div style='margin-bottom:4px;'>
             <h2 style='margin:0; font-weight:800; font-size:1.8rem;'>Dashboard</h2>
             <div style='color:{C["text_muted"]}; font-size:0.85rem;'>{now.strftime('%A, %B %d, %Y')}</div>
-            <div style='color:{C["teal"]}; font-size:0.95rem; font-weight:600; margin-top:2px;'>Plan your food before you buy. &middot; Track smarter. Live better.</div>
         </div>
     """, unsafe_allow_html=True)
 
