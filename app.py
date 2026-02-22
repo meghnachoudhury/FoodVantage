@@ -49,6 +49,9 @@ if 'allergy_popup_open' not in st.session_state: st.session_state.allergy_popup_
 if '_loading_insights' not in st.session_state: st.session_state._loading_insights = False
 if '_loading_recipes' not in st.session_state: st.session_state._loading_recipes = False
 if '_loading_meal_plan' not in st.session_state: st.session_state._loading_meal_plan = False
+if 'cal_date' not in st.session_state: st.session_state.cal_date = datetime.now().date()
+if 'cal_year' not in st.session_state: st.session_state.cal_year = datetime.now().year
+if 'cal_month' not in st.session_state: st.session_state.cal_month = datetime.now().month
 
 # --- DARK THEME COLOR PALETTE ---
 C = {
@@ -106,6 +109,10 @@ def score_color(score, mode='vms'):
         if score < 3.0: return C['green']
         if score < 7.0: return C['yellow']
         return C['red']
+
+def vms_to_display_score(vms_score):
+    """Convert VMS score (-2 to 10) to a 0-10 user-facing scale where 10 = healthiest."""
+    return round(vms_to_health_score(vms_score) / 10, 1)
 
 # --- CSS (Dark Theme) ---
 st.markdown('<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">', unsafe_allow_html=True)
@@ -586,7 +593,10 @@ def render_logo(size="1.6rem"):
 def create_html_calendar(year, month, selected_day=None, logged_days=None):
     logged_days = logged_days or set()
     cal = cal_module.monthcalendar(year, month)
-    html = "<table style='width:100%; text-align:center; border-collapse: separate; border-spacing: 4px;'><thead><tr>"
+    month_name = cal_module.month_name[month]
+    # Month name header (navigation is handled by Streamlit buttons above)
+    html = f"<div style='text-align:center; font-weight:700; font-size:0.95rem; color:{C['text']}; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid {C['border']};'>{month_name} {year}</div>"
+    html += "<table style='width:100%; text-align:center; border-collapse: separate; border-spacing: 4px;'><thead><tr>"
     for day in ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"]:
         html += f"<th style='color:{C['text_muted']}; font-size:0.75rem; font-weight:600; padding:6px;'>{day}</th>"
     html += "</tr></thead><tbody>"
@@ -598,14 +608,16 @@ def create_html_calendar(year, month, selected_day=None, logged_days=None):
             else:
                 is_selected = day == selected_day
                 is_logged = day in logged_days
+                date_str = f"{year:04d}-{month:02d}-{day:02d}"
+                onclick = f"onclick=\"var u=new URL(window.location);u.searchParams.set('sel_date','{date_str}');window.location.href=u.toString();\""
                 if is_selected:
-                    style = f"background:{C['teal']}; color:white; border-radius:10px; font-weight:700;"
+                    style = f"background:{C['teal']}; color:white; border-radius:10px; font-weight:700; cursor:pointer;"
                 elif is_logged:
-                    style = f"color:{C['text']}; font-weight:600; position:relative;"
+                    style = f"color:{C['text']}; font-weight:600; position:relative; cursor:pointer; border-radius:8px;"
                 else:
-                    style = f"color:{C['text_sec']};"
+                    style = f"color:{C['text_sec']}; cursor:pointer; border-radius:8px;"
                 dot = f"<div style='width:4px;height:4px;border-radius:50%;background:{C['teal']};margin:2px auto 0;'></div>" if is_logged and not is_selected else ""
-                html += f"<td style='padding:8px; font-size:0.85rem; {style}'>{day}{dot}</td>"
+                html += f"<td {onclick} style='padding:8px; font-size:0.85rem; {style}'>{day}{dot}</td>"
         html += "</tr>"
     return html + "</tbody></table>"
 
@@ -626,8 +638,9 @@ with st.sidebar:
         if filtered_results:
             for d in filtered_results[:3]:
                 h_score = vms_to_health_score(d['vms_score'])
+                d_score = vms_to_display_score(d['vms_score'])
                 clr = score_color(h_score, 'health')
-                st.markdown(f"<div style='padding:4px 0; display:flex; justify-content:space-between;'><span style='font-size:0.8rem; color:{C['text_sec']};'>{d['name'][:30]}</span><strong style='color:{clr}; font-size:0.8rem;'>{h_score}/100</strong></div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='padding:4px 0; display:flex; justify-content:space-between;'><span style='font-size:0.8rem; color:{C['text_sec']};'>{d['name'][:30]}</span><strong style='color:{clr}; font-size:0.8rem;'>{d_score}/10</strong></div>", unsafe_allow_html=True)
         else:
             st.markdown(f"<div style='font-size:0.8rem; color:{C['text_muted']}; padding:4px 0;'>No results found.</div>", unsafe_allow_html=True)
 
@@ -785,9 +798,14 @@ if st.session_state.page == 'dashboard':
                 <div class='scanner-corner corner-tr'></div>
                 <div class='scanner-corner corner-bl'></div>
                 <div class='scanner-corner corner-br'></div>
-                <div class='scanner-icon'><i class='fa-solid fa-camera'></i></div>
+                <div class='scanner-icon' style='cursor:pointer;'
+                     onclick="var btns=Array.from(document.querySelectorAll('button'));
+                              var b=btns.find(function(x){{return x.innerText.includes('Start Live Scan');}});
+                              if(b)b.click();">
+                    <i class='fa-solid fa-camera'></i>
+                </div>
                 <div style='font-size:1rem; font-weight:600; color:{C["text"]}; margin-bottom:4px;'>Scanner ready</div>
-                <div style='font-size:0.8rem; color:{C["text_muted"]};'>Tap below to begin live scanning</div>
+                <div style='font-size:0.8rem; color:{C["text_muted"]};'>Tap the camera icon or the button below</div>
             </div>
         """, unsafe_allow_html=True)
         if st.button("Start Live Scan", type="primary", use_container_width=True):
@@ -902,6 +920,7 @@ if st.session_state.page == 'dashboard':
             clr = score_color(vms)
             health_score = vms_to_health_score(vms)
             health_clr = score_color(health_score, 'health')
+            display_score = vms_to_display_score(vms)
             rating = result['rating']
             portion_label = " /serving" if needs_portion_size(result['name']) else ""
             raw = result['raw']
@@ -924,14 +943,14 @@ if st.session_state.page == 'dashboard':
                             <span style='color:{clr}; font-size:0.8rem; font-weight:600;'>{rating}</span>
                         </div>
                         <div style='text-align:right;'>
-                            <div style='color:{clr}; font-size:1.6rem; font-weight:900;'>{round(vms, 1)}{portion_label}</div>
-                            <div style='font-size:0.7rem; color:{C["text_muted"]};'>VMS Score</div>
+                            <div style='color:{health_clr}; font-size:1.6rem; font-weight:900;'>{display_score}<span style='font-size:0.9rem; font-weight:600;'>/10</span></div>
+                            <div style='font-size:0.7rem; color:{C["text_muted"]};'>Health Score</div>
                         </div>
                     </div>
                     <div style='display:flex; align-items:center; gap:8px; margin-top:8px;'>
-                        <div style='background:rgba(91,155,157,0.12); padding:4px 12px; border-radius:20px;'>
-                            <span style='color:{health_clr}; font-weight:700; font-size:0.85rem;'>{health_score}</span>
-                            <span style='color:{C["text_muted"]}; font-size:0.7rem;'>/100 Health Score</span>
+                        <div style='background:rgba(91,155,157,0.08); padding:4px 12px; border-radius:20px;'>
+                            <span style='color:{C["text_muted"]}; font-size:0.7rem;'>Higher score = healthier choice &middot; </span>
+                            <span style='color:{health_clr}; font-weight:600; font-size:0.7rem;'>{rating}</span>
                         </div>
                     </div>
                     <div style='margin-top:12px; padding-top:10px; border-top:1px solid {C["border"]};'>
@@ -1211,16 +1230,46 @@ elif st.session_state.page == 'calendar':
         </div>
     """, unsafe_allow_html=True)
 
+    # Handle date selection from clickable calendar (JS sets URL query param)
+    if 'sel_date' in st.query_params:
+        try:
+            _qd = datetime.strptime(st.query_params['sel_date'], '%Y-%m-%d').date()
+            st.session_state.cal_date = _qd
+            st.session_state.cal_year = _qd.year
+            st.session_state.cal_month = _qd.month
+            del st.query_params['sel_date']
+            st.rerun()
+        except:
+            pass
+
+    sel_date = st.session_state.cal_date
+
     c1, c2 = st.columns([1, 1.5])
 
     with c1:
-        sel_date = st.date_input("Select Date", datetime.now(), label_visibility="collapsed")
-        # Get logged days for current month
+        # Month navigation
+        nav_col1, nav_col2, nav_col3 = st.columns([1, 2, 1])
+        with nav_col1:
+            if st.button("‹", key="cal_prev", help="Previous month"):
+                m, y = st.session_state.cal_month - 1, st.session_state.cal_year
+                if m < 1: m, y = 12, y - 1
+                st.session_state.cal_month, st.session_state.cal_year = m, y
+                st.rerun()
+        with nav_col3:
+            if st.button("›", key="cal_next", help="Next month"):
+                m, y = st.session_state.cal_month + 1, st.session_state.cal_year
+                if m > 12: m, y = 1, y + 1
+                st.session_state.cal_month, st.session_state.cal_year = m, y
+                st.rerun()
+
+        # Get logged days for displayed month
         logged_days_in_month = set()
         for d in unique_dates:
-            if hasattr(d, 'year') and d.year == sel_date.year and d.month == sel_date.month:
+            if hasattr(d, 'year') and d.year == st.session_state.cal_year and d.month == st.session_state.cal_month:
                 logged_days_in_month.add(d.day)
-        st.markdown(f"<div class='card'>{create_html_calendar(sel_date.year, sel_date.month, sel_date.day, logged_days_in_month)}</div>", unsafe_allow_html=True)
+        # Highlight selected day only if it's in the displayed month
+        shown_selected = sel_date.day if (sel_date.year == st.session_state.cal_year and sel_date.month == st.session_state.cal_month) else None
+        st.markdown(f"<div class='card'>{create_html_calendar(st.session_state.cal_year, st.session_state.cal_month, shown_selected, logged_days_in_month)}</div>", unsafe_allow_html=True)
 
     with c2:
         items = get_calendar_items_db(st.session_state.user_id, sel_date.strftime("%Y-%m-%d"))
@@ -1232,8 +1281,13 @@ elif st.session_state.page == 'calendar':
             </div>
         """, unsafe_allow_html=True)
 
-        # Add item
-        st.markdown(f"<div style='font-size:0.75rem; font-weight:600; color:{C['text_muted']}; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px;'>Add to This Haul</div>", unsafe_allow_html=True)
+        # Add item — friendly onboarding text
+        st.markdown(f"""
+            <div style='background:rgba(91,155,157,0.08); border:1px solid rgba(91,155,157,0.2); border-radius:12px; padding:10px 14px; margin-bottom:10px;'>
+                <div style='font-size:0.8rem; font-weight:600; color:{C["teal"]}; margin-bottom:3px;'>Forgot to scan before buying? No problem!</div>
+                <div style='font-size:0.75rem; color:{C["text_muted"]};'>Search any item below — we'll look up its health score and log it to your haul.</div>
+            </div>
+        """, unsafe_allow_html=True)
         search_item = st.text_input("Search for an item", key="calendar_search", placeholder="e.g., banana, avocado...", label_visibility="collapsed")
 
         if search_item:
@@ -1243,7 +1297,9 @@ elif st.session_state.page == 'calendar':
                 st.markdown('<div class="results-scroll-container">', unsafe_allow_html=True)
                 cal_user_allergies = get_user_allergies(st.session_state.user_id)
                 for idx, result in enumerate(filtered_results):
-                    clr = score_color(result['vms_score'])
+                    h_sc = vms_to_health_score(result['vms_score'])
+                    clr = score_color(h_sc, 'health')
+                    d_sc = vms_to_display_score(result['vms_score'])
                     col_a, col_b, col_c = st.columns([3, 1, 0.6])
                     with col_a:
                         st.markdown(f"<span style='font-size:0.9rem;'>{result['name']}</span>", unsafe_allow_html=True)
@@ -1251,7 +1307,7 @@ elif st.session_state.page == 'calendar':
                         if cal_matched:
                             st.markdown(f"<div style='font-size:0.7rem; color:{C['red']}; font-weight:600;'>⚠️ Potential allergy: {', '.join(cal_matched)} — verify ingredients</div>", unsafe_allow_html=True)
                     with col_b:
-                        st.markdown(f"<div style='text-align:center; color:{clr}; font-weight:bold;'>{round(result['vms_score'], 1)}</div>", unsafe_allow_html=True)
+                        st.markdown(f"<div style='text-align:center; color:{clr}; font-weight:bold;'>{d_sc}/10</div>", unsafe_allow_html=True)
                     with col_c:
                         if st.button("+", key=f"add_cal_{idx}_{sel_date}", help=f"Add {result['name']}"):
                             add_calendar_item_db(st.session_state.user_id, sel_date.strftime("%Y-%m-%d"),
@@ -1273,7 +1329,9 @@ elif st.session_state.page == 'calendar':
         st.markdown(f"<div style='font-size:0.75rem; font-weight:600; color:{C['text_muted']}; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px;'>Items in This Haul</div>", unsafe_allow_html=True)
         if items:
             for iid, name, score_val, cat in items:
-                clr = score_color(score_val)
+                h_sc_item = vms_to_health_score(score_val)
+                clr = score_color(h_sc_item, 'health')
+                d_sc_item = vms_to_display_score(score_val)
                 col_item, col_del = st.columns([5, 1])
                 with col_item:
                     st.markdown(f"""
@@ -1282,7 +1340,7 @@ elif st.session_state.page == 'calendar':
                                 <div style='width:8px; height:8px; border-radius:50%; background:{clr};'></div>
                                 <span style='font-size:0.9rem;'>{name}</span>
                             </div>
-                            <strong style='color:{clr}; font-size:0.9rem;'>{round(score_val, 1)}</strong>
+                            <strong style='color:{clr}; font-size:0.9rem;'>{d_sc_item}/10</strong>
                         </div>
                     """, unsafe_allow_html=True)
                 with col_del:
@@ -1364,10 +1422,9 @@ elif st.session_state.page == 'log':
                     </div>
             """, unsafe_allow_html=True)
             for iid, name, score_val, cat in items_list:
-                clr = score_color(score_val)
-                # Show +/- prefix for VMS scores
-                score_prefix = "+" if score_val >= 0 else ""
-                score_display = f"{score_prefix}{round(score_val, 1)}"
+                h_sc_log = vms_to_health_score(score_val)
+                clr = score_color(h_sc_log, 'health')
+                score_display = f"{vms_to_display_score(score_val)}/10"
                 # Estimate calories per item based on score category
                 item_cal = 89 if score_val < 3.0 else 220 if score_val < 7.0 else 320
                 col_item, col_del = st.columns([6, 0.5])
