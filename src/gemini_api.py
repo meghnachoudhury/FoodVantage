@@ -359,6 +359,36 @@ def _normalized_tokens(text: str):
     return [t for t in cleaned.split() if len(t) > 1]
 
 
+def _singularize(term: str) -> str:
+    """Convert common English food plurals to singular form for broader DB matching."""
+    t = term.lower().strip()
+    if t.endswith('ies') and len(t) > 4:
+        return t[:-3] + 'y'   # blueberries→blueberry, strawberries→strawberry
+    if t.endswith('ves') and len(t) > 4:
+        return t[:-3] + 'f'   # leaves→leaf
+    if t.endswith('s') and len(t) > 3 and not t.endswith('ss'):
+        return t[:-1]          # apples→apple, bananas→banana, grapes→grape
+    return t
+
+
+def _name_relevance(product_name: str, query: str) -> int:
+    """Score how closely a product name matches the query (higher is better match)."""
+    pn = product_name.lower().strip()
+    q  = query.lower().strip()
+    qs = _singularize(q)
+    best = 0
+    for qt in {q, qs}:
+        if pn == qt:
+            best = max(best, 100)
+        elif pn.startswith(qt + ' ') or pn == qt + 's':
+            best = max(best, 85)
+        elif re.search(r'\b' + re.escape(qt) + r'\b', pn):
+            best = max(best, 60)
+        elif qt in pn:
+            best = max(best, 35)
+    return best
+
+
 def _token_query_terms(text: str):
     """Scanner-oriented search tokens (drop noisy packaging words)."""
     stopwords = {
@@ -433,24 +463,42 @@ def search_vantage_db(product_name: str, limit=5, fast_mode=False):
     con = get_scientific_db()
     if not con: return None
     try:
-        safe_name = product_name.replace("'", "''")
-        search_terms = _token_query_terms(product_name)
-        
+        safe_name     = product_name.replace("'", "''")
+        safe_singular = _singularize(product_name).replace("'", "''")
+        search_terms  = _token_query_terms(product_name)
+
+        # Match both the typed form and the singular form so "blueberries"
+        # also finds products named "blueberry" (and vice-versa).
+        if safe_singular != safe_name:
+            where_clause = (
+                f"product_name ILIKE '%{safe_name}%' "
+                f"OR product_name ILIKE '%{safe_singular}%'"
+            )
+            exact_clause = (
+                f"LOWER(product_name) = LOWER('{safe_name}') "
+                f"OR LOWER(product_name) = LOWER('{safe_singular}')"
+            )
+        else:
+            where_clause = f"product_name ILIKE '%{safe_name}%'"
+            exact_clause = f"LOWER(product_name) = LOWER('{safe_name}')"
+
+        # sugar ASC as tie-breaker so the least-processed / healthiest items
+        # surface first when name length is equal (was incorrectly DESC before).
         query = f"""
-            SELECT * FROM products 
-            WHERE product_name ILIKE '%{safe_name}%'
-            ORDER BY 
-                CASE 
-                    WHEN LOWER(product_name) = LOWER('{safe_name}') THEN 0
+            SELECT * FROM products
+            WHERE {where_clause}
+            ORDER BY
+                CASE
+                    WHEN {exact_clause} THEN 0
                     WHEN product_name NOT LIKE '%,%' AND (brand IS NULL OR brand = '') THEN 1
                     WHEN LENGTH(product_name) - LENGTH(REPLACE(product_name, ' ', '')) <= 2 THEN 2
                     ELSE 3
                 END,
                 LENGTH(product_name),
-                sugar DESC
-            LIMIT {limit}
+                sugar ASC
+            LIMIT {limit * 3}
         """
-        
+
         results = con.execute(query).fetchall()
 
         # Tokenized fallback for long/noisy scanner labels.
@@ -497,8 +545,17 @@ def search_vantage_db(product_name: str, limit=5, fast_mode=False):
                 "rating": rating,
                 "raw": r
             })
-        
-        return output
+
+        # Re-rank by relevance (closer name match first), then healthier score.
+        # This ensures "blueberry" and "blueberries" both surface the fresh
+        # whole-food result before processed/flavoured products.
+        output.sort(key=lambda x: (
+            -_name_relevance(x["name"], product_name),
+            x["vms_score"],
+            len(x["name"])
+        ))
+
+        return output[:limit]
         
     except Exception as e:
         print(f"[DB ERROR] {e}")
