@@ -78,7 +78,7 @@ C = {
     'text': '#E8EAF0',
     'text_sec': '#a0a0b4',
     'text_muted': '#9090b0',
-    'muted_purple': '#c4b8de',
+    'muted_purple': '#d8cfee',
     'green': '#4CAF50',
     'yellow': '#F9A825',
     'red': '#E53935',
@@ -187,7 +187,7 @@ st.markdown(f"""
 
     /* === BUTTONS === */
     .stButton > button {{
-        background: rgba(238,164,183,0.3) !important;
+        background: rgba(238,164,183,0.2) !important;
         color: {C['teal_light']} !important;
         border: 1px solid rgba(238,164,183,0.3) !important;
         border-radius: 12px !important;
@@ -689,88 +689,107 @@ st.markdown(f"""
 st.markdown(f"""
 <div style="position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:0;overflow:hidden;">
 
-  <!-- TOP-RIGHT corner botanical cluster -->
-  <div style="position:absolute;top:0;right:0;width:240px;height:240px;opacity:0.28;">
-    <svg viewBox="0 0 240 240" width="240" height="240" xmlns="http://www.w3.org/2000/svg">
-      <!-- Large back leaf -->
-      <path d="M228,8 C210,38 188,85 178,135 C168,178 172,208 178,235
-               C186,205 190,172 198,128 C212,76 226,32 228,8 Z"
-            fill="#7c9e38" opacity="0.55"/>
-      <!-- Medium centre leaf -->
-      <path d="M240,28 C218,58 194,108 182,158 C170,200 174,228 181,240
-               C190,225 192,195 201,150 C217,97 237,52 240,28 Z"
-            fill="#7c9e38" opacity="0.65"/>
-      <!-- Slim front leaf -->
-      <path d="M210,0 C204,22 200,58 198,94 C196,130 198,158 202,182
-               C204,156 207,127 210,90 C215,54 216,22 210,0 Z"
-            fill="#96b348" opacity="0.45"/>
-      <!-- Horizontal accent leaf -->
-      <path d="M240,96 C210,90 175,92 148,110
-               C175,116 210,114 240,96 Z"
-            fill="#7c9e38" opacity="0.40"/>
-      <!-- Stem line -->
-      <path d="M230,230 Q195,165 162,108" stroke="#7c9e38" stroke-width="1.8" fill="none" opacity="0.45"/>
-      <!-- Pink accent dots -->
-      <circle cx="162" cy="126" r="5.5" fill="{C['teal']}" opacity="0.55"/>
-      <circle cx="178" cy="155" r="4"   fill="{C['teal']}" opacity="0.50"/>
-      <circle cx="150" cy="142" r="3"   fill="{C['teal']}" opacity="0.45"/>
-      <circle cx="182" cy="174" r="4.5" fill="{C['teal_light']}" opacity="0.42"/>
-      <!-- Olive dots -->
-      <circle cx="144" cy="110" r="3.5" fill="#7c9e38" opacity="0.45"/>
-      <circle cx="166" cy="98"  r="2.5" fill="#7c9e38" opacity="0.38"/>
+  <!-- TOP-RIGHT: elegant herb sprig with paired leaves + berry accents -->
+  <div style="position:absolute;top:-8px;right:-8px;width:280px;height:280px;opacity:0.22;">
+    <svg viewBox="0 0 280 280" width="280" height="280" xmlns="http://www.w3.org/2000/svg">
+      <!-- Main curved stem from corner inward -->
+      <path d="M272,6 C258,28 240,58 220,90 C200,122 180,152 164,180 C152,200 144,220 140,238"
+            stroke="#7c9e38" stroke-width="1.8" fill="none" opacity="0.85"/>
+      <!-- Leaf pair 1 -->
+      <path d="M252,26 C262,16 274,12 269,26 C265,38 253,42 252,26Z" fill="#7c9e38" opacity="0.7"/>
+      <path d="M252,26 C242,18 236,10 244,22 C248,28 251,34 252,26Z" fill="#96b348" opacity="0.55"/>
+      <line x1="252" y1="26" x2="268" y2="16" stroke="#b0cc68" stroke-width="0.8" opacity="0.5"/>
+      <line x1="252" y1="26" x2="240" y2="16" stroke="#b0cc68" stroke-width="0.8" opacity="0.5"/>
+      <!-- Leaf pair 2 -->
+      <path d="M234,52 C246,40 260,36 254,52 C249,65 234,68 234,52Z" fill="#7c9e38" opacity="0.65"/>
+      <path d="M234,52 C222,42 216,32 226,46 C230,54 233,61 234,52Z" fill="#96b348" opacity="0.5"/>
+      <line x1="234" y1="52" x2="250" y2="40" stroke="#b0cc68" stroke-width="0.8" opacity="0.45"/>
+      <line x1="234" y1="52" x2="220" y2="40" stroke="#b0cc68" stroke-width="0.8" opacity="0.45"/>
+      <!-- Leaf pair 3 -->
+      <path d="M212,82 C226,68 242,64 235,82 C229,97 212,100 212,82Z" fill="#7c9e38" opacity="0.6"/>
+      <path d="M212,82 C198,70 192,58 204,74 C208,82 211,91 212,82Z" fill="#96b348" opacity="0.48"/>
+      <line x1="212" y1="82" x2="230" y2="68" stroke="#b0cc68" stroke-width="0.8" opacity="0.4"/>
+      <line x1="212" y1="82" x2="196" y2="68" stroke="#b0cc68" stroke-width="0.8" opacity="0.4"/>
+      <!-- Leaf pair 4 -->
+      <path d="M192,114 C208,98 226,94 218,114 C211,130 192,134 192,114Z" fill="#7c9e38" opacity="0.55"/>
+      <path d="M192,114 C176,100 170,88 183,104 C187,114 191,124 192,114Z" fill="#96b348" opacity="0.44"/>
+      <!-- Leaf pair 5 -->
+      <path d="M172,146 C188,130 208,126 199,146 C192,162 172,166 172,146Z" fill="#7c9e38" opacity="0.48"/>
+      <path d="M172,146 C156,132 150,120 164,138 C168,148 171,158 172,146Z" fill="#96b348" opacity="0.38"/>
+      <!-- Pink berry cluster -->
+      <circle cx="160" cy="174" r="5.5" fill="{C['teal']}" opacity="0.65"/>
+      <circle cx="148" cy="188" r="3.8" fill="{C['teal']}" opacity="0.55"/>
+      <circle cx="168" cy="186" r="3.2" fill="{C['teal_light']}" opacity="0.5"/>
+      <circle cx="142" cy="202" r="2.6" fill="{C['teal']}" opacity="0.42"/>
+      <!-- Tiny olive dots along stem -->
+      <circle cx="248" cy="40" r="2.2" fill="#96b348" opacity="0.4"/>
+      <circle cx="230" cy="66" r="1.8" fill="#96b348" opacity="0.35"/>
     </svg>
   </div>
 
-  <!-- BOTTOM-LEFT corner botanical cluster (mirror of top-right) -->
-  <div style="position:absolute;bottom:0;left:0;width:240px;height:240px;opacity:0.28;transform:rotate(180deg);">
-    <svg viewBox="0 0 240 240" width="240" height="240" xmlns="http://www.w3.org/2000/svg">
-      <path d="M228,8 C210,38 188,85 178,135 C168,178 172,208 178,235
-               C186,205 190,172 198,128 C212,76 226,32 228,8 Z"
-            fill="#7c9e38" opacity="0.55"/>
-      <path d="M240,28 C218,58 194,108 182,158 C170,200 174,228 181,240
-               C190,225 192,195 201,150 C217,97 237,52 240,28 Z"
-            fill="#7c9e38" opacity="0.65"/>
-      <path d="M210,0 C204,22 200,58 198,94 C196,130 198,158 202,182
-               C204,156 207,127 210,90 C215,54 216,22 210,0 Z"
-            fill="#96b348" opacity="0.45"/>
-      <path d="M240,96 C210,90 175,92 148,110
-               C175,116 210,114 240,96 Z"
-            fill="#7c9e38" opacity="0.40"/>
-      <path d="M230,230 Q195,165 162,108" stroke="#7c9e38" stroke-width="1.8" fill="none" opacity="0.45"/>
-      <circle cx="162" cy="126" r="5.5" fill="{C['teal']}" opacity="0.55"/>
-      <circle cx="178" cy="155" r="4"   fill="{C['teal']}" opacity="0.50"/>
-      <circle cx="150" cy="142" r="3"   fill="{C['teal']}" opacity="0.45"/>
-      <circle cx="182" cy="174" r="4.5" fill="{C['teal_light']}" opacity="0.42"/>
-      <circle cx="144" cy="110" r="3.5" fill="#7c9e38" opacity="0.45"/>
-      <circle cx="166" cy="98"  r="2.5" fill="#7c9e38" opacity="0.38"/>
+  <!-- BOTTOM-LEFT: same sprig rotated 180° -->
+  <div style="position:absolute;bottom:-8px;left:-8px;width:280px;height:280px;opacity:0.22;transform:rotate(180deg);">
+    <svg viewBox="0 0 280 280" width="280" height="280" xmlns="http://www.w3.org/2000/svg">
+      <path d="M272,6 C258,28 240,58 220,90 C200,122 180,152 164,180 C152,200 144,220 140,238"
+            stroke="#7c9e38" stroke-width="1.8" fill="none" opacity="0.85"/>
+      <path d="M252,26 C262,16 274,12 269,26 C265,38 253,42 252,26Z" fill="#7c9e38" opacity="0.7"/>
+      <path d="M252,26 C242,18 236,10 244,22 C248,28 251,34 252,26Z" fill="#96b348" opacity="0.55"/>
+      <line x1="252" y1="26" x2="268" y2="16" stroke="#b0cc68" stroke-width="0.8" opacity="0.5"/>
+      <line x1="252" y1="26" x2="240" y2="16" stroke="#b0cc68" stroke-width="0.8" opacity="0.5"/>
+      <path d="M234,52 C246,40 260,36 254,52 C249,65 234,68 234,52Z" fill="#7c9e38" opacity="0.65"/>
+      <path d="M234,52 C222,42 216,32 226,46 C230,54 233,61 234,52Z" fill="#96b348" opacity="0.5"/>
+      <line x1="234" y1="52" x2="250" y2="40" stroke="#b0cc68" stroke-width="0.8" opacity="0.45"/>
+      <line x1="234" y1="52" x2="220" y2="40" stroke="#b0cc68" stroke-width="0.8" opacity="0.45"/>
+      <path d="M212,82 C226,68 242,64 235,82 C229,97 212,100 212,82Z" fill="#7c9e38" opacity="0.6"/>
+      <path d="M212,82 C198,70 192,58 204,74 C208,82 211,91 212,82Z" fill="#96b348" opacity="0.48"/>
+      <line x1="212" y1="82" x2="230" y2="68" stroke="#b0cc68" stroke-width="0.8" opacity="0.4"/>
+      <line x1="212" y1="82" x2="196" y2="68" stroke="#b0cc68" stroke-width="0.8" opacity="0.4"/>
+      <path d="M192,114 C208,98 226,94 218,114 C211,130 192,134 192,114Z" fill="#7c9e38" opacity="0.55"/>
+      <path d="M192,114 C176,100 170,88 183,104 C187,114 191,124 192,114Z" fill="#96b348" opacity="0.44"/>
+      <path d="M172,146 C188,130 208,126 199,146 C192,162 172,166 172,146Z" fill="#7c9e38" opacity="0.48"/>
+      <path d="M172,146 C156,132 150,120 164,138 C168,148 171,158 172,146Z" fill="#96b348" opacity="0.38"/>
+      <circle cx="160" cy="174" r="5.5" fill="{C['teal']}" opacity="0.65"/>
+      <circle cx="148" cy="188" r="3.8" fill="{C['teal']}" opacity="0.55"/>
+      <circle cx="168" cy="186" r="3.2" fill="{C['teal_light']}" opacity="0.5"/>
+      <circle cx="142" cy="202" r="2.6" fill="{C['teal']}" opacity="0.42"/>
+      <circle cx="248" cy="40" r="2.2" fill="#96b348" opacity="0.4"/>
+      <circle cx="230" cy="66" r="1.8" fill="#96b348" opacity="0.35"/>
     </svg>
   </div>
 
-  <!-- TOP-LEFT corner small accent -->
-  <div style="position:absolute;top:0;left:0;width:160px;height:160px;opacity:0.16;transform:scaleX(-1);">
-    <svg viewBox="0 0 240 240" width="160" height="160" xmlns="http://www.w3.org/2000/svg">
-      <path d="M228,8 C210,38 188,85 178,135 C168,178 172,208 178,235
-               C186,205 190,172 198,128 C212,76 226,32 228,8 Z"
-            fill="#7c9e38" opacity="0.7"/>
-      <path d="M210,0 C204,22 200,58 198,94 C196,130 198,158 202,182
-               C204,156 207,127 210,90 C215,54 216,22 210,0 Z"
-            fill="#96b348" opacity="0.55"/>
-      <circle cx="162" cy="126" r="5" fill="{C['teal']}" opacity="0.55"/>
-      <circle cx="150" cy="108" r="3" fill="{C['teal']}" opacity="0.45"/>
+  <!-- TOP-LEFT: smaller accent sprig -->
+  <div style="position:absolute;top:-6px;left:-6px;width:190px;height:190px;opacity:0.15;">
+    <svg viewBox="0 0 200 200" width="190" height="190" xmlns="http://www.w3.org/2000/svg">
+      <!-- Stem goes from top-left corner down-right -->
+      <path d="M6,194 C18,172 38,146 62,118 C86,90 112,66 130,44 C144,26 150,10 148,2"
+            stroke="#7c9e38" stroke-width="1.5" fill="none" opacity="0.85"/>
+      <!-- Leaf pair 1 -->
+      <path d="M130,44 C140,34 152,28 148,44 C144,57 130,60 130,44Z" fill="#7c9e38" opacity="0.65"/>
+      <path d="M130,44 C118,36 112,26 122,38 C126,46 129,54 130,44Z" fill="#96b348" opacity="0.5"/>
+      <line x1="130" y1="44" x2="146" y2="32" stroke="#b0cc68" stroke-width="0.8" opacity="0.45"/>
+      <line x1="130" y1="44" x2="116" y2="32" stroke="#b0cc68" stroke-width="0.8" opacity="0.45"/>
+      <!-- Leaf pair 2 -->
+      <path d="M108,72 C120,60 136,56 128,72 C122,86 108,90 108,72Z" fill="#7c9e38" opacity="0.58"/>
+      <path d="M108,72 C96,62 90,50 100,64 C104,72 107,81 108,72Z" fill="#96b348" opacity="0.44"/>
+      <!-- Berry accents -->
+      <circle cx="90" cy="100" r="4.5" fill="{C['teal']}" opacity="0.6"/>
+      <circle cx="78" cy="114" r="3" fill="{C['teal_light']}" opacity="0.5"/>
     </svg>
   </div>
 
-  <!-- BOTTOM-RIGHT corner small accent -->
-  <div style="position:absolute;bottom:0;right:0;width:160px;height:160px;opacity:0.16;transform:rotate(180deg) scaleX(-1);">
-    <svg viewBox="0 0 240 240" width="160" height="160" xmlns="http://www.w3.org/2000/svg">
-      <path d="M228,8 C210,38 188,85 178,135 C168,178 172,208 178,235
-               C186,205 190,172 198,128 C212,76 226,32 228,8 Z"
-            fill="#7c9e38" opacity="0.7"/>
-      <path d="M210,0 C204,22 200,58 198,94 C196,130 198,158 202,182
-               C204,156 207,127 210,90 C215,54 216,22 210,0 Z"
-            fill="#96b348" opacity="0.55"/>
-      <circle cx="162" cy="126" r="5" fill="{C['teal']}" opacity="0.55"/>
-      <circle cx="150" cy="108" r="3" fill="{C['teal']}" opacity="0.45"/>
+  <!-- BOTTOM-RIGHT: smaller accent sprig (mirror of top-left) -->
+  <div style="position:absolute;bottom:-6px;right:-6px;width:190px;height:190px;opacity:0.15;transform:rotate(180deg);">
+    <svg viewBox="0 0 200 200" width="190" height="190" xmlns="http://www.w3.org/2000/svg">
+      <path d="M6,194 C18,172 38,146 62,118 C86,90 112,66 130,44 C144,26 150,10 148,2"
+            stroke="#7c9e38" stroke-width="1.5" fill="none" opacity="0.85"/>
+      <path d="M130,44 C140,34 152,28 148,44 C144,57 130,60 130,44Z" fill="#7c9e38" opacity="0.65"/>
+      <path d="M130,44 C118,36 112,26 122,38 C126,46 129,54 130,44Z" fill="#96b348" opacity="0.5"/>
+      <line x1="130" y1="44" x2="146" y2="32" stroke="#b0cc68" stroke-width="0.8" opacity="0.45"/>
+      <line x1="130" y1="44" x2="116" y2="32" stroke="#b0cc68" stroke-width="0.8" opacity="0.45"/>
+      <path d="M108,72 C120,60 136,56 128,72 C122,86 108,90 108,72Z" fill="#7c9e38" opacity="0.58"/>
+      <path d="M108,72 C96,62 90,50 100,64 C104,72 107,81 108,72Z" fill="#96b348" opacity="0.44"/>
+      <circle cx="90" cy="100" r="4.5" fill="{C['teal']}" opacity="0.6"/>
+      <circle cx="78" cy="114" r="3" fill="{C['teal_light']}" opacity="0.5"/>
     </svg>
   </div>
 
