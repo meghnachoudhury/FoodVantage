@@ -12,7 +12,7 @@ import plotly.graph_objects as go
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "src"))
 from gemini_api import (
-    calculate_vms_science, get_serving_scale, get_scientific_db,
+    calculate_vms_science, get_scientific_db,
     search_vantage_db, search_open_food_facts, vision_live_scan_dark,
     generate_health_insights, generate_meal_plan, generate_daily_recipes,
     get_db_connection, get_trend_data_db, get_all_calendar_data_db,
@@ -57,23 +57,23 @@ if 'cal_month' not in st.session_state: st.session_state.cal_month = datetime.no
 
 # --- DARK THEME COLOR PALETTE ---
 C = {
-    'bg': '#0F1117',
-    'bg_card': '#1A1D25',
-    'bg_elevated': '#222630',
-    'bg_input': '#1E2230',
-    'sidebar_bg': '#141720',
-    'teal': '#5B9B9D',
-    'teal_light': '#7EC8CA',
-    'olive': '#5B8C3E',
+    'bg': '#101014',
+    'bg_card': '#17171d',
+    'bg_elevated': '#242430',
+    'bg_input': '#1f1f2a',
+    'sidebar_bg': '#131318',
+    'teal': '#eea4b7',
+    'teal_light': '#f4bdcb',
+    'olive': '#7c9e38',
     'text': '#E8EAF0',
-    'text_sec': '#9CA3B0',
-    'text_muted': '#6B7280',
+    'text_sec': '#a0a0b4',
+    'text_muted': '#9090b0',
     'green': '#4CAF50',
     'yellow': '#F9A825',
     'red': '#E53935',
     'orange': '#E8967A',
-    'border': '#2A2E38',
-    'streak_bg': '#1C2030',
+    'border': '#52526e',
+    'streak_bg': '#242430',
 }
 
 # Helper: portion size label
@@ -155,7 +155,7 @@ st.markdown(f"""
     }}
     input[type="text"]:focus {{
         border-color: {C['teal']} !important;
-        box-shadow: 0 0 0 2px rgba(91,155,157,0.2) !important;
+        box-shadow: 0 0 0 2px rgba(238,164,183,0.2) !important;
     }}
     .stTextInput > div > div > input {{
         background-color: {C['bg_input']} !important;
@@ -176,7 +176,7 @@ st.markdown(f"""
 
     /* === BUTTONS === */
     .stButton > button {{
-        background: linear-gradient(135deg, {C['teal']} 0%, #4A8A8C 100%) !important;
+        background: linear-gradient(135deg, {C['teal']} 0%, #d88ea3 100%) !important;
         color: white !important;
         border: none !important;
         border-radius: 12px !important;
@@ -187,7 +187,7 @@ st.markdown(f"""
         letter-spacing: 0.1px;
     }}
     .stButton > button:hover {{
-        box-shadow: 0 4px 16px rgba(91,155,157,0.3) !important;
+        box-shadow: 0 4px 16px rgba(238,164,183,0.3) !important;
         transform: translateY(-1px) !important;
     }}
     .stButton > button[kind="secondary"] {{
@@ -329,7 +329,7 @@ st.markdown(f"""
     .scanner-icon {{
         width: 64px; height: 64px;
         border-radius: 50%;
-        background: rgba(91,155,157,0.15);
+        background: rgba(238,164,183,0.15);
         display: flex; align-items: center; justify-content: center;
         margin-bottom: 16px;
     }}
@@ -442,7 +442,7 @@ st.markdown(f"""
         padding: 0.3rem 0.6rem !important;
     }}
     .trend-tabs-compact .stButton > button[kind="primary"] {{
-        background: linear-gradient(135deg, {C['teal']} 0%, #4A8A8C 100%) !important;
+        background: linear-gradient(135deg, {C['teal']} 0%, #d88ea3 100%) !important;
         border: none !important;
         border-radius: 14px !important;
         min-height: 44px;
@@ -494,9 +494,9 @@ st.markdown(f"""
         transition: all 0.15s ease;
         text-decoration: none;
     }}
-    .nav-btn:hover {{ background: rgba(91,155,157,0.1); color: {C['text']}; }}
+    .nav-btn:hover {{ background: rgba(238,164,183,0.1); color: {C['text']}; }}
     .nav-btn.active {{
-        background: rgba(91,155,157,0.15);
+        background: rgba(238,164,183,0.15);
         color: {C['teal_light']};
         font-weight: 600;
     }}
@@ -532,13 +532,13 @@ st.markdown(f"""
         letter-spacing: 0 !important;
     }}
     .sidebar-nav .stButton > button:hover {{
-        background: rgba(91,155,157,0.1) !important;
+        background: rgba(238,164,183,0.1) !important;
         color: {C['text']} !important;
         transform: none !important;
         box-shadow: none !important;
     }}
     .sidebar-nav .stButton > button[kind="primary"] {{
-        background: rgba(91,155,157,0.15) !important;
+        background: rgba(238,164,183,0.15) !important;
         color: {C['teal_light']} !important;
         font-weight: 600 !important;
         box-shadow: none !important;
@@ -584,7 +584,31 @@ st.markdown(f"""
         color: {C['text_sec']};
         margin-top: 2px;
     }}
-    </style>
+
+
+    .botanical-corner {{
+        position: fixed;
+        pointer-events: none;
+        z-index: 0;
+        opacity: 0.38;
+    }}
+    .botanical-left {{ left: 20px; top: 120px; }}
+    .botanical-right-top {{ right: 18px; top: 60px; }}
+    .botanical-right-bottom {{ right: 8px; bottom: 80px; }}
+    .botanical-corner svg {{
+        width: 220px;
+        height: 220px;
+        stroke: {C['olive']};
+        fill: none;
+        stroke-width: 1.7;
+    }}
+        </style>
+""", unsafe_allow_html=True)
+
+st.markdown("""
+<div class='botanical-corner botanical-left'><svg viewBox='0 0 220 220'><path d='M40 210 C20 160, 30 90, 55 20'/><path d='M65 205 C48 150, 60 90, 86 16'/><ellipse cx='55' cy='126' rx='14' ry='8'/><ellipse cx='84' cy='90' rx='13' ry='7'/></svg></div>
+<div class='botanical-corner botanical-right-top'><svg viewBox='0 0 220 220'><path d='M20 170 C80 120, 120 70, 190 20'/><ellipse cx='82' cy='122' rx='15' ry='8'/><ellipse cx='119' cy='92' rx='14' ry='8'/><ellipse cx='156' cy='60' rx='14' ry='8'/></svg></div>
+<div class='botanical-corner botanical-right-bottom'><svg viewBox='0 0 220 220'><path d='M20 20 C90 70, 130 120, 200 190'/><ellipse cx='83' cy='76' rx='14' ry='8'/><ellipse cx='123' cy='112' rx='14' ry='8'/><ellipse cx='160' cy='150' rx='14' ry='8'/></svg></div>
 """, unsafe_allow_html=True)
 
 def render_logo(size="1.6rem"):
@@ -640,9 +664,8 @@ with st.sidebar:
     search_q = st.text_input("Search any food item", key="sidebar_search", placeholder="Type a food name...", label_visibility="collapsed")
     if search_q:
         results = search_vantage_db(search_q, limit=5)
-        filtered_results = [r for r in results if r['vms_score'] != 10.0] if results else []
-        if filtered_results:
-            for d in filtered_results[:3]:
+        if results:
+            for d in results[:3]:
                 h_score = vms_to_health_score(d['vms_score'])
                 d_score = vms_to_display_score(d['vms_score'])
                 clr = score_color(h_score, 'health')
@@ -814,8 +837,8 @@ body{{background:{C['bg_card']};font-family:'Inter',sans-serif;overflow:hidden;}
 .tr{{top:28px;right:28px;border-width:3px 3px 0 0;border-radius:0 6px 0 0;animation:jitter-tr 5s ease-in-out infinite;}}
 .bl{{bottom:28px;left:28px;border-width:0 0 3px 3px;border-radius:0 0 0 6px;animation:jitter-bl 5s ease-in-out infinite;}}
 .br{{bottom:28px;right:28px;border-width:0 3px 3px 0;border-radius:0 0 6px 0;animation:jitter-br 5s ease-in-out infinite;}}
-.icon-btn{{width:64px;height:64px;border-radius:50%;background:rgba(91,155,157,0.15);display:flex;align-items:center;justify-content:center;margin-bottom:14px;cursor:pointer;transition:background .2s,transform .1s;}}
-.icon-btn:hover{{background:rgba(91,155,157,0.3);transform:scale(1.1);}}
+.icon-btn{{width:64px;height:64px;border-radius:50%;background:rgba(238,164,183,0.15);display:flex;align-items:center;justify-content:center;margin-bottom:14px;cursor:pointer;transition:background .2s,transform .1s;}}
+.icon-btn:hover{{background:rgba(238,164,183,0.3);transform:scale(1.1);}}
 .icon-btn i{{font-size:28px;color:{C['teal']};}}
 .rt{{font-size:1rem;font-weight:600;color:{C['text']};margin-bottom:4px;}}
 .ht{{font-size:0.8rem;color:{C['text_muted']};}}
@@ -881,7 +904,16 @@ function startScan(){{
             </div>
         """, unsafe_allow_html=True)
 
-        image = back_camera_input(key="hud_cam")
+        if st.session_state.get('detected_items') and not st.session_state.get('scan_results'):
+            preview = ", ".join(st.session_state.detected_items[:3])
+            st.markdown(f"""
+                <div class="scanner-result">
+                    <div class="scanner-result-title">👁️ Items Detected</div>
+                    <div class="scanner-result-text">{preview}</div>
+                </div>
+            """, unsafe_allow_html=True)
+
+        image = back_camera_input(key=f"hud_cam_{st.session_state.scan_count}")
 
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
@@ -891,6 +923,7 @@ function startScan(){{
                     st.session_state.scan_status = None
                     st.session_state.scanning = True
                     st.session_state._captured_image = None
+                    st.session_state.scan_count += 1
                     st.rerun()
             if st.button("Stop Scanning", use_container_width=True):
                 st.session_state.camera_active = False
@@ -901,6 +934,7 @@ function startScan(){{
                 st.session_state.detected_items = []
                 st.session_state._captured_image = None
                 st.session_state.scan_error = None
+                st.session_state.scan_count += 1
                 st.rerun()
 
         # Scanning logic - two-phase: capture acknowledgement, then analyze
@@ -923,9 +957,13 @@ function startScan(){{
                     st.session_state.detected_items = [r['name'] for r in results[:5]]
                     st.session_state.scan_status = None
                     st.session_state.scan_error = None
+                    st.session_state.scanning = True
+                    st.session_state.scan_count += 1
                 else:
                     st.session_state.scan_status = None
+                    st.session_state.scan_error = "Item not found in database — try a clearer angle or different wording"
                     st.session_state.scanning = True  # Allow retry on failure
+                    st.session_state.scan_count += 1
             except Exception as e:
                 error_msg = str(e)
                 if "429" in error_msg or "quota" in error_msg.lower() or "RESOURCE_EXHAUSTED" in error_msg:
@@ -934,7 +972,8 @@ function startScan(){{
                     st.session_state.scan_error = "Scan failed — please try again"
                 st.session_state.scan_status = None
                 st.session_state._captured_image = None
-                st.session_state.scanning = False
+                st.session_state.scanning = True
+                st.session_state.scan_count += 1
             st.rerun()
 
     # Scan results with full item details, nutrition, and grocery list integration
@@ -952,15 +991,16 @@ function startScan(){{
             portion_label = " /serving" if needs_portion_size(result['name']) else ""
             raw = result['raw']
 
-            # Use actual serving size from API if available, otherwise fallback to keyword scale
+            # If API provides serving size, scale per-100g values to that serving.
+            # Otherwise, display per-100g directly (no heuristic scaling).
             if 'serving_g' in result:
                 scale = result['serving_g'] / 100.0
                 serving_note = f"per {int(result['serving_g'])}g serving"
             else:
-                scale = get_serving_scale(result['name'])
-                serving_note = f"per ~{int(scale * 100)}g serving" if scale < 1.0 else "per 100g"
+                scale = 1.0
+                serving_note = "per 100g"
 
-            # Extract nutrition data (raw values are per 100g, scale to serving)
+            # Extract nutrition data (raw values are normalized to per 100g in backend)
             cal = round(float(raw[2] or 0) * scale, 1)
             sug = round(float(raw[3] or 0) * scale, 1)
             fib = round(float(raw[4] or 0) * scale, 1)
@@ -981,7 +1021,7 @@ function startScan(){{
                         </div>
                     </div>
                     <div style='display:flex; align-items:center; gap:8px; margin-top:8px;'>
-                        <div style='background:rgba(91,155,157,0.08); padding:4px 12px; border-radius:20px;'>
+                        <div style='background:rgba(238,164,183,0.08); padding:4px 12px; border-radius:20px;'>
                             <span style='color:{C["text_muted"]}; font-size:0.7rem;'>Higher score = healthier choice &middot; </span>
                             <span style='color:{health_clr}; font-weight:600; font-size:0.7rem;'>{rating}</span>
                         </div>
@@ -1047,6 +1087,7 @@ function startScan(){{
                 st.session_state.scan_status = None
                 st.session_state._captured_image = None
                 st.session_state.scan_error = None
+                st.session_state.scan_count += 1
                 time.sleep(0.5)
                 st.rerun()
 
@@ -1057,6 +1098,7 @@ function startScan(){{
             st.session_state.selected_result = None
             st.session_state.scanning = True
             st.session_state.detected_items = []
+            st.session_state.scan_count += 1
             st.rerun()
 
     # Health Trends - header with tabs on the right
@@ -1097,7 +1139,7 @@ function startScan(){{
             fig.add_trace(go.Scatter(x=df_pivot.index, y=df_pivot['healthy'], name='Healthy',
                                      mode='lines+markers', line=dict(color=C['teal'], width=2.5, shape='spline'),
                                      marker=dict(size=6), fill='tozeroy',
-                                     fillcolor='rgba(91,155,157,0.1)',
+                                     fillcolor='rgba(238,164,183,0.1)',
                                      hovertemplate='%{y} healthy<extra></extra>'))
         if 'moderate' in df_pivot.columns:
             fig.add_trace(go.Scatter(x=df_pivot.index, y=df_pivot['moderate'], name='Moderate',
@@ -1133,7 +1175,7 @@ function startScan(){{
             st.markdown(f"""
                 <div class='card' style='min-height:200px;'>
                     <div style='display:flex; align-items:center; gap:10px; margin-bottom:12px;'>
-                        <div style='width:36px; height:36px; border-radius:10px; background:rgba(91,155,157,0.15); display:flex; align-items:center; justify-content:center;'>
+                        <div style='width:36px; height:36px; border-radius:10px; background:rgba(238,164,183,0.15); display:flex; align-items:center; justify-content:center;'>
                             <i class='fa-solid fa-heart-pulse' style='color:{C["teal"]}; font-size:1rem;'></i>
                         </div>
                         <div>
@@ -1180,7 +1222,7 @@ function startScan(){{
             st.markdown(f"""
                 <div class='card' style='min-height:200px;'>
                     <div style='display:flex; align-items:center; gap:10px; margin-bottom:12px;'>
-                        <div style='width:36px; height:36px; border-radius:10px; background:rgba(91,140,62,0.15); display:flex; align-items:center; justify-content:center;'>
+                        <div style='width:36px; height:36px; border-radius:10px; background:rgba(124,158,56,0.20); display:flex; align-items:center; justify-content:center;'>
                             <i class='fa-solid fa-utensils' style='color:{C["olive"]}; font-size:1rem;'></i>
                         </div>
                         <div>
@@ -1358,7 +1400,7 @@ function pickDate(day){{
 
         # Add item — friendly onboarding text
         st.markdown(f"""
-            <div style='background:rgba(91,155,157,0.08); border:1px solid rgba(91,155,157,0.2); border-radius:12px; padding:10px 14px; margin-bottom:10px;'>
+            <div style='background:rgba(238,164,183,0.08); border:1px solid rgba(238,164,183,0.2); border-radius:12px; padding:10px 14px; margin-bottom:10px;'>
                 <div style='font-size:0.8rem; font-weight:600; color:{C["teal"]}; margin-bottom:3px;'>Forgot to scan before buying? No problem!</div>
                 <div style='font-size:0.75rem; color:{C["text_muted"]};'>Search any item below — we'll look up its health score and log it to your haul.</div>
             </div>
@@ -1367,11 +1409,10 @@ function pickDate(day){{
 
         if search_item:
             search_results = search_vantage_db(search_item, limit=10)
-            filtered_results = [r for r in search_results if r['vms_score'] != 10.0] if search_results else []
-            if filtered_results:
+            if search_results:
                 st.markdown('<div class="results-scroll-container">', unsafe_allow_html=True)
                 cal_user_allergies = get_user_allergies(st.session_state.user_id)
-                for idx, result in enumerate(filtered_results):
+                for idx, result in enumerate(search_results):
                     h_sc = vms_to_health_score(result['vms_score'])
                     clr = score_color(h_sc, 'health')
                     d_sc = vms_to_display_score(result['vms_score'])

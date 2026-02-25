@@ -10,14 +10,22 @@ from PIL import Image
 import io
 import base64
 import requests
+import re
 from datetime import datetime, timedelta
+
+from calibration import (
+    row_confidence as _row_confidence,
+    temperature_scale_confidence as _temperature_scale_confidence,
+    confidence_weighted_score as _confidence_weighted_score,
+)
 
 load_dotenv()
 
 # === AI MODEL CONFIGURATION ===
-# Text + vision AI: Google Gemini 2.5 Flash via OpenAI-compatible endpoint
+# Text + vision AI via OpenAI-compatible endpoint
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
-GEMINI_MODEL = "gemini-2.5-flash"
+GEMINI_AGENT_MODEL = "gemini-2.5-flash"
+GEMINI_SCANNER_MODEL = "gemini-2.5-flash-lite"
 
 # === DIGITALOCEAN GRADIENT AI CONFIGURATION (for hackathon integration) ===
 GRADIENT_BASE_URL = "https://inference.do-ai.run/v1/"
@@ -110,9 +118,101 @@ def get_serving_scale(name):
             return SERVING_SCALE[keyword]
     return 1.0  # Default: use full per-100g values
 
+
+def _safe_float(value):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _extract_serving_grams(product):
+    """Best-effort extraction of serving size in grams from Open Food Facts product payload."""
+    sq = _safe_float(product.get('serving_quantity'))
+    if sq and sq > 0:
+        return sq
+
+    serving_size = str(product.get('serving_size', '') or '').lower()
+    import re
+    match = re.search(r'(\d+(?:\.\d+)?)\s*g\b', serving_size)
+    if match:
+        grams = _safe_float(match.group(1))
+        if grams and grams > 0:
+            return grams
+    return None
+
+
+def _nutrient_per_100g(nutriments, key_base, serving_g):
+    """
+    Normalize Open Food Facts nutrient values to a per-100g basis.
+    Returns (value_per_100g, source_basis) where source_basis is one of:
+    - 'per_100g' when *_100g is present
+    - 'per_serving' when converted from *_serving using serving_g
+    - 'missing' when neither path is usable
+    """
+    per_100_key = f"{key_base}_100g"
+    per_serving_key = f"{key_base}_serving"
+
+    per_100 = _safe_float(nutriments.get(per_100_key))
+    if per_100 is not None:
+        return per_100, 'per_100g'
+
+    per_serving = _safe_float(nutriments.get(per_serving_key))
+    if per_serving is None or not serving_g:
+        return None, 'missing'
+
+    return per_serving * (100.0 / serving_g), 'per_serving'
+
+
+def _calories_per_100g(nutriments, serving_g):
+    """Return kcal per 100g from OFF nutriments, with kJ fallback."""
+    calories, basis = _nutrient_per_100g(nutriments, 'energy-kcal', serving_g)
+    if calories is not None:
+        return calories, basis
+
+    energy_kj, kj_basis = _nutrient_per_100g(nutriments, 'energy', serving_g)
+    if energy_kj is None:
+        return None, 'missing'
+
+    return energy_kj / 4.184, f"{kj_basis}_kj"
+
+
+def _sodium_per_100g(nutriments, serving_g):
+    """Return sodium (g/100g) from OFF, with salt-based fallback."""
+    sodium, basis = _nutrient_per_100g(nutriments, 'sodium', serving_g)
+    if sodium is not None:
+        return sodium, basis
+
+    salt, salt_basis = _nutrient_per_100g(nutriments, 'salt', serving_g)
+    if salt is None:
+        return None, 'missing'
+
+    # OFF salt is grams NaCl; sodium is ~39.3% of salt by mass.
+    return salt * 0.393, f"{salt_basis}_from_salt"
+
+
 def calculate_vms_science(row):
     try:
         name, _, cal, sug, fib, prot, fat, sod, _, nova = row
+        cal_f = _safe_float(cal)
+        sug_f = _safe_float(sug)
+        fat_f = _safe_float(fat)
+        sod_f = _safe_float(sod)
+        prot_f = _safe_float(prot)
+
+        present_risk_fields = sum(
+            _safe_float(v) is not None and _safe_float(v) > 0
+            for v in [cal, sug, fat, sod]
+        )
+
+        # Guardrail: avoid over-confident "perfect" scores when OFF/local nutrition is sparse.
+        if present_risk_fields < 2:
+            return 5.0
+
+        # Data-quality guardrail for packaged foods where key risk fields are zeroed/missing.
+        if (cal_f or 0) >= 120 and (prot_f or 0) >= 5 and (fat_f or 0) == 0 and (sod_f or 0) == 0:
+            return 5.0
+
         cal, sug, fib, prot, fat, sod = [float(x or 0) for x in [cal, sug, fib, prot, fat, sod]]
         nova_val = int(nova or 1)
 
@@ -138,12 +238,17 @@ def calculate_vms_science(row):
             'fried', 'breaded', 'crispy', 'wrapped', 'stuffed', 'smothered',
             'cheesy', 'creamy', 'buttery', 'glazed', 'frosted', 'coated',
             'melt', 'loaded', 'supreme', 'deluxe', 'combo', 'platter',
+            'lasagna', 'fries', 'frozen', 'processed',
             # FIX 5: Add cooked food keywords
             'cooked', 'grilled', 'baked', 'roasted', 'steamed', 'boiled',
             'sauteed', 'plate', 'meal', 'dish', 'curry', 'stew', 'soup'
         ]
         
         is_heavily_processed = any(word in n for word in processed_indicators) or nova_val >= 3
+
+        # If likely processed food is missing a key risk field, avoid overly optimistic scores.
+        if is_heavily_processed and (sod_f is None or fat_f is None):
+            return 5.0
         
         # Only mark as superfood if NOT heavily processed
         if not is_heavily_processed:
@@ -245,6 +350,60 @@ def get_items_today(username):
     except:
         return 0
 
+
+def _normalized_tokens(text: str):
+    cleaned = re.sub(r'[^a-z0-9\s]', ' ', (text or '').lower())
+    return [t for t in cleaned.split() if len(t) > 1]
+
+
+_GENERIC_QUERY_TOKENS = {
+    'food', 'item', 'brand', 'product', 'snack', 'drink', 'beverage',
+    'simply', 'original', 'classic', 'flavor', 'flavoured', 'flavored'
+}
+
+
+def _scanner_match_confidence(query: str, result: dict) -> float:
+    """Heuristic confidence used to pick scanner matches from search candidates."""
+    q_tokens = set(_normalized_tokens(query))
+    name_tokens = set(_normalized_tokens(result.get('name', '')))
+    brand_tokens = set(_normalized_tokens(result.get('brand', '')))
+    all_tokens = name_tokens | brand_tokens
+
+    if not q_tokens or not all_tokens:
+        return 0.0
+
+    overlap = len(q_tokens & all_tokens) / len(q_tokens)
+    jaccard = len(q_tokens & all_tokens) / len(q_tokens | all_tokens)
+    q_text = " ".join(_normalized_tokens(query))
+    n_text = " ".join(_normalized_tokens(result.get('name', '')))
+    exact_bonus = 0.35 if q_text and (q_text == n_text or q_text in n_text) else 0.0
+
+    return (0.65 * overlap) + (0.35 * jaccard) + exact_bonus
+
+
+def _query_has_specific_tokens(query: str) -> bool:
+    tokens = [t for t in _normalized_tokens(query) if t not in _GENERIC_QUERY_TOKENS]
+    return len(tokens) >= 1
+
+
+def _token_overlap_count(query: str, result: dict) -> int:
+    q_tokens = {t for t in _normalized_tokens(query) if t not in _GENERIC_QUERY_TOKENS}
+    if not q_tokens:
+        return 0
+    all_tokens = set(_normalized_tokens(result.get('name', ''))) | set(_normalized_tokens(result.get('brand', '')))
+    return len(q_tokens & all_tokens)
+
+
+def _has_minimum_nutrition(result: dict) -> bool:
+    """Reject entries that are effectively empty nutrition rows."""
+    raw = result.get('raw') if isinstance(result, dict) else None
+    if not raw or len(raw) < 8:
+        return False
+
+    vals = [_safe_float(raw[2]), _safe_float(raw[3]), _safe_float(raw[6]), _safe_float(raw[7])]
+    positive_count = sum(v is not None and v > 0 for v in vals)
+    return positive_count >= 2
+
 # === 2. DATABASE ACCESS ===
 @st.cache_resource
 def get_scientific_db():
@@ -255,7 +414,7 @@ def get_scientific_db():
             zip_ref.extractall('/tmp/')
     return duckdb.connect(db_path, read_only=True)
 
-def search_vantage_db(product_name: str, limit=5):
+def search_vantage_db(product_name: str, limit=5, fast_mode=False):
     """
     FIX 3: Returns up to 20 results (increased from 5)
     Returns top results with full product names
@@ -285,11 +444,13 @@ def search_vantage_db(product_name: str, limit=5):
         # If no results in local DB, try Open Food Facts API
         if not results or len(results) == 0:
             print(f"[DB] No results in local database, trying Open Food Facts...")
-            return search_open_food_facts(product_name, limit)
+            return search_open_food_facts(product_name, limit, fast_mode=fast_mode)
         
         output = []
         for r in results:
-            score = round(calculate_vms_science(r), 1)
+            raw_score = round(calculate_vms_science(r), 1)
+            confidence = _row_confidence(r)
+            score = _confidence_weighted_score(raw_score, confidence)
             rating = "Metabolic Green" if score < 3.0 else "Metabolic Yellow" if score < 7.0 else "Metabolic Red"
 
             full_name = r[0].title()
@@ -304,6 +465,8 @@ def search_vantage_db(product_name: str, limit=5):
                 "name": display_name,
                 "brand": brand,
                 "vms_score": score,
+                "raw_vms_score": raw_score,
+                "confidence": round(confidence, 3),
                 "rating": rating,
                 "raw": r
             })
@@ -316,7 +479,7 @@ def search_vantage_db(product_name: str, limit=5):
         traceback.print_exc()
         return None
 
-def search_open_food_facts(product_name: str, limit=5):
+def search_open_food_facts(product_name: str, limit=5, fast_mode=False):
     """
     FIX 7: Fallback to Open Food Facts API with better error handling
     """
@@ -336,8 +499,10 @@ def search_open_food_facts(product_name: str, limit=5):
         ]
         
         all_products = []
-        
-        for attempt_num, term in enumerate(search_attempts):
+        attempts_to_try = search_attempts[:1] if fast_mode else search_attempts
+        request_timeout_s = 4 if fast_mode else 10
+
+        for attempt_num, term in enumerate(attempts_to_try):
             if not term or len(term) < 3:
                 continue
                 
@@ -352,7 +517,7 @@ def search_open_food_facts(product_name: str, limit=5):
             }
             
             try:
-                response = requests.get(url, params=params, timeout=10)
+                response = requests.get(url, params=params, timeout=request_timeout_s)
                 print(f"[OPEN FOOD FACTS] Status code: {response.status_code}")
                 
                 if response.status_code == 200:
@@ -391,26 +556,23 @@ def search_open_food_facts(product_name: str, limit=5):
                 
                 brand = p.get('brands', '').split(',')[0].strip() if p.get('brands') else ''
                 
-                calories = float(nutriments.get('energy-kcal_100g', 0) or 0)
-                sugar = float(nutriments.get('sugars_100g', 0) or 0)
-                fiber = float(nutriments.get('fiber_100g', 0) or 0)
-                protein = float(nutriments.get('proteins_100g', 0) or 0)
-                fat = float(nutriments.get('fat_100g', 0) or 0)
-                sodium = float(nutriments.get('sodium_100g', 0) or 0) * 1000
+                # Extract actual serving size from Open Food Facts (in grams)
+                serving_g = _extract_serving_grams(p)
+
+                calories, calories_basis = _calories_per_100g(nutriments, serving_g)
+                sugar, sugar_basis = _nutrient_per_100g(nutriments, 'sugars', serving_g)
+                fiber, fiber_basis = _nutrient_per_100g(nutriments, 'fiber', serving_g)
+                protein, protein_basis = _nutrient_per_100g(nutriments, 'proteins', serving_g)
+                fat, fat_basis = _nutrient_per_100g(nutriments, 'fat', serving_g)
+                sodium_per_100g, sodium_basis = _sodium_per_100g(nutriments, serving_g)
+                sodium = (sodium_per_100g or 0) * 1000
                 nova = int(p.get('nova_group', 3) or 3)
-                
+
                 row = [name, brand, calories, sugar, fiber, protein, fat, sodium, None, nova]
 
-                # Extract actual serving size from Open Food Facts (in grams)
-                serving_g = None
-                try:
-                    sq = p.get('serving_quantity')
-                    if sq and float(sq) > 0:
-                        serving_g = float(sq)
-                except (ValueError, TypeError):
-                    pass
-
-                score = round(calculate_vms_science(row), 1)
+                raw_score = round(calculate_vms_science(row), 1)
+                confidence = _row_confidence(row)
+                score = _confidence_weighted_score(raw_score, confidence)
                 rating = "Metabolic Green" if score < 3.0 else "Metabolic Yellow" if score < 7.0 else "Metabolic Red"
 
                 display_name = f"{brand.title()} {name.title()}" if brand else name.title()
@@ -419,12 +581,22 @@ def search_open_food_facts(product_name: str, limit=5):
                     "name": display_name,
                     "brand": brand.title() if brand else "",
                     "vms_score": score,
+                    "raw_vms_score": raw_score,
+                    "confidence": round(confidence, 3),
                     "rating": rating,
                     "raw": row
                 }
                 # Include actual serving size when available from the API
                 if serving_g:
                     result_entry["serving_g"] = serving_g
+                result_entry["nutrition_basis"] = {
+                    "calories": calories_basis,
+                    "sugar": sugar_basis,
+                    "fiber": fiber_basis,
+                    "protein": protein_basis,
+                    "fat": fat_basis,
+                    "sodium": sodium_basis,
+                }
                 output.append(result_entry)
                 
                 print(f"[OPEN FOOD FACTS] ✅ Added: {display_name} (Score: {score})")
@@ -501,20 +673,13 @@ def vision_live_scan_dark(image_bytes):
         bottom = int(h * 0.95)
         img_cropped = img.crop((left, top, right, bottom))
 
-        # Enhance image
-        from PIL import ImageEnhance
-        enhancer = ImageEnhance.Contrast(img_cropped)
-        img_cropped = enhancer.enhance(1.5)
-        enhancer = ImageEnhance.Brightness(img_cropped)
-        img_cropped = enhancer.enhance(1.2)
-
         # Final RGB check
         if img_cropped.mode != 'RGB':
             img_cropped = img_cropped.convert('RGB')
 
         # Convert to base64
         buf = io.BytesIO()
-        img_cropped.save(buf, format="JPEG", quality=95)
+        img_cropped.save(buf, format="JPEG", quality=80)
         buf.seek(0)
         img_bytes = buf.read()
         img_b64 = base64.b64encode(img_bytes).decode('utf-8')
@@ -536,19 +701,11 @@ Be PRECISE. Return ONLY the JSON array, no other text."""
 
         client = get_gemini_client()
 
-        print(f"[DEBUG] Calling {_active_model()} Vision API...")
-
-        # Analyzing message
-        st.markdown(f"""
-            <div class="scanner-result">
-                <div class="scanner-result-title">🔍 Analyzing Image</div>
-                <div class="scanner-result-text">Processing with {_active_model()} Vision...</div>
-            </div>
-        """, unsafe_allow_html=True)
+        print(f"[DEBUG] Calling {_active_model('scanner')} Vision API...")
 
         try:
             response = client.chat.completions.create(
-                model=_active_model(),
+                model=_active_model('scanner'),
                 messages=[
                     {
                         "role": "user",
@@ -558,13 +715,13 @@ Be PRECISE. Return ONLY the JSON array, no other text."""
                                 "type": "image_url",
                                 "image_url": {
                                     "url": f"data:image/jpeg;base64,{img_b64}",
-                                    "detail": "high"
+                                    "detail": "low"
                                 }
                             }
                         ]
                     }
                 ],
-                max_tokens=_MAX_TOKENS_VISION
+                max_tokens=700
             )
 
             response_text = (response.choices[0].message.content or "").strip()
@@ -584,18 +741,6 @@ Be PRECISE. Return ONLY the JSON array, no other text."""
                 detected_items = [product_name] if product_name else ['food item']
                 print(f"✅ [Gemini] Single item detected: {product_name}")
 
-            # Detection message
-            items_display = ", ".join(detected_items[:3])
-            if len(detected_items) > 3:
-                items_display += f" +{len(detected_items) - 3} more"
-
-            st.markdown(f"""
-                <div class="scanner-result">
-                    <div class="scanner-result-title">👁️ Items Detected</div>
-                    <div class="scanner-result-text">{items_display}</div>
-                </div>
-            """, unsafe_allow_html=True)
-
         except Exception as api_error:
             print(f"[GPT-4o ERROR] {api_error}")
             raise api_error
@@ -603,38 +748,30 @@ Be PRECISE. Return ONLY the JSON array, no other text."""
         # FIX 3: Search for ALL detected items
         all_results = []
         for item in detected_items:
-            results = search_vantage_db(item, limit=1)
+            if not _query_has_specific_tokens(item):
+                continue
+            results = search_vantage_db(item, limit=8, fast_mode=True)
             if results and len(results) > 0:
-                # FIX: Filter 10.0 default scores
-                for r in results:
-                    if r['vms_score'] != 10.0:
-                        all_results.append(r)
+                nutritionally_valid = [r for r in results if _has_minimum_nutrition(r)]
+                if not nutritionally_valid:
+                    continue
+                scored = sorted(
+                    nutritionally_valid,
+                    key=lambda r: _scanner_match_confidence(item, r),
+                    reverse=True
+                )
+                best = scored[0]
+                best_conf = _scanner_match_confidence(item, best)
+                overlap = _token_overlap_count(item, best)
+                if best_conf >= 0.6 and overlap >= 2:
+                    all_results.append(best)
         
         if all_results:
             print(f"✅ [DATABASE] Found {len(all_results)} total matches")
             
-            # DARK themed success message
-            st.markdown(f"""
-                <div class="scanner-result">
-                    <div class="scanner-result-title">✅ Database Match</div>
-                    <div class="scanner-result-text">Found {len(all_results)} item(s)</div>
-                </div>
-            """, unsafe_allow_html=True)
-            
             return all_results
         else:
             print(f"❌ [DATABASE] No matches found")
-            
-            # FIX 7: Friendly error message
-            st.markdown(f"""
-                <div class="scanner-result" style="border-left-color: #D4765E;">
-                    <div class="scanner-result-title">🔍 Item Not Found Yet</div>
-                    <div class="scanner-result-text">We're constantly expanding our database with new products.</div>
-                    <div style="font-size: 0.9rem; color: #666; margin-top: 8px;">
-                        Try: Repositioning • Better lighting • Different angle
-                    </div>
-                </div>
-            """, unsafe_allow_html=True)
             
             return None
         
@@ -643,22 +780,6 @@ Be PRECISE. Return ONLY the JSON array, no other text."""
         print(f"❌ [SCAN ERROR] {error_msg}")
         import traceback
         traceback.print_exc()
-        
-        # Better error handling for API quota
-        if "429" in error_msg or "quota" in error_msg.lower() or "RESOURCE_EXHAUSTED" in error_msg:
-            st.markdown(f"""
-                <div class="scanner-result" style="border-left-color: #D4765E;">
-                    <div class="scanner-result-title">⚠️ API Limit Reached</div>
-                    <div class="scanner-result-text">High demand detected. Please try again in a few moments.</div>
-                </div>
-            """, unsafe_allow_html=True)
-        else:
-            st.markdown(f"""
-                <div class="scanner-result" style="border-left-color: #D4765E;">
-                    <div class="scanner-result-title">⚠️ Scan Error</div>
-                    <div class="scanner-result-text">{error_msg[:150]}</div>
-                </div>
-            """, unsafe_allow_html=True)
         
         return None
 
@@ -727,10 +848,10 @@ Return ONLY valid JSON array, no other text:
   {{"emoji": "✨", "title": "Short Title", "insight": "Your personalized observation...", "action": "Specific action step..."}}
 ]"""
 
-        print(f"[INSIGHTS] Calling {_active_model()} with {total_items} items over {days_range} days...")
+        print(f"[INSIGHTS] Calling {_active_model('agent')} with {total_items} items over {days_range} days...")
 
         response = client.chat.completions.create(
-            model=_active_model(),
+            model=_active_model('agent'),
             messages=[
                 {"role": "system", "content": _JSON_SYSTEM},
                 {"role": "user", "content": prompt}
@@ -832,10 +953,10 @@ Return ONLY valid JSON, no other text:
   "Sunday": [...]
 }}"""
 
-        print(f"[MEAL PLAN] Calling {_active_model()} for user {user_id}...")
+        print(f"[MEAL PLAN] Calling {_active_model('agent')} for user {user_id}...")
 
         response = client.chat.completions.create(
-            model=_active_model(),
+            model=_active_model('agent'),
             messages=[
                 {"role": "system", "content": _JSON_SYSTEM},
                 {"role": "user", "content": prompt}
@@ -932,10 +1053,10 @@ Return ONLY valid JSON array, no other text:
   {{"name": "Recipe Name", "cuisine": "Cuisine Type", "meal_type": "Dessert", "prep_time": "15 min", "description": "One sentence description", "key_ingredients": "3-4 main ingredients"}}
 ]"""
 
-        print(f"[RECIPES] Calling {_active_model()} for daily recipes (day {day_of_year})...")
+        print(f"[RECIPES] Calling {_active_model('agent')} for daily recipes (day {day_of_year})...")
 
         response = client.chat.completions.create(
-            model=_active_model(),
+            model=_active_model('agent'),
             messages=[
                 {"role": "system", "content": _JSON_SYSTEM},
                 {"role": "user", "content": prompt}
@@ -1205,9 +1326,11 @@ def _using_gemini_key():
     return any(os.getenv(n) for n in gemini_names)
 
 
-def _active_model():
-    """Return the model name matching whichever API key is configured."""
-    return GEMINI_MODEL if _using_gemini_key() else "gpt-4o"
+def _active_model(mode='agent'):
+    """Return model name for the requested mode and configured provider."""
+    if not _using_gemini_key():
+        return "gpt-4o"
+    return GEMINI_SCANNER_MODEL if mode == 'scanner' else GEMINI_AGENT_MODEL
 
 
 def get_gemini_client():
@@ -1217,7 +1340,7 @@ def get_gemini_client():
         print("[CLIENT] ERROR: No API key available — all AI agents will be disabled")
         return None
     if _using_gemini_key():
-        print(f"[CLIENT] Gemini endpoint active: model={GEMINI_MODEL}")
+        print(f"[CLIENT] Gemini endpoint active: agent={GEMINI_AGENT_MODEL}, scanner={GEMINI_SCANNER_MODEL}")
         return OpenAI(base_url=GEMINI_BASE_URL, api_key=api_key)
     print("[CLIENT] OpenAI fallback active: model=gpt-4o")
     return OpenAI(api_key=api_key)
