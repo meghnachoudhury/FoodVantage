@@ -31,6 +31,11 @@ st.set_page_config(page_title="FoodVantage", page_icon="🥗", layout="wide", in
 # --- SESSION STATE ---
 if 'logged_in' not in st.session_state: st.session_state.logged_in = False
 if 'user_id' not in st.session_state: st.session_state.user_id = None
+# Migration guard: old sessions had logged_in=True with user_id="demo_user".
+# Force those sessions back to the login screen.
+if st.session_state.get('user_id') == 'demo_user':
+    st.session_state.logged_in = False
+    st.session_state.user_id = None
 if 'auth_tab' not in st.session_state: st.session_state.auth_tab = 'login'   # login | signup | forgot
 if 'page' not in st.session_state: st.session_state.page = 'dashboard'
 if 'camera_active' not in st.session_state: st.session_state.camera_active = False
