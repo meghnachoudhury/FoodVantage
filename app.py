@@ -29,7 +29,7 @@ try:
 except ImportError:
     back_camera_input = None
 
-st.set_page_config(page_title="FoodVantage", page_icon="🥗", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="FoodVantage", page_icon="🥗", layout="wide", initial_sidebar_state="collapsed")
 
 # --- SESSION STATE ---
 if 'logged_in' not in st.session_state: st.session_state.logged_in = False
@@ -684,21 +684,11 @@ st.markdown(f"""
         box-shadow: 0 4px 16px rgba(124,158,56,0.2) !important;
     }}
 
-    /* === MOBILE: keep columns horizontal (prevent Streamlit's default stacking) === */
+    /* === MOBILE: allow Streamlit columns to stack naturally === */
     @media (max-width: 768px) {{
-        [data-testid="stHorizontalBlock"] {{
-            flex-wrap: nowrap !important;
-            gap: 6px !important;
-        }}
-        [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {{
-            min-width: 0 !important;
-            flex: 1 1 0% !important;
-        }}
-        /* Shrink button font + padding so 3 fit on one line */
         [data-testid="stHorizontalBlock"] .stButton > button {{
-            font-size: 0.78rem !important;
-            padding: 8px 4px !important;
-            white-space: nowrap !important;
+            font-size: 0.95rem !important;
+            padding: 10px 8px !important;
         }}
     }}
     </style>
