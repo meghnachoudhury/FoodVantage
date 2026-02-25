@@ -28,11 +28,15 @@ GRADIENT_MODEL = "llama3.3-70b-instruct"
 # System prompt that forces Gemini to return raw JSON without markdown wrapping
 _JSON_SYSTEM = "You are a JSON API. Return ONLY valid JSON with no markdown, no code fences, no explanation. Start your response directly with { or [."
 
-# Gemini 2.5 Flash uses "thinking" by default — thinking tokens count toward
-# max_tokens, so we need a generous budget to avoid empty responses when the
-# model spends most of the budget on reasoning.
-_MAX_TOKENS_VISION = 4096
-_MAX_TOKENS_TEXT = 8192
+# Speed optimisation: disable Gemini's "thinking" mode for structured JSON tasks.
+# Thinking tokens consume the max_tokens budget first and slow response by 5-15s.
+# For scanner (vision) use budget=0 (no thinking). For agent text tasks use a
+# small budget (512 tokens) to still allow a brief reasoning pass.
+_NO_THINKING = {"extra_body": {"google": {"thinkingConfig": {"thinkingBudget": 0}}}}
+_LIGHT_THINKING = {"extra_body": {"google": {"thinkingConfig": {"thinkingBudget": 512}}}}
+
+_MAX_TOKENS_VISION = 1024   # scanner only needs a short JSON array
+_MAX_TOKENS_TEXT = 4096
 
 def safe_parse_json(text, expected='object'):
     """Robustly parse JSON from Gemini — strips code fences, fixes trailing commas."""
@@ -687,7 +691,8 @@ Be PRECISE. Return ONLY the JSON array, no other text."""
                         ]
                     }
                 ],
-                max_tokens=700
+                max_tokens=_MAX_TOKENS_VISION,
+                **_NO_THINKING
             )
 
             response_text = (response.choices[0].message.content or "").strip()
@@ -818,7 +823,8 @@ Return ONLY valid JSON array, no other text:
                 {"role": "system", "content": _JSON_SYSTEM},
                 {"role": "user", "content": prompt}
             ],
-            max_tokens=_MAX_TOKENS_TEXT
+            max_tokens=_MAX_TOKENS_TEXT,
+            **_LIGHT_THINKING
         )
 
         response_text = (response.choices[0].message.content or "").strip()
@@ -923,7 +929,8 @@ Return ONLY valid JSON, no other text:
                 {"role": "system", "content": _JSON_SYSTEM},
                 {"role": "user", "content": prompt}
             ],
-            max_tokens=_MAX_TOKENS_TEXT
+            max_tokens=_MAX_TOKENS_TEXT,
+            **_LIGHT_THINKING
         )
 
         response_text = (response.choices[0].message.content or "").strip()
@@ -1023,7 +1030,8 @@ Return ONLY valid JSON array, no other text:
                 {"role": "system", "content": _JSON_SYSTEM},
                 {"role": "user", "content": prompt}
             ],
-            max_tokens=_MAX_TOKENS_TEXT
+            max_tokens=_MAX_TOKENS_TEXT,
+            **_LIGHT_THINKING
         )
 
         response_text = (response.choices[0].message.content or "").strip()
@@ -1360,7 +1368,7 @@ def create_user(username, password):
     try:
         con = get_db_connection()
         exists = con.execute("SELECT * FROM users WHERE username = ?", [username]).fetchone()
-        if exists: 
+        if exists:
             print(f"[AUTH] User '{username}' already exists")
             return False
         pwd_hash = hashlib.sha256(password.encode()).hexdigest()
@@ -1369,4 +1377,50 @@ def create_user(username, password):
         return True
     except Exception as e:
         print(f"[AUTH ERROR] Failed to create user '{username}': {e}")
+        return False
+
+def user_exists(username):
+    """Check if a username exists in the DB."""
+    try:
+        con = get_db_connection()
+        result = con.execute("SELECT 1 FROM users WHERE username = ?", [username]).fetchone()
+        return result is not None
+    except Exception as e:
+        print(f"[AUTH ERROR] user_exists: {e}")
+        return False
+
+def reset_password(username, new_password):
+    """Reset the password for an existing user. Returns True on success."""
+    try:
+        con = get_db_connection()
+        exists = con.execute("SELECT 1 FROM users WHERE username = ?", [username]).fetchone()
+        if not exists:
+            print(f"[AUTH] reset_password: user '{username}' not found")
+            return False
+        pwd_hash = hashlib.sha256(new_password.encode()).hexdigest()
+        con.execute("UPDATE users SET password_hash = ? WHERE username = ?", [pwd_hash, username])
+        print(f"[AUTH] Password reset for '{username}'")
+        return True
+    except Exception as e:
+        print(f"[AUTH ERROR] reset_password: {e}")
+        return False
+
+def change_password(username, old_password, new_password):
+    """Change password after verifying the old one. Returns True on success."""
+    if not authenticate_user(username, old_password):
+        return False
+    return reset_password(username, new_password)
+
+def delete_account(username):
+    """Delete a user account and all their data."""
+    try:
+        con = get_db_connection()
+        con.execute("DELETE FROM users WHERE username = ?", [username])
+        con.execute("DELETE FROM calendar WHERE username = ?", [username])
+        _ensure_allergies_table()
+        con.execute("DELETE FROM allergies WHERE username = ?", [username])
+        print(f"[AUTH] Deleted account and all data for '{username}'")
+        return True
+    except Exception as e:
+        print(f"[AUTH ERROR] delete_account: {e}")
         return False
