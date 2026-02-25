@@ -683,6 +683,24 @@ st.markdown(f"""
         background: rgba(124,158,56,0.3) !important;
         box-shadow: 0 4px 16px rgba(124,158,56,0.2) !important;
     }}
+
+    /* === MOBILE: keep columns horizontal (prevent Streamlit's default stacking) === */
+    @media (max-width: 768px) {{
+        [data-testid="stHorizontalBlock"] {{
+            flex-wrap: nowrap !important;
+            gap: 6px !important;
+        }}
+        [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {{
+            min-width: 0 !important;
+            flex: 1 1 0% !important;
+        }}
+        /* Shrink button font + padding so 3 fit on one line */
+        [data-testid="stHorizontalBlock"] .stButton > button {{
+            font-size: 0.78rem !important;
+            padding: 8px 4px !important;
+            white-space: nowrap !important;
+        }}
+    }}
     </style>
 """, unsafe_allow_html=True)
 
