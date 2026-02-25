@@ -28,13 +28,14 @@ GRADIENT_MODEL = "llama3.3-70b-instruct"
 # System prompt that forces Gemini to return raw JSON without markdown wrapping
 _JSON_SYSTEM = "You are a JSON API. Return ONLY valid JSON with no markdown, no code fences, no explanation. Start your response directly with { or [."
 
-# gemini-2.5-flash has thinking ENABLED by default.
-# We must explicitly set thinkingBudget=0 to disable it for fast/reliable calls,
-# or a small budget for agent calls that benefit from light reasoning.
-# Without this, thinking tokens consume max_tokens causing empty/400 responses.
-_NO_THINKING = {"extra_body": {"google": {"thinkingConfig": {"thinkingBudget": 0}}}}
-_SCANNER_LIGHT_THINKING = {"extra_body": {"google": {"thinkingConfig": {"thinkingBudget": 0}}}}
-_LIGHT_THINKING = {"extra_body": {"google": {"thinkingConfig": {"thinkingBudget": 512}}}}
+# Thinking config dicts — kept as empty dicts so they are no-ops in API calls.
+# Passing extra_body with unsupported format (e.g. {"google": ...}) causes
+# 400 Bad Request from the OpenAI-compatible Gemini endpoint.
+# gemini-2.5-flash thinking tokens are billed separately and do NOT consume
+# max_tokens through this endpoint, so no workaround is needed.
+_NO_THINKING = {}
+_SCANNER_LIGHT_THINKING = {}
+_LIGHT_THINKING = {}
 
 _MAX_TOKENS_VISION = 1536   # scanner JSON can include multiple label-heavy items
 _MAX_TOKENS_TEXT = 8192     # increased to give agents room alongside light thinking
