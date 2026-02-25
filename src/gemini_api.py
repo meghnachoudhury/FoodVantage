@@ -666,7 +666,14 @@ def vision_live_scan_dark(image_bytes):
         if isinstance(image_bytes, io.BytesIO):
             image_bytes = image_bytes.getvalue()
         elif hasattr(image_bytes, 'read'):
+            try:
+                image_bytes.seek(0)
+            except Exception:
+                pass
             image_bytes = image_bytes.read()
+
+        if not image_bytes:
+            raise ScannerAnalysisError("Captured image was empty")
 
         print(f"[DEBUG] Image type: {type(image_bytes)}, size: {len(image_bytes)} bytes")
 
@@ -739,6 +746,14 @@ Be PRECISE. Return ONLY the JSON array, no other text."""
         print(f"[DEBUG] Encoded payload size: {len(img_bytes)} bytes")
 
         try:
+            image_payload = {
+                "url": f"data:image/jpeg;base64,{img_b64}",
+                "detail": "low"
+            }
+            if use_gemini:
+                # Gemini compatibility: omit detail to avoid occasional payload-shape rejection.
+                image_payload = {"url": f"data:image/jpeg;base64,{img_b64}"}
+
             request_kwargs = {
                 "model": _active_model('scanner'),
                 "messages": [
@@ -748,10 +763,7 @@ Be PRECISE. Return ONLY the JSON array, no other text."""
                             {"type": "text", "text": prompt},
                             {
                                 "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:image/jpeg;base64,{img_b64}",
-                                    "detail": "low"
-                                }
+                                "image_url": image_payload
                             }
                         ]
                     }
@@ -763,9 +775,49 @@ Be PRECISE. Return ONLY the JSON array, no other text."""
             if use_gemini:
                 request_kwargs.update(_SCANNER_LIGHT_THINKING)
 
-            response = client.chat.completions.create(**request_kwargs)
+            try:
+                response = client.chat.completions.create(**request_kwargs)
+            except Exception as first_error:
+                msg = str(first_error).lower()
+                should_retry = any(
+                    token in msg for token in ["400", "invalid_request", "unsupported", "bad request", "image_url"]
+                )
+                if should_retry:
+                    print("[DEBUG] Retrying scanner request with compatibility image payload...")
+                    retry_kwargs = dict(request_kwargs)
+                    retry_kwargs["messages"] = [
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "text", "text": prompt},
+                                {
+                                    "type": "image_url",
+                                    "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}
+                                }
+                            ]
+                        }
+                    ]
+                    response = client.chat.completions.create(**retry_kwargs)
+                else:
+                    raise
 
-            response_text = (response.choices[0].message.content or "").strip()
+            if not getattr(response, "choices", None):
+                raise ScannerAnalysisError("AI returned no choices")
+            raw_content = response.choices[0].message.content
+            response_text = ""
+            if isinstance(raw_content, str):
+                response_text = raw_content.strip()
+            elif isinstance(raw_content, list):
+                chunks = []
+                for part in raw_content:
+                    if isinstance(part, dict):
+                        chunks.append(
+                            part.get("text")
+                            or part.get("output_text")
+                            or part.get("refusal")
+                            or ""
+                        )
+                response_text = "\n".join([c for c in chunks if c]).strip()
             finish_reason = getattr(response.choices[0], 'finish_reason', None)
             print(f"[Gemini] finish_reason={finish_reason}, response length={len(response_text)}")
             if not response_text:
@@ -784,7 +836,14 @@ Be PRECISE. Return ONLY the JSON array, no other text."""
 
         except Exception as api_error:
             print(f"[GEMINI SCANNER ERROR] {api_error}")
-            raise ScannerAnalysisError(str(api_error)) from api_error
+            details = str(api_error)
+            status_code = getattr(api_error, "status_code", None)
+            body = getattr(api_error, "body", None)
+            if status_code is not None:
+                details = f"{details} [status_code={status_code}]"
+            if body:
+                details = f"{details} [body={body}]"
+            raise ScannerAnalysisError(details) from api_error
         
         # FIX 3: Search for ALL detected items
         all_results = []
