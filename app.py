@@ -633,6 +633,14 @@ st.markdown(f"""
         background: transparent;
         color: {C['text_muted']};
     }}
+
+    /* === OLIVE SCAN BUTTONS === */
+    .olive-btn .stButton > button {{
+        background: linear-gradient(135deg, {C['olive']} 0%, #5a7a28 100%) !important;
+    }}
+    .olive-btn .stButton > button:hover {{
+        box-shadow: 0 4px 16px rgba(124,158,56,0.35) !important;
+    }}
     </style>
 """, unsafe_allow_html=True)
 
@@ -1118,6 +1126,7 @@ function startScan(){{
   }}
 }}
 </script></body></html>""", height=200, scrolling=False)
+        st.markdown('<div class="olive-btn">', unsafe_allow_html=True)
         if st.button("Start Live Scan", type="primary", use_container_width=True):
             st.session_state.camera_active = True
             st.session_state.scanning = True
@@ -1128,6 +1137,7 @@ function startScan(){{
             st.session_state.detected_items = []
             st.session_state._captured_image = None
             st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
     else:
         # Scanner active - show HUD
         # Inline scan status indicator - auto-dismisses when items are detected
@@ -1180,6 +1190,7 @@ function startScan(){{
 
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
+            st.markdown('<div class="olive-btn">', unsafe_allow_html=True)
             if st.session_state.get('scan_error'):
                 if st.button("Scan Again", use_container_width=True):
                     st.session_state.scan_error = None
@@ -1199,6 +1210,7 @@ function startScan(){{
                 st.session_state.scan_error = None
                 st.session_state.scan_count += 1
                 st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
 
         # Scanning logic - two-phase: capture acknowledgement, then analyze
         # Phase 1: Image captured - show acknowledgement and prevent duplicate scans
@@ -1242,6 +1254,7 @@ function startScan(){{
     # Scan results with full item details, nutrition, and grocery list integration
     if st.session_state.scan_results:
         # "Scan Again" at the TOP so the user can immediately go to next item
+        st.markdown('<div class="olive-btn">', unsafe_allow_html=True)
         if st.button("🔄 Scan Again", use_container_width=True, key="scan_again_btn_top"):
             st.session_state.scan_results = None
             st.session_state.selected_result = None
@@ -1249,6 +1262,7 @@ function startScan(){{
             st.session_state.detected_items = []
             st.session_state.scan_count += 1
             st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
 
         st.markdown(f"<h4 style='font-weight:700; margin-top:12px;'>Scan Results</h4>", unsafe_allow_html=True)
         st.markdown(f"<div style='color:{C['text_sec']}; font-size:0.85rem; margin-bottom:12px;'>Found {len(st.session_state.scan_results)} item(s) in frame</div>", unsafe_allow_html=True)
@@ -1343,6 +1357,7 @@ function startScan(){{
                 """, unsafe_allow_html=True)
 
             # Add to Grocery List button for each scanned item
+            st.markdown('<div class="olive-btn">', unsafe_allow_html=True)
             if st.button(f"+ Add to Grocery List", key=f"scan_add_{i}", use_container_width=True):
                 add_calendar_item_db(
                     st.session_state.user_id,
@@ -1362,6 +1377,7 @@ function startScan(){{
                 st.session_state.scan_count += 1
                 time.sleep(0.5)
                 st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
 
 
     # Health Trends - header with tabs on the right
