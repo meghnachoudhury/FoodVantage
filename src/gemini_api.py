@@ -690,6 +690,16 @@ def vision_live_scan_dark(image_bytes):
             print(f"[DEBUG] Converting {img.mode} to RGB...")
             img = img.convert('RGB')
 
+        # Downscale very large mobile images to reduce latency/timeouts.
+        max_dim = 1600
+        longest = max(img.size)
+        if longest > max_dim:
+            scale = max_dim / float(longest)
+            resized = (max(1, int(img.size[0] * scale)), max(1, int(img.size[1] * scale)))
+            print(f"[DEBUG] Resizing image from {img.size} to {resized}")
+            img = img.resize(resized, Image.LANCZOS)
+            w, h = img.size
+
         # Minimal crop (10% edges) to avoid UI elements, but scan most of frame
         left = int(w * 0.05)
         top = int(h * 0.05)
@@ -708,29 +718,24 @@ def vision_live_scan_dark(image_bytes):
         img_bytes = buf.read()
         img_b64 = base64.b64encode(img_bytes).decode('utf-8')
 
-        # Enhanced prompt for whole-frame detection
-        prompt = """You are a food detection AI. Identify ALL food items visible in this image.
+        # Enhanced prompt for item detection + nutrition lookup intent
+        prompt = """You are a grocery item detection ai. You have to recognize the item captured in the image using identification metrics like shape, color, container, brand of item if visible, and product name if caught in the image, and fetch nutrition data related to it if it has been posted by the brand for that product to finally display the results for "item detected".
 
-CRITICAL RULES:
-1. Count EACH item separately (1 apple, 2 bananas = 3 total items)
-2. For PACKAGED goods: Use exact product name from label
-3. For FRESH produce: Use common name, count each piece
-4. List ALL items you see in the frame
-5. Scan the ENTIRE visible area
-
-Return a JSON array like: ["Apple", "Banana", "Banana", "Orange", "Coca Cola"]
-
-If you see 2 apples, list "Apple" twice.
-Be PRECISE. Return ONLY the JSON array, no other text."""
+Return ONLY a JSON array of detected grocery item names (strings), for example: ["Apple", "Coca Cola"].
+No markdown, no explanation, no extra keys."""
 
         client = get_gemini_client()
+        if not client:
+            raise ScannerAnalysisError("No AI client configured")
 
-        print(f"[DEBUG] Calling {_active_model('scanner')} Vision API...")
+        use_gemini = _using_gemini_key()
+        print(f"[DEBUG] Calling {_active_model('scanner')} Vision API (provider={'gemini' if use_gemini else 'openai'})...")
+        print(f"[DEBUG] Encoded payload size: {len(img_bytes)} bytes")
 
         try:
-            response = client.chat.completions.create(
-                model=_active_model('scanner'),
-                messages=[
+            request_kwargs = {
+                "model": _active_model('scanner'),
+                "messages": [
                     {
                         "role": "user",
                         "content": [
@@ -745,10 +750,14 @@ Be PRECISE. Return ONLY the JSON array, no other text."""
                         ]
                     }
                 ],
-                max_tokens=_MAX_TOKENS_VISION,
-                timeout=22,
-                **_SCANNER_LIGHT_THINKING
-            )
+                "max_tokens": _MAX_TOKENS_VISION,
+                "timeout": 35,
+            }
+            # Gemini endpoint supports thinkingConfig; OpenAI endpoint does not.
+            if use_gemini:
+                request_kwargs.update(_SCANNER_LIGHT_THINKING)
+
+            response = client.chat.completions.create(**request_kwargs)
 
             response_text = (response.choices[0].message.content or "").strip()
             finish_reason = getattr(response.choices[0], 'finish_reason', None)
