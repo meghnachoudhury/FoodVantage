@@ -13,7 +13,7 @@ import plotly.graph_objects as go
 sys.path.append(os.path.join(os.path.dirname(__file__), "src"))
 from gemini_api import (
     calculate_vms_science, get_scientific_db,
-    search_vantage_db, search_open_food_facts, vision_live_scan_dark,
+    search_vantage_db, search_open_food_facts, vision_live_scan_dark, ScannerAnalysisError,
     generate_health_insights, generate_meal_plan, generate_daily_recipes,
     get_db_connection, get_trend_data_db, get_all_calendar_data_db,
     get_gemini_api_key, authenticate_user,
@@ -1403,6 +1403,21 @@ function startScan(){{
                     st.session_state.scan_error = "Item not found in database — try a clearer angle or different wording"
                     st.session_state.scanning = True  # Allow retry on failure
                     st.session_state.scan_count += 1
+            except ScannerAnalysisError as e:
+                error_msg = str(e)
+                err_lower = error_msg.lower()
+                if "429" in error_msg or "quota" in err_lower or "resource_exhausted" in err_lower:
+                    st.session_state.scan_error = "API limit reached — please try again in a moment"
+                elif "timeout" in err_lower or "timed out" in err_lower:
+                    st.session_state.scan_error = "Scan took too long — hold steady and retry"
+                elif "empty response" in err_lower:
+                    st.session_state.scan_error = "Could not read label clearly — please try a steadier angle"
+                else:
+                    st.session_state.scan_error = "AI scan unavailable — please retry in a moment"
+                st.session_state.scan_status = None
+                st.session_state._captured_image = None
+                st.session_state.scanning = True
+                st.session_state.scan_count += 1
             except Exception as e:
                 error_msg = str(e)
                 if "429" in error_msg or "quota" in error_msg.lower() or "RESOURCE_EXHAUSTED" in error_msg:

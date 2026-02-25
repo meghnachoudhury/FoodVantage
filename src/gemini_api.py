@@ -19,7 +19,7 @@ load_dotenv()
 # Text + vision AI via OpenAI-compatible endpoint
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
 GEMINI_AGENT_MODEL = "gemini-2.5-flash"
-GEMINI_SCANNER_MODEL = "gemini-2.5-flash-lite"
+GEMINI_SCANNER_MODEL = "gemini-2.5-flash"
 
 # === DIGITALOCEAN GRADIENT AI CONFIGURATION (for hackathon integration) ===
 GRADIENT_BASE_URL = "https://inference.do-ai.run/v1/"
@@ -33,10 +33,17 @@ _JSON_SYSTEM = "You are a JSON API. Return ONLY valid JSON with no markdown, no 
 # For scanner (vision) use budget=0 (no thinking). For agent text tasks use a
 # small budget (512 tokens) to still allow a brief reasoning pass.
 _NO_THINKING = {"extra_body": {"google": {"thinkingConfig": {"thinkingBudget": 0}}}}
+# Middle-ground scanner reasoning budget: improves OCR/label extraction accuracy
+# without the long delays of full thinking.
+_SCANNER_LIGHT_THINKING = {"extra_body": {"google": {"thinkingConfig": {"thinkingBudget": 128}}}}
 _LIGHT_THINKING = {"extra_body": {"google": {"thinkingConfig": {"thinkingBudget": 512}}}}
 
-_MAX_TOKENS_VISION = 1024   # scanner only needs a short JSON array
+_MAX_TOKENS_VISION = 1536   # scanner JSON can include multiple label-heavy items
 _MAX_TOKENS_TEXT = 4096
+
+
+class ScannerAnalysisError(Exception):
+    """Raised when scanner AI analysis fails (timeout/quota/network/model)."""
 
 def safe_parse_json(text, expected='object'):
     """Robustly parse JSON from Gemini — strips code fences, fixes trailing commas."""
@@ -353,6 +360,33 @@ def _normalized_tokens(text: str):
     return [t for t in cleaned.split() if len(t) > 1]
 
 
+def _token_query_terms(text: str):
+    """Scanner-oriented search tokens (drop noisy packaging words)."""
+    stopwords = {
+        'and', 'with', 'for', 'the', 'from', 'classic', 'roast', 'blend',
+        'flavor', 'flavour', 'original', 'instant', 'premium', 'natural',
+        'fresh', 'food', 'item', 'items', 'pack', 'can', 'bottle', 'jar',
+        'oz', 'ml', 'g', 'kg', 'lb', 'lbs'
+    }
+    tokens = []
+    for tok in _normalized_tokens(text):
+        if tok in stopwords:
+            continue
+        if tok.isdigit():
+            continue
+        if len(tok) < 3:
+            continue
+        tokens.append(tok)
+    # Preserve order while deduplicating
+    seen = set()
+    out = []
+    for tok in tokens:
+        if tok not in seen:
+            out.append(tok)
+            seen.add(tok)
+    return out
+
+
 def _scanner_match_confidence(query: str, result: dict) -> float:
     """Heuristic confidence used to pick scanner matches from search candidates."""
     q_tokens = set(_normalized_tokens(query))
@@ -401,6 +435,7 @@ def search_vantage_db(product_name: str, limit=5, fast_mode=False):
     if not con: return None
     try:
         safe_name = product_name.replace("'", "''")
+        search_terms = _token_query_terms(product_name)
         
         query = f"""
             SELECT * FROM products 
@@ -418,6 +453,25 @@ def search_vantage_db(product_name: str, limit=5, fast_mode=False):
         """
         
         results = con.execute(query).fetchall()
+
+        # Tokenized fallback for long/noisy scanner labels.
+        # Example: "illy instant classico classic roast" should still find
+        # products containing "illy" + "classico" even if the full phrase is absent.
+        if (not results or len(results) == 0) and search_terms:
+            token_clauses = [
+                f"(product_name ILIKE '%{t}%' OR COALESCE(brand, '') ILIKE '%{t}%')"
+                for t in search_terms[:5]
+            ]
+            if token_clauses:
+                fallback_query = f"""
+                    SELECT * FROM products
+                    WHERE {' AND '.join(token_clauses)}
+                    ORDER BY
+                        LENGTH(product_name),
+                        sugar DESC
+                    LIMIT {limit}
+                """
+                results = con.execute(fallback_query).fetchall()
         
         # If no results in local DB, try Open Food Facts API
         if not results or len(results) == 0:
@@ -692,15 +746,16 @@ Be PRECISE. Return ONLY the JSON array, no other text."""
                     }
                 ],
                 max_tokens=_MAX_TOKENS_VISION,
-                **_NO_THINKING
+                timeout=22,
+                **_SCANNER_LIGHT_THINKING
             )
 
             response_text = (response.choices[0].message.content or "").strip()
             finish_reason = getattr(response.choices[0], 'finish_reason', None)
             print(f"[Gemini] finish_reason={finish_reason}, response length={len(response_text)}")
             if not response_text:
-                print(f"[Gemini] WARNING: Empty response (finish_reason={finish_reason}). Thinking may have consumed entire token budget.")
-                raise Exception(f"AI returned empty response (finish_reason={finish_reason}). Try again.")
+                print(f"[Gemini] WARNING: Empty response (finish_reason={finish_reason}).")
+                raise ScannerAnalysisError(f"AI returned empty response (finish_reason={finish_reason}).")
             print(f"[Gemini] Raw response: {response_text}")
 
             detected_items = safe_parse_json(response_text, expected='array')
@@ -713,8 +768,8 @@ Be PRECISE. Return ONLY the JSON array, no other text."""
                 print(f"✅ [Gemini] Single item detected: {product_name}")
 
         except Exception as api_error:
-            print(f"[GPT-4o ERROR] {api_error}")
-            raise api_error
+            print(f"[GEMINI SCANNER ERROR] {api_error}")
+            raise ScannerAnalysisError(str(api_error)) from api_error
         
         # FIX 3: Search for ALL detected items
         all_results = []
@@ -730,7 +785,13 @@ Be PRECISE. Return ONLY the JSON array, no other text."""
                     reverse=True
                 )
                 best = scored[0]
-                if _scanner_match_confidence(item, best) >= 0.6:
+                conf = _scanner_match_confidence(item, best)
+                # 0.6 is too strict for label-heavy OCR/vision strings
+                # (e.g. includes roast/blend/size descriptors).
+                if conf >= 0.38:
+                    all_results.append(best)
+                elif conf >= 0.25 and len(detected_items) == 1:
+                    # Single-item scans should degrade gracefully instead of hard-failing.
                     all_results.append(best)
         
         if all_results:
@@ -742,13 +803,14 @@ Be PRECISE. Return ONLY the JSON array, no other text."""
             
             return None
         
+    except ScannerAnalysisError:
+        raise
     except Exception as e:
         error_msg = str(e)
         print(f"❌ [SCAN ERROR] {error_msg}")
         import traceback
         traceback.print_exc()
-        
-        return None
+        raise ScannerAnalysisError(error_msg) from e
 
 # === 3B. AI HEALTH COACH AGENT ===
 def generate_health_insights(trend_data, history_data, days_range):
