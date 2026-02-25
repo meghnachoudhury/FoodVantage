@@ -666,7 +666,14 @@ def vision_live_scan_dark(image_bytes):
         if isinstance(image_bytes, io.BytesIO):
             image_bytes = image_bytes.getvalue()
         elif hasattr(image_bytes, 'read'):
+            try:
+                image_bytes.seek(0)
+            except Exception:
+                pass
             image_bytes = image_bytes.read()
+
+        if not image_bytes:
+            raise ScannerAnalysisError("Captured image was empty")
 
         print(f"[DEBUG] Image type: {type(image_bytes)}, size: {len(image_bytes)} bytes")
 
@@ -690,6 +697,16 @@ def vision_live_scan_dark(image_bytes):
             print(f"[DEBUG] Converting {img.mode} to RGB...")
             img = img.convert('RGB')
 
+        # Downscale very large mobile images to reduce latency/timeouts.
+        max_dim = 1600
+        longest = max(img.size)
+        if longest > max_dim:
+            scale = max_dim / float(longest)
+            resized = (max(1, int(img.size[0] * scale)), max(1, int(img.size[1] * scale)))
+            print(f"[DEBUG] Resizing image from {img.size} to {resized}")
+            img = img.resize(resized, Image.LANCZOS)
+            w, h = img.size
+
         # Minimal crop (10% edges) to avoid UI elements, but scan most of frame
         left = int(w * 0.05)
         top = int(h * 0.05)
@@ -708,49 +725,99 @@ def vision_live_scan_dark(image_bytes):
         img_bytes = buf.read()
         img_b64 = base64.b64encode(img_bytes).decode('utf-8')
 
-        # Enhanced prompt for whole-frame detection
-        prompt = """You are a food detection AI. Identify ALL food items visible in this image.
-
+        # Enhanced prompt for item detection + nutrition lookup intent
+        prompt = """You are a grocery item detection ai. You have to recognize the item captured in the image using identification metrics like shape, color, container, brand of item if visible, and product name if caught in the image, and fetch nutrition data related to it if it has been posted by the brand for that product to finally display the results for "item detected"
 CRITICAL RULES:
 1. Count EACH item separately (1 apple, 2 bananas = 3 total items)
-2. For PACKAGED goods: Use exact product name from label
-3. For FRESH produce: Use common name, count each piece
+2. For PACKAGED goods: Use exact product name from label or try to identify and recognize the shape, color, extra text in the packaging (when brand and main face side of product not captured), and type of product and container if not directly visible.
+3. For FRESH produce: Use common name, count each piece. Remember even though some packaged items may contain fruit in it, does not mean it is healthy. (For example, orange juice)
 4. List ALL items you see in the frame
-5. Scan the ENTIRE visible area
+5. Scan the ENTIRE visible areaReturn a JSON array like: ["Apple", "Banana", "Banana", "Orange", "Coca Cola"]
 
-Return a JSON array like: ["Apple", "Banana", "Banana", "Orange", "Coca Cola"]
-
-If you see 2 apples, list "Apple" twice.
+If you see 2 apples, list "Apples" with "quantity 2".
 Be PRECISE. Return ONLY the JSON array, no other text."""
 
         client = get_gemini_client()
+        if not client:
+            raise ScannerAnalysisError("No AI client configured")
 
-        print(f"[DEBUG] Calling {_active_model('scanner')} Vision API...")
+        use_gemini = _using_gemini_key()
+        print(f"[DEBUG] Calling {_active_model('scanner')} Vision API (provider={'gemini' if use_gemini else 'openai'})...")
+        print(f"[DEBUG] Encoded payload size: {len(img_bytes)} bytes")
 
         try:
-            response = client.chat.completions.create(
-                model=_active_model('scanner'),
-                messages=[
+            image_payload = {
+                "url": f"data:image/jpeg;base64,{img_b64}",
+                "detail": "low"
+            }
+            if use_gemini:
+                # Gemini compatibility: omit detail to avoid occasional payload-shape rejection.
+                image_payload = {"url": f"data:image/jpeg;base64,{img_b64}"}
+
+            request_kwargs = {
+                "model": _active_model('scanner'),
+                "messages": [
                     {
                         "role": "user",
                         "content": [
                             {"type": "text", "text": prompt},
                             {
                                 "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:image/jpeg;base64,{img_b64}",
-                                    "detail": "low"
-                                }
+                                "image_url": image_payload
                             }
                         ]
                     }
                 ],
-                max_tokens=_MAX_TOKENS_VISION,
-                timeout=22,
-                **_SCANNER_LIGHT_THINKING
-            )
+                "max_tokens": _MAX_TOKENS_VISION,
+                "timeout": 35,
+            }
+            # Gemini endpoint supports thinkingConfig; OpenAI endpoint does not.
+            if use_gemini:
+                request_kwargs.update(_SCANNER_LIGHT_THINKING)
 
-            response_text = (response.choices[0].message.content or "").strip()
+            try:
+                response = client.chat.completions.create(**request_kwargs)
+            except Exception as first_error:
+                msg = str(first_error).lower()
+                should_retry = any(
+                    token in msg for token in ["400", "invalid_request", "unsupported", "bad request", "image_url"]
+                )
+                if should_retry:
+                    print("[DEBUG] Retrying scanner request with compatibility image payload...")
+                    retry_kwargs = dict(request_kwargs)
+                    retry_kwargs["messages"] = [
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "text", "text": prompt},
+                                {
+                                    "type": "image_url",
+                                    "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}
+                                }
+                            ]
+                        }
+                    ]
+                    response = client.chat.completions.create(**retry_kwargs)
+                else:
+                    raise
+
+            if not getattr(response, "choices", None):
+                raise ScannerAnalysisError("AI returned no choices")
+            raw_content = response.choices[0].message.content
+            response_text = ""
+            if isinstance(raw_content, str):
+                response_text = raw_content.strip()
+            elif isinstance(raw_content, list):
+                chunks = []
+                for part in raw_content:
+                    if isinstance(part, dict):
+                        chunks.append(
+                            part.get("text")
+                            or part.get("output_text")
+                            or part.get("refusal")
+                            or ""
+                        )
+                response_text = "\n".join([c for c in chunks if c]).strip()
             finish_reason = getattr(response.choices[0], 'finish_reason', None)
             print(f"[Gemini] finish_reason={finish_reason}, response length={len(response_text)}")
             if not response_text:
@@ -769,7 +836,14 @@ Be PRECISE. Return ONLY the JSON array, no other text."""
 
         except Exception as api_error:
             print(f"[GEMINI SCANNER ERROR] {api_error}")
-            raise ScannerAnalysisError(str(api_error)) from api_error
+            details = str(api_error)
+            status_code = getattr(api_error, "status_code", None)
+            body = getattr(api_error, "body", None)
+            if status_code is not None:
+                details = f"{details} [status_code={status_code}]"
+            if body:
+                details = f"{details} [body={body}]"
+            raise ScannerAnalysisError(details) from api_error
         
         # FIX 3: Search for ALL detected items
         all_results = []
@@ -1136,14 +1210,52 @@ Return ONLY valid JSON array, no other text:
 # writes from two simultaneous users cause race conditions and silent data corruption.
 _db_thread_local = threading.local()
 
+
+def _init_user_db_schema(con):
+    """Ensure required auth/calendar/allergy tables exist."""
+    con.execute("CREATE TABLE IF NOT EXISTS users (username VARCHAR PRIMARY KEY, password_hash VARCHAR)")
+    try:
+        con.execute("CREATE SEQUENCE IF NOT EXISTS seq_cal_id START 1")
+    except Exception:
+        pass
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS calendar (
+            id INTEGER DEFAULT nextval('seq_cal_id'),
+            username VARCHAR,
+            date DATE,
+            item_name VARCHAR,
+            score FLOAT,
+            category VARCHAR
+        )
+    """)
+    con.execute("CREATE TABLE IF NOT EXISTS allergies (username VARCHAR, allergy_name VARCHAR)")
+
 def get_db_connection():
     """Return a per-thread DuckDB connection to the user data store."""
     if not getattr(_db_thread_local, 'con', None):
-        con = duckdb.connect('data/user_data.db', read_only=False)
-        con.execute("CREATE TABLE IF NOT EXISTS users (username VARCHAR PRIMARY KEY, password_hash VARCHAR)")
-        try: con.execute("CREATE SEQUENCE IF NOT EXISTS seq_cal_id START 1")
-        except: pass
-        con.execute("CREATE TABLE IF NOT EXISTS calendar (id INTEGER DEFAULT nextval('seq_cal_id'), username VARCHAR, date DATE, item_name VARCHAR, score FLOAT, category VARCHAR)")
+        db_path = 'data/user_data.db'
+        os.makedirs(os.path.dirname(db_path), exist_ok=True)
+
+        # Recover from zero-byte database files (common after failed deploy/startup).
+        if os.path.exists(db_path) and os.path.getsize(db_path) == 0:
+            os.remove(db_path)
+
+        try:
+            con = duckdb.connect(db_path, read_only=False)
+        except duckdb.IOException as e:
+            # Last-resort recovery for corrupted/non-duckdb files.
+            if "not a valid DuckDB database file" in str(e):
+                backup_path = f"{db_path}.corrupt"
+                if os.path.exists(backup_path):
+                    os.remove(backup_path)
+                if os.path.exists(db_path):
+                    os.replace(db_path, backup_path)
+                con = duckdb.connect(db_path, read_only=False)
+                print(f"[AUTH] Rebuilt invalid user DB. Backup saved to {backup_path}")
+            else:
+                raise
+
+        _init_user_db_schema(con)
         _db_thread_local.con = con
     return _db_thread_local.con
 

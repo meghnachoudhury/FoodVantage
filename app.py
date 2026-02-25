@@ -29,7 +29,7 @@ try:
 except ImportError:
     back_camera_input = None
 
-st.set_page_config(page_title="FoodVantage", page_icon="🥗", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="FoodVantage", page_icon="🥗", layout="wide", initial_sidebar_state="collapsed")
 
 # --- SESSION STATE ---
 if 'logged_in' not in st.session_state: st.session_state.logged_in = False
@@ -684,21 +684,11 @@ st.markdown(f"""
         box-shadow: 0 4px 16px rgba(124,158,56,0.2) !important;
     }}
 
-    /* === MOBILE: keep columns horizontal (prevent Streamlit's default stacking) === */
+    /* === MOBILE: allow Streamlit columns to stack naturally === */
     @media (max-width: 768px) {{
-        [data-testid="stHorizontalBlock"] {{
-            flex-wrap: nowrap !important;
-            gap: 6px !important;
-        }}
-        [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {{
-            min-width: 0 !important;
-            flex: 1 1 0% !important;
-        }}
-        /* Shrink button font + padding so 3 fit on one line */
         [data-testid="stHorizontalBlock"] .stButton > button {{
-            font-size: 0.78rem !important;
-            padding: 8px 4px !important;
-            white-space: nowrap !important;
+            font-size: 0.95rem !important;
+            padding: 10px 8px !important;
         }}
     }}
     </style>
@@ -1352,7 +1342,18 @@ function startScan(){{
         if image and st.session_state.scanning:
             st.session_state.scanning = False  # Prevent duplicate scans immediately
             st.session_state.scan_status = "captured"
-            st.session_state._captured_image = image
+            captured_bytes = None
+            if isinstance(image, (bytes, bytearray)):
+                captured_bytes = bytes(image)
+            elif hasattr(image, "getvalue"):
+                captured_bytes = image.getvalue()
+            elif hasattr(image, "read"):
+                try:
+                    image.seek(0)
+                except Exception:
+                    pass
+                captured_bytes = image.read()
+            st.session_state._captured_image = captured_bytes
             st.rerun()
 
         # Phase 2: Process captured image (runs on next rerun after acknowledgement shown)
@@ -1392,10 +1393,14 @@ function startScan(){{
                     st.session_state.scan_error = "API limit reached — please try again in a moment"
                 elif "timeout" in err_lower or "timed out" in err_lower:
                     st.session_state.scan_error = "Scan took too long — hold steady and retry"
-                elif "empty response" in err_lower:
+                elif "empty response" in err_lower or "captured image was empty" in err_lower:
                     st.session_state.scan_error = "Could not read label clearly — please try a steadier angle"
+                elif "401" in err_lower or "403" in err_lower or "api key" in err_lower or "authentication" in err_lower:
+                    st.session_state.scan_error = "Authentication failed — please verify API key configuration"
+                elif "400" in err_lower or "invalid_request" in err_lower or "unsupported" in err_lower:
+                    st.session_state.scan_error = "Scan request format failed — please retry"
                 else:
-                    st.session_state.scan_error = "AI scan unavailable — please retry in a moment"
+                    st.session_state.scan_error = f"AI scan unavailable — {error_msg[:90]}"
                 st.session_state.scan_status = None
                 st.session_state._captured_image = None
                 st.session_state.scanning = True
