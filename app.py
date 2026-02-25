@@ -873,9 +873,9 @@ with st.sidebar:
         # Navigation
         page = st.session_state.page
         nav_items = [
-            ('dashboard', '🏠', 'Dashboard'),
+            ('dashboard', '𖠿', 'Dashboard'),
             ('calendar', '📅', 'Calendar'),
-            ('log',       '🍳', 'Cook With It'),
+            ('log',       '🥘', 'Cook With It'),
         ]
         st.markdown('<div class="sidebar-nav">', unsafe_allow_html=True)
         for pg, icon, label in nav_items:
