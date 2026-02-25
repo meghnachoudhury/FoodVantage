@@ -19,7 +19,7 @@ load_dotenv()
 # Text + vision AI via OpenAI-compatible endpoint
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
 GEMINI_AGENT_MODEL = "gemini-2.5-flash"
-GEMINI_SCANNER_MODEL = "gemini-2.5-flash-lite"
+GEMINI_SCANNER_MODEL = "gemini-2.5-flash"
 
 # === DIGITALOCEAN GRADIENT AI CONFIGURATION (for hackathon integration) ===
 GRADIENT_BASE_URL = "https://inference.do-ai.run/v1/"
@@ -33,10 +33,17 @@ _JSON_SYSTEM = "You are a JSON API. Return ONLY valid JSON with no markdown, no 
 # For scanner (vision) use budget=0 (no thinking). For agent text tasks use a
 # small budget (512 tokens) to still allow a brief reasoning pass.
 _NO_THINKING = {"extra_body": {"google": {"thinkingConfig": {"thinkingBudget": 0}}}}
+# Middle-ground scanner reasoning budget: improves OCR/label extraction accuracy
+# without the long delays of full thinking.
+_SCANNER_LIGHT_THINKING = {"extra_body": {"google": {"thinkingConfig": {"thinkingBudget": 128}}}}
 _LIGHT_THINKING = {"extra_body": {"google": {"thinkingConfig": {"thinkingBudget": 512}}}}
 
-_MAX_TOKENS_VISION = 1024   # scanner only needs a short JSON array
+_MAX_TOKENS_VISION = 1536   # scanner JSON can include multiple label-heavy items
 _MAX_TOKENS_TEXT = 4096
+
+
+class ScannerAnalysisError(Exception):
+    """Raised when scanner AI analysis fails (timeout/quota/network/model)."""
 
 def safe_parse_json(text, expected='object'):
     """Robustly parse JSON from Gemini — strips code fences, fixes trailing commas."""
@@ -353,6 +360,33 @@ def _normalized_tokens(text: str):
     return [t for t in cleaned.split() if len(t) > 1]
 
 
+def _token_query_terms(text: str):
+    """Scanner-oriented search tokens (drop noisy packaging words)."""
+    stopwords = {
+        'and', 'with', 'for', 'the', 'from', 'classic', 'roast', 'blend',
+        'flavor', 'flavour', 'original', 'instant', 'premium', 'natural',
+        'fresh', 'food', 'item', 'items', 'pack', 'can', 'bottle', 'jar',
+        'oz', 'ml', 'g', 'kg', 'lb', 'lbs'
+    }
+    tokens = []
+    for tok in _normalized_tokens(text):
+        if tok in stopwords:
+            continue
+        if tok.isdigit():
+            continue
+        if len(tok) < 3:
+            continue
+        tokens.append(tok)
+    # Preserve order while deduplicating
+    seen = set()
+    out = []
+    for tok in tokens:
+        if tok not in seen:
+            out.append(tok)
+            seen.add(tok)
+    return out
+
+
 def _scanner_match_confidence(query: str, result: dict) -> float:
     """Heuristic confidence used to pick scanner matches from search candidates."""
     q_tokens = set(_normalized_tokens(query))
@@ -401,6 +435,7 @@ def search_vantage_db(product_name: str, limit=5, fast_mode=False):
     if not con: return None
     try:
         safe_name = product_name.replace("'", "''")
+        search_terms = _token_query_terms(product_name)
         
         query = f"""
             SELECT * FROM products 
@@ -418,6 +453,25 @@ def search_vantage_db(product_name: str, limit=5, fast_mode=False):
         """
         
         results = con.execute(query).fetchall()
+
+        # Tokenized fallback for long/noisy scanner labels.
+        # Example: "illy instant classico classic roast" should still find
+        # products containing "illy" + "classico" even if the full phrase is absent.
+        if (not results or len(results) == 0) and search_terms:
+            token_clauses = [
+                f"(product_name ILIKE '%{t}%' OR COALESCE(brand, '') ILIKE '%{t}%')"
+                for t in search_terms[:5]
+            ]
+            if token_clauses:
+                fallback_query = f"""
+                    SELECT * FROM products
+                    WHERE {' AND '.join(token_clauses)}
+                    ORDER BY
+                        LENGTH(product_name),
+                        sugar DESC
+                    LIMIT {limit}
+                """
+                results = con.execute(fallback_query).fetchall()
         
         # If no results in local DB, try Open Food Facts API
         if not results or len(results) == 0:
@@ -636,6 +690,16 @@ def vision_live_scan_dark(image_bytes):
             print(f"[DEBUG] Converting {img.mode} to RGB...")
             img = img.convert('RGB')
 
+        # Downscale very large mobile images to reduce latency/timeouts.
+        max_dim = 1600
+        longest = max(img.size)
+        if longest > max_dim:
+            scale = max_dim / float(longest)
+            resized = (max(1, int(img.size[0] * scale)), max(1, int(img.size[1] * scale)))
+            print(f"[DEBUG] Resizing image from {img.size} to {resized}")
+            img = img.resize(resized, Image.LANCZOS)
+            w, h = img.size
+
         # Minimal crop (10% edges) to avoid UI elements, but scan most of frame
         left = int(w * 0.05)
         top = int(h * 0.05)
@@ -654,29 +718,30 @@ def vision_live_scan_dark(image_bytes):
         img_bytes = buf.read()
         img_b64 = base64.b64encode(img_bytes).decode('utf-8')
 
-        # Enhanced prompt for whole-frame detection
-        prompt = """You are a food detection AI. Identify ALL food items visible in this image.
-
+        # Enhanced prompt for item detection + nutrition lookup intent
+        prompt = """You are a grocery item detection ai. You have to recognize the item captured in the image using identification metrics like shape, color, container, brand of item if visible, and product name if caught in the image, and fetch nutrition data related to it if it has been posted by the brand for that product to finally display the results for "item detected"
 CRITICAL RULES:
 1. Count EACH item separately (1 apple, 2 bananas = 3 total items)
-2. For PACKAGED goods: Use exact product name from label
-3. For FRESH produce: Use common name, count each piece
+2. For PACKAGED goods: Use exact product name from label or try to identify and recognize the shape, color, extra text in the packaging (when brand and main face side of product not captured), and type of product and container if not directly visible.
+3. For FRESH produce: Use common name, count each piece. Remember even though some packaged items may contain fruit in it, does not mean it is healthy. (For example, orange juice)
 4. List ALL items you see in the frame
-5. Scan the ENTIRE visible area
+5. Scan the ENTIRE visible areaReturn a JSON array like: ["Apple", "Banana", "Banana", "Orange", "Coca Cola"]
 
-Return a JSON array like: ["Apple", "Banana", "Banana", "Orange", "Coca Cola"]
-
-If you see 2 apples, list "Apple" twice.
+If you see 2 apples, list "Apples" with "quantity 2".
 Be PRECISE. Return ONLY the JSON array, no other text."""
 
         client = get_gemini_client()
+        if not client:
+            raise ScannerAnalysisError("No AI client configured")
 
-        print(f"[DEBUG] Calling {_active_model('scanner')} Vision API...")
+        use_gemini = _using_gemini_key()
+        print(f"[DEBUG] Calling {_active_model('scanner')} Vision API (provider={'gemini' if use_gemini else 'openai'})...")
+        print(f"[DEBUG] Encoded payload size: {len(img_bytes)} bytes")
 
         try:
-            response = client.chat.completions.create(
-                model=_active_model('scanner'),
-                messages=[
+            request_kwargs = {
+                "model": _active_model('scanner'),
+                "messages": [
                     {
                         "role": "user",
                         "content": [
@@ -691,16 +756,21 @@ Be PRECISE. Return ONLY the JSON array, no other text."""
                         ]
                     }
                 ],
-                max_tokens=_MAX_TOKENS_VISION,
-                **_NO_THINKING
-            )
+                "max_tokens": _MAX_TOKENS_VISION,
+                "timeout": 35,
+            }
+            # Gemini endpoint supports thinkingConfig; OpenAI endpoint does not.
+            if use_gemini:
+                request_kwargs.update(_SCANNER_LIGHT_THINKING)
+
+            response = client.chat.completions.create(**request_kwargs)
 
             response_text = (response.choices[0].message.content or "").strip()
             finish_reason = getattr(response.choices[0], 'finish_reason', None)
             print(f"[Gemini] finish_reason={finish_reason}, response length={len(response_text)}")
             if not response_text:
-                print(f"[Gemini] WARNING: Empty response (finish_reason={finish_reason}). Thinking may have consumed entire token budget.")
-                raise Exception(f"AI returned empty response (finish_reason={finish_reason}). Try again.")
+                print(f"[Gemini] WARNING: Empty response (finish_reason={finish_reason}).")
+                raise ScannerAnalysisError(f"AI returned empty response (finish_reason={finish_reason}).")
             print(f"[Gemini] Raw response: {response_text}")
 
             detected_items = safe_parse_json(response_text, expected='array')
@@ -713,8 +783,8 @@ Be PRECISE. Return ONLY the JSON array, no other text."""
                 print(f"✅ [Gemini] Single item detected: {product_name}")
 
         except Exception as api_error:
-            print(f"[GPT-4o ERROR] {api_error}")
-            raise api_error
+            print(f"[GEMINI SCANNER ERROR] {api_error}")
+            raise ScannerAnalysisError(str(api_error)) from api_error
         
         # FIX 3: Search for ALL detected items
         all_results = []
@@ -730,7 +800,13 @@ Be PRECISE. Return ONLY the JSON array, no other text."""
                     reverse=True
                 )
                 best = scored[0]
-                if _scanner_match_confidence(item, best) >= 0.6:
+                conf = _scanner_match_confidence(item, best)
+                # 0.6 is too strict for label-heavy OCR/vision strings
+                # (e.g. includes roast/blend/size descriptors).
+                if conf >= 0.38:
+                    all_results.append(best)
+                elif conf >= 0.25 and len(detected_items) == 1:
+                    # Single-item scans should degrade gracefully instead of hard-failing.
                     all_results.append(best)
         
         if all_results:
@@ -742,13 +818,14 @@ Be PRECISE. Return ONLY the JSON array, no other text."""
             
             return None
         
+    except ScannerAnalysisError:
+        raise
     except Exception as e:
         error_msg = str(e)
         print(f"❌ [SCAN ERROR] {error_msg}")
         import traceback
         traceback.print_exc()
-        
-        return None
+        raise ScannerAnalysisError(error_msg) from e
 
 # === 3B. AI HEALTH COACH AGENT ===
 def generate_health_insights(trend_data, history_data, days_range):
@@ -1074,14 +1151,52 @@ Return ONLY valid JSON array, no other text:
 # writes from two simultaneous users cause race conditions and silent data corruption.
 _db_thread_local = threading.local()
 
+
+def _init_user_db_schema(con):
+    """Ensure required auth/calendar/allergy tables exist."""
+    con.execute("CREATE TABLE IF NOT EXISTS users (username VARCHAR PRIMARY KEY, password_hash VARCHAR)")
+    try:
+        con.execute("CREATE SEQUENCE IF NOT EXISTS seq_cal_id START 1")
+    except Exception:
+        pass
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS calendar (
+            id INTEGER DEFAULT nextval('seq_cal_id'),
+            username VARCHAR,
+            date DATE,
+            item_name VARCHAR,
+            score FLOAT,
+            category VARCHAR
+        )
+    """)
+    con.execute("CREATE TABLE IF NOT EXISTS allergies (username VARCHAR, allergy_name VARCHAR)")
+
 def get_db_connection():
     """Return a per-thread DuckDB connection to the user data store."""
     if not getattr(_db_thread_local, 'con', None):
-        con = duckdb.connect('/tmp/user_data.db', read_only=False)
-        con.execute("CREATE TABLE IF NOT EXISTS users (username VARCHAR PRIMARY KEY, password_hash VARCHAR)")
-        try: con.execute("CREATE SEQUENCE IF NOT EXISTS seq_cal_id START 1")
-        except: pass
-        con.execute("CREATE TABLE IF NOT EXISTS calendar (id INTEGER DEFAULT nextval('seq_cal_id'), username VARCHAR, date DATE, item_name VARCHAR, score FLOAT, category VARCHAR)")
+        db_path = 'data/user_data.db'
+        os.makedirs(os.path.dirname(db_path), exist_ok=True)
+
+        # Recover from zero-byte database files (common after failed deploy/startup).
+        if os.path.exists(db_path) and os.path.getsize(db_path) == 0:
+            os.remove(db_path)
+
+        try:
+            con = duckdb.connect(db_path, read_only=False)
+        except duckdb.IOException as e:
+            # Last-resort recovery for corrupted/non-duckdb files.
+            if "not a valid DuckDB database file" in str(e):
+                backup_path = f"{db_path}.corrupt"
+                if os.path.exists(backup_path):
+                    os.remove(backup_path)
+                if os.path.exists(db_path):
+                    os.replace(db_path, backup_path)
+                con = duckdb.connect(db_path, read_only=False)
+                print(f"[AUTH] Rebuilt invalid user DB. Backup saved to {backup_path}")
+            else:
+                raise
+
+        _init_user_db_schema(con)
         _db_thread_local.con = con
     return _db_thread_local.con
 

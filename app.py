@@ -13,7 +13,7 @@ import plotly.graph_objects as go
 sys.path.append(os.path.join(os.path.dirname(__file__), "src"))
 from gemini_api import (
     calculate_vms_science, get_scientific_db,
-    search_vantage_db, search_open_food_facts, vision_live_scan_dark,
+    search_vantage_db, search_open_food_facts, vision_live_scan_dark, ScannerAnalysisError,
     generate_health_insights, generate_meal_plan, generate_daily_recipes,
     get_db_connection, get_trend_data_db, get_all_calendar_data_db,
     get_gemini_api_key, authenticate_user,
@@ -29,7 +29,7 @@ try:
 except ImportError:
     back_camera_input = None
 
-st.set_page_config(page_title="FoodVantage", page_icon="🥗", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="FoodVantage", page_icon="🥗", layout="wide", initial_sidebar_state="collapsed")
 
 # --- SESSION STATE ---
 if 'logged_in' not in st.session_state: st.session_state.logged_in = False
@@ -683,6 +683,14 @@ st.markdown(f"""
         background: rgba(124,158,56,0.3) !important;
         box-shadow: 0 4px 16px rgba(124,158,56,0.2) !important;
     }}
+
+    /* === MOBILE: allow Streamlit columns to stack naturally === */
+    @media (max-width: 768px) {{
+        [data-testid="stHorizontalBlock"] .stButton > button {{
+            font-size: 0.95rem !important;
+            padding: 10px 8px !important;
+        }}
+    }}
     </style>
 """, unsafe_allow_html=True)
 
@@ -1245,24 +1253,6 @@ function startScan(){{
                 </div>
             """, unsafe_allow_html=True)
 
-        # Scan line animation — shown while awaiting user capture
-        if st.session_state.get('scanning'):
-            components.html(f"""
-<style>
-@keyframes scanline{{0%{{top:8%}}50%{{top:82%}}100%{{top:8%}}}}
-.sl-wrap{{position:relative;height:48px;border-radius:10px;overflow:hidden;
-          background:linear-gradient(180deg,rgba(242,180,197,0.04) 0%,rgba(124,158,56,0.04) 100%);
-          border:1px solid rgba(242,180,197,0.12);margin-bottom:4px;}}
-.sl{{position:absolute;left:0;right:0;height:2px;
-     background:linear-gradient(90deg,transparent 0%,{C['teal']} 30%,#ffffff88 50%,{C['teal']} 70%,transparent 100%);
-     box-shadow:0 0 8px {C['teal']};
-     animation:scanline 1.6s ease-in-out infinite;}}
-.sl-label{{position:absolute;right:12px;bottom:6px;font-size:0.65rem;
-           font-family:'Inter',sans-serif;color:{C['teal']};opacity:0.7;letter-spacing:0.5px;}}
-</style>
-<div class="sl-wrap"><div class="sl"></div><div class="sl-label">SCANNING</div></div>
-""", height=56, scrolling=False)
-
         if back_camera_input is not None:
             image = back_camera_input(key=f"hud_cam_{st.session_state.scan_count}")
         else:
@@ -1385,6 +1375,21 @@ function startScan(){{
                     st.session_state.scan_error = "Item not found in database — try a clearer angle or different wording"
                     st.session_state.scanning = True  # Allow retry on failure
                     st.session_state.scan_count += 1
+            except ScannerAnalysisError as e:
+                error_msg = str(e)
+                err_lower = error_msg.lower()
+                if "429" in error_msg or "quota" in err_lower or "resource_exhausted" in err_lower:
+                    st.session_state.scan_error = "API limit reached — please try again in a moment"
+                elif "timeout" in err_lower or "timed out" in err_lower:
+                    st.session_state.scan_error = "Scan took too long — hold steady and retry"
+                elif "empty response" in err_lower:
+                    st.session_state.scan_error = "Could not read label clearly — please try a steadier angle"
+                else:
+                    st.session_state.scan_error = "AI scan unavailable — please retry in a moment"
+                st.session_state.scan_status = None
+                st.session_state._captured_image = None
+                st.session_state.scanning = True
+                st.session_state.scan_count += 1
             except Exception as e:
                 error_msg = str(e)
                 if "429" in error_msg or "quota" in error_msg.lower() or "RESOURCE_EXHAUSTED" in error_msg:
