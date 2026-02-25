@@ -78,7 +78,7 @@ C = {
     'text': '#E8EAF0',
     'text_sec': '#a0a0b4',
     'text_muted': '#9090b0',
-    'muted_purple': '#a89bc0',
+    'muted_purple': '#c4b8de',
     'green': '#4CAF50',
     'yellow': '#F9A825',
     'red': '#E53935',
@@ -187,28 +187,28 @@ st.markdown(f"""
 
     /* === BUTTONS === */
     .stButton > button {{
-        background: rgba(238,164,183,0.03) !important;
-        color: {C['muted_purple']} !important;
-        border: 1px solid rgba(168,155,192,0.2) !important;
+        background: rgba(238,164,183,0.12) !important;
+        color: {C['teal_light']} !important;
+        border: 1px solid rgba(238,164,183,0.3) !important;
         border-radius: 12px !important;
         font-family: 'Inter', sans-serif !important;
         font-weight: 600 !important;
         padding: 0.5rem 1.5rem !important;
         transition: all 0.2s ease !important;
         letter-spacing: 0.1px;
-        box-shadow: 0 0 6px rgba(168,155,192,0.06) !important;
+        box-shadow: 0 0 8px rgba(238,164,183,0.1) !important;
         backdrop-filter: blur(4px);
     }}
     .stButton > button:hover {{
-        background: rgba(168,155,192,0.08) !important;
-        border-color: rgba(168,155,192,0.38) !important;
-        box-shadow: 0 0 12px rgba(168,155,192,0.15) !important;
+        background: rgba(238,164,183,0.2) !important;
+        border-color: rgba(238,164,183,0.55) !important;
+        box-shadow: 0 0 16px rgba(238,164,183,0.22) !important;
         transform: translateY(-1px) !important;
         color: white !important;
     }}
     .stButton > button[kind="secondary"] {{
         background: rgba(20,20,28,0.6) !important;
-        border: 1px solid rgba(168,155,192,0.12) !important;
+        border: 1px solid rgba(238,164,183,0.15) !important;
         color: {C['text_sec']} !important;
     }}
 
