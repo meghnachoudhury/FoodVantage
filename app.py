@@ -186,23 +186,29 @@ st.markdown(f"""
 
     /* === BUTTONS === */
     .stButton > button {{
-        background: linear-gradient(135deg, {C['teal']} 0%, #d88ea5 100%) !important;
-        color: white !important;
-        border: none !important;
+        background: rgba(238,164,183,0.07) !important;
+        color: {C['teal_light']} !important;
+        border: 1px solid rgba(238,164,183,0.25) !important;
         border-radius: 12px !important;
         font-family: 'Inter', sans-serif !important;
         font-weight: 600 !important;
         padding: 0.5rem 1.5rem !important;
         transition: all 0.2s ease !important;
         letter-spacing: 0.1px;
+        box-shadow: 0 0 8px rgba(238,164,183,0.08) !important;
+        backdrop-filter: blur(4px);
     }}
     .stButton > button:hover {{
-        box-shadow: 0 4px 16px rgba(238,164,183,0.3) !important;
+        background: rgba(238,164,183,0.14) !important;
+        border-color: rgba(238,164,183,0.5) !important;
+        box-shadow: 0 0 16px rgba(238,164,183,0.22) !important;
         transform: translateY(-1px) !important;
+        color: white !important;
     }}
     .stButton > button[kind="secondary"] {{
-        background: {C['bg_elevated']} !important;
-        border: 1px solid {C['border']} !important;
+        background: rgba(36,36,48,0.45) !important;
+        border: 1px solid rgba(238,164,183,0.15) !important;
+        color: {C['text_sec']} !important;
     }}
 
     .stHorizontalBlock div[data-testid="column"] .stButton > button {{
@@ -214,7 +220,7 @@ st.markdown(f"""
         font-weight: 700 !important;
     }}
     [data-testid="stMetricLabel"] {{
-        color: {C['text_sec']} !important;
+        color: {C['teal']} !important;
     }}
 
     /* === EXPANDERS === */
@@ -363,7 +369,7 @@ st.markdown(f"""
         font-size: 0.7rem;
         font-weight: 700;
         letter-spacing: 1.2px;
-        color: {C['text_muted']};
+        color: {C['teal']};
         text-transform: uppercase;
         margin-bottom: 8px;
     }}
@@ -395,7 +401,7 @@ st.markdown(f"""
     .streak-header {{
         font-size: 1rem;
         font-weight: 700;
-        color: {C['text']};
+        color: {C['teal']};
         margin-bottom: 2px;
     }}
     .streak-sub {{
@@ -435,7 +441,7 @@ st.markdown(f"""
     .streak-stat-val {{
         font-size: 1.1rem;
         font-weight: 800;
-        color: {C['text']};
+        color: {C['teal']};
     }}
     .streak-stat-label {{
         font-size: 0.65rem;
@@ -445,16 +451,19 @@ st.markdown(f"""
 
     /* === TREND TABS (compact in right column) === */
     .trend-tabs-compact .stButton > button {{
-        background: {C['bg_elevated']} !important;
-        border: 1px solid {C['border']} !important;
+        background: rgba(36,36,48,0.35) !important;
+        border: 1px solid rgba(238,164,183,0.15) !important;
         border-radius: 8px !important;
         font-size: 0.8rem !important;
         padding: 0.3rem 0.6rem !important;
+        color: {C['text_muted']} !important;
     }}
     .trend-tabs-compact .stButton > button[kind="primary"] {{
-        background: linear-gradient(135deg, {C['teal']} 0%, #d88ea5 100%) !important;
-        border: none !important;
-        border-radius: 14px !important;
+        background: rgba(238,164,183,0.1) !important;
+        border: 1px solid rgba(238,164,183,0.45) !important;
+        border-radius: 8px !important;
+        color: {C['teal_light']} !important;
+        box-shadow: 0 0 10px rgba(238,164,183,0.2) !important;
         min-height: 44px;
     }}
 
@@ -548,10 +557,11 @@ st.markdown(f"""
         box-shadow: none !important;
     }}
     .sidebar-nav .stButton > button[kind="primary"] {{
-        background: rgba(238,164,183,0.15) !important;
+        background: rgba(238,164,183,0.08) !important;
+        border: 1px solid rgba(238,164,183,0.4) !important;
         color: {C['teal_light']} !important;
         font-weight: 600 !important;
-        box-shadow: none !important;
+        box-shadow: 0 0 12px rgba(238,164,183,0.18) !important;
     }}
 
     /* === AI LOADING INDICATOR === */
