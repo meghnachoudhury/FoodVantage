@@ -18,7 +18,8 @@ from gemini_api import (
     get_db_connection, get_trend_data_db, get_all_calendar_data_db,
     get_gemini_api_key, authenticate_user,
     add_calendar_item_db, get_calendar_items_db, delete_item_db,
-    get_log_history_db, create_user,
+    get_log_history_db, create_user, user_exists, reset_password,
+    change_password, delete_account,
     vms_to_health_score, calculate_overall_health_score, calculate_day_streak,
     get_total_items_logged, get_items_today,
     get_user_allergies, save_user_allergies, check_item_allergies, ALLERGY_KEYWORDS
@@ -28,8 +29,9 @@ from streamlit_back_camera_input import back_camera_input
 st.set_page_config(page_title="FoodVantage", page_icon="🥗", layout="wide", initial_sidebar_state="expanded")
 
 # --- SESSION STATE ---
-if 'logged_in' not in st.session_state: st.session_state.logged_in = True
-if 'user_id' not in st.session_state: st.session_state.user_id = "demo_user"
+if 'logged_in' not in st.session_state: st.session_state.logged_in = False
+if 'user_id' not in st.session_state: st.session_state.user_id = None
+if 'auth_tab' not in st.session_state: st.session_state.auth_tab = 'login'   # login | signup | forgot
 if 'page' not in st.session_state: st.session_state.page = 'dashboard'
 if 'camera_active' not in st.session_state: st.session_state.camera_active = False
 if 'scan_results' not in st.session_state: st.session_state.scan_results = None
@@ -584,12 +586,51 @@ st.markdown(f"""
         color: {C['text_sec']};
         margin-top: 2px;
     }}
+
+    /* === BLINKING DOT IN LOGO === */
+    @keyframes blink-dot {{
+        0%, 100% {{ opacity: 1; }}
+        50% {{ opacity: 0; }}
+    }}
+    .logo-dot-blink {{
+        animation: blink-dot 1.1s ease-in-out infinite;
+        display: inline-block;
+    }}
+
+    /* === AUTH PAGE === */
+    .auth-card {{
+        background: {C['bg_card']};
+        border: 1px solid {C['border']};
+        border-radius: 20px;
+        padding: 36px 32px;
+        max-width: 420px;
+        margin: 0 auto;
+    }}
+    .auth-tab-btn {{
+        flex: 1;
+        padding: 10px;
+        border-radius: 10px;
+        border: none;
+        cursor: pointer;
+        font-family: 'Inter', sans-serif;
+        font-size: 0.9rem;
+        font-weight: 600;
+        transition: all 0.2s;
+    }}
+    .auth-tab-active {{
+        background: {C['teal']};
+        color: white;
+    }}
+    .auth-tab-inactive {{
+        background: transparent;
+        color: {C['text_muted']};
+    }}
     </style>
 """, unsafe_allow_html=True)
 
 def render_logo(size="1.6rem"):
     st.markdown(f"""<div style='margin-bottom: 6px;'>
-        <span style='font-size: {size}; font-weight: 800; color: {C["text"]};'>foodvantage</span><span style='font-size: {size}; font-weight: 800; color: {C["teal"]};'>.</span>
+        <span style='font-size: {size}; font-weight: 800; color: {C["text"]};'>foodvantage</span><span class='logo-dot-blink' style='font-size: {size}; font-weight: 800; color: {C["teal"]};'>.</span>
     </div>""", unsafe_allow_html=True)
 
 def create_html_calendar(year, month, selected_day=None, logged_days=None):
@@ -629,78 +670,221 @@ def create_html_calendar(year, month, selected_day=None, logged_days=None):
 
 
 # ============================
-# SIDEBAR
+# SIDEBAR  (only when logged in)
 # ============================
+def _reset_scanner():
+    st.session_state.camera_active = False
+    st.session_state.scan_results = None
+    st.session_state.selected_result = None
+    st.session_state.scanning = False
+    st.session_state.scan_status = None
+    st.session_state.detected_items = []
+    st.session_state._captured_image = None
+
 with st.sidebar:
     render_logo(size="1.5rem")
     st.markdown(f"<div style='height:12px;'></div>", unsafe_allow_html=True)
 
-    # Quick Score Check
-    st.markdown(f"<div style='font-size:0.7rem; font-weight:700; color:{C['text_muted']}; letter-spacing:1px; text-transform:uppercase; margin-bottom:6px;'>Quick Score Check</div>", unsafe_allow_html=True)
-    search_q = st.text_input("Search any food item", key="sidebar_search", placeholder="Type a food name...", label_visibility="collapsed")
-    if search_q:
-        results = search_vantage_db(search_q, limit=5)
-        if results:
-            for d in results[:3]:
-                h_score = vms_to_health_score(d['vms_score'])
-                d_score = vms_to_display_score(d['vms_score'])
-                clr = score_color(h_score, 'health')
-                st.markdown(f"<div style='padding:4px 0; display:flex; justify-content:space-between;'><span style='font-size:0.8rem; color:{C['text_sec']};'>{d['name'][:30]}</span><strong style='color:{clr}; font-size:0.8rem;'>{d_score}/10</strong></div>", unsafe_allow_html=True)
-        else:
-            st.markdown(f"<div style='font-size:0.8rem; color:{C['text_muted']}; padding:4px 0;'>No results found.</div>", unsafe_allow_html=True)
+    if st.session_state.logged_in:
+        # Quick Score Check
+        st.markdown(f"<div style='font-size:0.7rem; font-weight:700; color:{C['text_muted']}; letter-spacing:1px; text-transform:uppercase; margin-bottom:6px;'>Quick Score Check</div>", unsafe_allow_html=True)
+        search_q = st.text_input("Search any food item", key="sidebar_search", placeholder="Type a food name...", label_visibility="collapsed")
+        if search_q:
+            results = search_vantage_db(search_q, limit=5)
+            if results:
+                for d in results[:3]:
+                    h_score = vms_to_health_score(d['vms_score'])
+                    d_score = vms_to_display_score(d['vms_score'])
+                    clr = score_color(h_score, 'health')
+                    st.markdown(f"<div style='padding:4px 0; display:flex; justify-content:space-between;'><span style='font-size:0.8rem; color:{C['text_sec']};'>{d['name'][:30]}</span><strong style='color:{clr}; font-size:0.8rem;'>{d_score}/10</strong></div>", unsafe_allow_html=True)
+            else:
+                st.markdown(f"<div style='font-size:0.8rem; color:{C['text_muted']}; padding:4px 0;'>No results found.</div>", unsafe_allow_html=True)
 
-    st.markdown(f"<div style='height:16px;'></div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='height:16px;'></div>", unsafe_allow_html=True)
 
-    # Navigation
-    page = st.session_state.page
-    nav_items = [
-        ('dashboard', '🏠', 'Dashboard'),
-        ('calendar', '📅', 'Calendar'),
-        ('log',       '🍳', 'Cook With It'),
-    ]
-    st.markdown('<div class="sidebar-nav">', unsafe_allow_html=True)
-    for pg, icon, label in nav_items:
-        btn_type = "primary" if page == pg else "secondary"
-        if st.button(f"{icon}  {label}", key=f"nav_{pg}", use_container_width=True, type=btn_type):
-            # Reset scanner state on any navigation so dashboard always opens fresh
-            st.session_state.camera_active = False
-            st.session_state.scan_results = None
-            st.session_state.selected_result = None
-            st.session_state.scanning = False
-            st.session_state.scan_status = None
-            st.session_state.detected_items = []
-            st.session_state._captured_image = None
-            st.session_state.page = pg
+        # Navigation
+        page = st.session_state.page
+        nav_items = [
+            ('dashboard', '🏠', 'Dashboard'),
+            ('calendar', '📅', 'Calendar'),
+            ('log',       '🍳', 'Cook With It'),
+        ]
+        st.markdown('<div class="sidebar-nav">', unsafe_allow_html=True)
+        for pg, icon, label in nav_items:
+            btn_type = "primary" if page == pg else "secondary"
+            if st.button(f"{icon}  {label}", key=f"nav_{pg}", use_container_width=True, type=btn_type):
+                _reset_scanner()
+                st.session_state.page = pg
+                st.rerun()
+
+        # Me / Account button
+        me_type = "primary" if page == 'account' else "secondary"
+        if st.button("👤  Me", key="nav_account", use_container_width=True, type=me_type):
+            _reset_scanner()
+            st.session_state.page = 'account'
             st.rerun()
-    st.markdown('</div>', unsafe_allow_html=True)
 
-    # Streak Card at bottom
-    st.markdown(f"<div style='height:20px;'></div>", unsafe_allow_html=True)
-    day_streak = calculate_day_streak(st.session_state.user_id)
-    overall_score = calculate_overall_health_score(st.session_state.user_id)
-    total_items = get_total_items_logged(st.session_state.user_id)
-    streak_pct = min(day_streak * 10, 100)
-    st.markdown(f"""
-        <div class='streak-card'>
-            <div class='streak-header'>&#128722; {day_streak}-haul streak</div>
-            <div class='streak-sub'>{'Consecutive healthy hauls!' if day_streak > 0 else 'Start a haul to build your streak!'}</div>
-            <div class='streak-bar-bg'>
-                <div class='streak-bar-fill' style='width:{streak_pct}%'></div>
-            </div>
-            <div class='streak-milestone'>{day_streak} / 10 hauls to next milestone</div>
-            <div class='streak-stats'>
-                <div class='streak-stat'>
-                    <div class='streak-stat-val'>{total_items}</div>
-                    <div class='streak-stat-label'>items logged</div>
-                </div>
-                <div class='streak-stat'>
-                    <div class='streak-stat-val'>{overall_score}</div>
-                    <div class='streak-stat-label'>health score</div>
-                </div>
-            </div>
-        </div>
-    """, unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
 
+        # Logout button at very bottom
+        st.markdown(f"<div style='height:12px;'></div>", unsafe_allow_html=True)
+        if st.button("🚪  Logout", key="sidebar_logout", use_container_width=True, type="secondary"):
+            _reset_scanner()
+            st.session_state.logged_in = False
+            st.session_state.user_id = None
+            st.session_state.page = 'dashboard'
+            st.session_state.ai_insights = None
+            st.session_state.meal_plan = None
+            st.session_state.daily_recipes = None
+            st.session_state.user_allergies = None
+            st.rerun()
+
+        # Streak Card
+        st.markdown(f"<div style='height:20px;'></div>", unsafe_allow_html=True)
+        day_streak = calculate_day_streak(st.session_state.user_id)
+        overall_score = calculate_overall_health_score(st.session_state.user_id)
+        total_items = get_total_items_logged(st.session_state.user_id)
+        streak_pct = min(day_streak * 10, 100)
+        st.markdown(f"""
+            <div class='streak-card'>
+                <div class='streak-header'>&#128722; {day_streak}-haul streak</div>
+                <div class='streak-sub'>{'Consecutive healthy hauls!' if day_streak > 0 else 'Start a haul to build your streak!'}</div>
+                <div class='streak-bar-bg'>
+                    <div class='streak-bar-fill' style='width:{streak_pct}%'></div>
+                </div>
+                <div class='streak-milestone'>{day_streak} / 10 hauls to next milestone</div>
+                <div class='streak-stats'>
+                    <div class='streak-stat'>
+                        <div class='streak-stat-val'>{total_items}</div>
+                        <div class='streak-stat-label'>items logged</div>
+                    </div>
+                    <div class='streak-stat'>
+                        <div class='streak-stat-val'>{overall_score}</div>
+                        <div class='streak-stat-label'>health score</div>
+                    </div>
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+
+
+# ============================
+# AUTH GATE — show login/signup if not logged in
+# ============================
+if not st.session_state.logged_in:
+    # Centered auth card
+    _, mid, _ = st.columns([1, 2, 1])
+    with mid:
+        st.markdown(f"""
+            <div style='text-align:center; padding:40px 0 20px;'>
+                <div style='font-size:2.6rem; font-weight:800; letter-spacing:-0.5px;'>
+                    <span style='color:{C["text"]};'>foodvantage</span><span class='logo-dot-blink' style='color:{C["teal"]};'>.</span>
+                </div>
+                <div style='font-size:0.95rem; color:#C4A35A; margin-top:8px; font-weight:500;'>Know what's in your cart before it's in your body.</div>
+            </div>
+        """, unsafe_allow_html=True)
+
+        tab = st.session_state.auth_tab
+
+        # Tab switcher
+        col_l, col_s, col_f = st.columns(3)
+        with col_l:
+            if st.button("Log In", use_container_width=True,
+                         type="primary" if tab == 'login' else "secondary", key="auth_tab_login"):
+                st.session_state.auth_tab = 'login'; st.rerun()
+        with col_s:
+            if st.button("Sign Up", use_container_width=True,
+                         type="primary" if tab == 'signup' else "secondary", key="auth_tab_signup"):
+                st.session_state.auth_tab = 'signup'; st.rerun()
+        with col_f:
+            if st.button("Reset Password", use_container_width=True,
+                         type="primary" if tab == 'forgot' else "secondary", key="auth_tab_forgot"):
+                st.session_state.auth_tab = 'forgot'; st.rerun()
+
+        st.markdown(f"<div style='height:12px;'></div>", unsafe_allow_html=True)
+
+        # ---- LOGIN ----
+        if tab == 'login':
+            st.markdown(f"<div class='card' style='padding:28px 24px;'>", unsafe_allow_html=True)
+            st.markdown(f"<div style='font-weight:700; font-size:1.2rem; margin-bottom:4px;'>Welcome back</div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='color:{C['text_muted']}; font-size:0.85rem; margin-bottom:20px;'>Log in to your FoodVantage account</div>", unsafe_allow_html=True)
+            login_user = st.text_input("Username", key="login_user", placeholder="Enter your username")
+            login_pass = st.text_input("Password", key="login_pass", placeholder="Enter your password", type="password")
+            if st.button("Log In", use_container_width=True, type="primary", key="login_submit"):
+                if not login_user or not login_pass:
+                    st.error("Please enter both username and password.")
+                elif authenticate_user(login_user.strip(), login_pass):
+                    st.session_state.logged_in = True
+                    st.session_state.user_id = login_user.strip()
+                    st.session_state.page = 'dashboard'
+                    st.session_state.user_allergies = None
+                    st.rerun()
+                else:
+                    st.error("Invalid username or password.")
+            st.markdown(f"<div style='height:8px;'></div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='text-align:center; font-size:0.8rem; color:{C['text_muted']};'>Don't have an account? <span style='color:{C['teal']}; cursor:pointer;'>Click Sign Up above</span></div>", unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
+
+        # ---- SIGN UP ----
+        elif tab == 'signup':
+            st.markdown(f"<div class='card' style='padding:28px 24px;'>", unsafe_allow_html=True)
+            st.markdown(f"<div style='font-weight:700; font-size:1.2rem; margin-bottom:4px;'>Create your account</div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='color:{C['text_muted']}; font-size:0.85rem; margin-bottom:20px;'>Start tracking your grocery health</div>", unsafe_allow_html=True)
+            new_user = st.text_input("Choose a username", key="signup_user", placeholder="At least 5 characters")
+            new_pass = st.text_input("Create a password", key="signup_pass", placeholder="At least 8 characters", type="password")
+            new_pass2 = st.text_input("Confirm password", key="signup_pass2", placeholder="Repeat your password", type="password")
+            if st.button("Create Account", use_container_width=True, type="primary", key="signup_submit"):
+                u = (new_user or "").strip()
+                p = new_pass or ""
+                p2 = new_pass2 or ""
+                if len(u) < 5:
+                    st.error("Username must be at least 5 characters.")
+                elif len(p) < 8:
+                    st.error("Password must be at least 8 characters.")
+                elif p != p2:
+                    st.error("Passwords do not match.")
+                elif user_exists(u):
+                    st.error("That username is already taken. Please choose another.")
+                else:
+                    if create_user(u, p):
+                        st.success("Account created! You can now log in.")
+                        st.session_state.auth_tab = 'login'
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        st.error("Could not create account. Please try again.")
+            st.markdown("</div>", unsafe_allow_html=True)
+
+        # ---- FORGOT / RESET ----
+        elif tab == 'forgot':
+            st.markdown(f"<div class='card' style='padding:28px 24px;'>", unsafe_allow_html=True)
+            st.markdown(f"<div style='font-weight:700; font-size:1.2rem; margin-bottom:4px;'>Reset Password</div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='color:{C['text_muted']}; font-size:0.85rem; margin-bottom:20px;'>Enter your username and set a new password</div>", unsafe_allow_html=True)
+            fp_user = st.text_input("Username", key="fp_user", placeholder="Your username")
+            fp_new = st.text_input("New password", key="fp_new", placeholder="At least 8 characters", type="password")
+            fp_conf = st.text_input("Confirm new password", key="fp_conf", placeholder="Repeat new password", type="password")
+            if st.button("Reset Password", use_container_width=True, type="primary", key="fp_submit"):
+                u = (fp_user or "").strip()
+                p = fp_new or ""
+                p2 = fp_conf or ""
+                if not u:
+                    st.error("Please enter your username.")
+                elif not user_exists(u):
+                    st.error("Username not found.")
+                elif len(p) < 8:
+                    st.error("New password must be at least 8 characters.")
+                elif p != p2:
+                    st.error("Passwords do not match.")
+                else:
+                    if reset_password(u, p):
+                        st.success("Password reset successfully! You can now log in.")
+                        st.session_state.auth_tab = 'login'
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        st.error("Could not reset password. Please try again.")
+            st.markdown("</div>", unsafe_allow_html=True)
+
+    st.stop()   # Don't render anything else while logged out
 
 # ============================
 # DASHBOARD PAGE
@@ -714,7 +898,7 @@ if st.session_state.page == 'dashboard':
     st.markdown(f"""
         <div style='text-align:center; padding:32px 0 24px; border-bottom:1px solid {C["border"]}; margin-bottom:28px;'>
             <div style='font-size:2.4rem; font-weight:800; letter-spacing:-0.5px; line-height:1;'>
-                <span style='color:{C["text"]};'>foodvantage</span><span style='color:{C["teal"]};'>.</span>
+                <span style='color:{C["text"]};'>foodvantage</span><span class='logo-dot-blink' style='color:{C["teal"]};'>.</span>
             </div>
             <div style='font-size:0.95rem; font-weight:500; color:#C4A35A; margin-top:10px; letter-spacing:0.2px;'>
                 Know what's in your cart before it's in your body.
@@ -954,7 +1138,16 @@ function startScan(){{
 
     # Scan results with full item details, nutrition, and grocery list integration
     if st.session_state.scan_results:
-        st.markdown(f"<h4 style='font-weight:700; margin-top:16px;'>Scan Results</h4>", unsafe_allow_html=True)
+        # "Scan Again" at the TOP so the user can immediately go to next item
+        if st.button("🔄 Scan Again", use_container_width=True, key="scan_again_btn_top"):
+            st.session_state.scan_results = None
+            st.session_state.selected_result = None
+            st.session_state.scanning = True
+            st.session_state.detected_items = []
+            st.session_state.scan_count += 1
+            st.rerun()
+
+        st.markdown(f"<h4 style='font-weight:700; margin-top:12px;'>Scan Results</h4>", unsafe_allow_html=True)
         st.markdown(f"<div style='color:{C['text_sec']}; font-size:0.85rem; margin-bottom:12px;'>Found {len(st.session_state.scan_results)} item(s) in frame</div>", unsafe_allow_html=True)
 
         for i, result in enumerate(st.session_state.scan_results):
@@ -1067,15 +1260,6 @@ function startScan(){{
                 time.sleep(0.5)
                 st.rerun()
 
-        # Scan Again button
-        st.markdown(f"<div style='height:8px;'></div>", unsafe_allow_html=True)
-        if st.button("Scan Again", use_container_width=True, key="scan_again_btn"):
-            st.session_state.scan_results = None
-            st.session_state.selected_result = None
-            st.session_state.scanning = True
-            st.session_state.detected_items = []
-            st.session_state.scan_count += 1
-            st.rerun()
 
     # Health Trends - header with tabs on the right
     col_trends_title, col_trends_tabs = st.columns([2, 1])
@@ -1109,24 +1293,61 @@ function startScan(){{
         df['date'] = pd.to_datetime(df['date'])
         df_pivot = df.pivot_table(index='date', columns='category', values='count', aggfunc='sum', fill_value=0)
 
-        # Line chart matching Figma design
+        # Build per-date health score for interactive hover tooltip
+        # Fetch avg VMS per day to compute daily health score
+        try:
+            from gemini_api import get_db_connection as _get_db
+            _con = _get_db()
+            _hs_rows = _con.execute("""
+                SELECT date, AVG(score) as avg_vms
+                FROM calendar WHERE username = ?
+                GROUP BY date ORDER BY date
+            """, [st.session_state.user_id]).fetchall()
+            _hs_map = {str(r[0]): vms_to_health_score(r[1]) for r in _hs_rows}
+        except Exception:
+            _hs_map = {}
+
         fig = go.Figure()
         if 'healthy' in df_pivot.columns:
-            fig.add_trace(go.Scatter(x=df_pivot.index, y=df_pivot['healthy'], name='Healthy',
-                                     mode='lines+markers', line=dict(color=C['teal'], width=2.5, shape='spline'),
-                                     marker=dict(size=6), fill='tozeroy',
-                                     fillcolor='rgba(91,155,157,0.1)',
-                                     hovertemplate='%{y} healthy<extra></extra>'))
+            hs_vals = [_hs_map.get(str(d.date()), None) for d in df_pivot.index]
+            hover_texts = [
+                f"<b>{str(d.date())}</b><br>{y} healthy items<br>Health Score: <b>{hs}/100</b>" if hs is not None
+                else f"<b>{str(d.date())}</b><br>{y} healthy items"
+                for d, y, hs in zip(df_pivot.index, df_pivot['healthy'], hs_vals)
+            ]
+            fig.add_trace(go.Scatter(
+                x=df_pivot.index, y=df_pivot['healthy'], name='Healthy',
+                mode='lines+markers', line=dict(color=C['teal'], width=2.5, shape='spline'),
+                marker=dict(size=7, color=C['teal']), fill='tozeroy',
+                fillcolor='rgba(91,155,157,0.1)',
+                text=hover_texts, hovertemplate='%{text}<extra></extra>'
+            ))
         if 'moderate' in df_pivot.columns:
-            fig.add_trace(go.Scatter(x=df_pivot.index, y=df_pivot['moderate'], name='Moderate',
-                                     mode='lines+markers', line=dict(color=C['yellow'], width=2, shape='spline'),
-                                     marker=dict(size=5),
-                                     hovertemplate='%{y} moderate<extra></extra>'))
+            hs_vals_m = [_hs_map.get(str(d.date()), None) for d in df_pivot.index]
+            hover_texts_m = [
+                f"<b>{str(d.date())}</b><br>{y} moderate items<br>Health Score: <b>{hs}/100</b>" if hs is not None
+                else f"<b>{str(d.date())}</b><br>{y} moderate items"
+                for d, y, hs in zip(df_pivot.index, df_pivot['moderate'], hs_vals_m)
+            ]
+            fig.add_trace(go.Scatter(
+                x=df_pivot.index, y=df_pivot['moderate'], name='Moderate',
+                mode='lines+markers', line=dict(color=C['yellow'], width=2, shape='spline'),
+                marker=dict(size=6),
+                text=hover_texts_m, hovertemplate='%{text}<extra></extra>'
+            ))
         if 'unhealthy' in df_pivot.columns:
-            fig.add_trace(go.Scatter(x=df_pivot.index, y=df_pivot['unhealthy'], name='Unhealthy',
-                                     mode='lines+markers', line=dict(color=C['red'], width=2, shape='spline'),
-                                     marker=dict(size=5),
-                                     hovertemplate='%{y} unhealthy<extra></extra>'))
+            hs_vals_u = [_hs_map.get(str(d.date()), None) for d in df_pivot.index]
+            hover_texts_u = [
+                f"<b>{str(d.date())}</b><br>{y} unhealthy items<br>Health Score: <b>{hs}/100</b>" if hs is not None
+                else f"<b>{str(d.date())}</b><br>{y} unhealthy items"
+                for d, y, hs in zip(df_pivot.index, df_pivot['unhealthy'], hs_vals_u)
+            ]
+            fig.add_trace(go.Scatter(
+                x=df_pivot.index, y=df_pivot['unhealthy'], name='Unhealthy',
+                mode='lines+markers', line=dict(color=C['red'], width=2, shape='spline'),
+                marker=dict(size=6),
+                text=hover_texts_u, hovertemplate='%{text}<extra></extra>'
+            ))
 
         fig.update_layout(
             height=280,
@@ -1135,7 +1356,8 @@ function startScan(){{
             xaxis=dict(showgrid=False, showline=False, tickfont=dict(color=C['text_muted']), color=C['text_muted']),
             yaxis=dict(showgrid=True, gridcolor=C['border'], showline=False, tickfont=dict(color=C['text_muted']), color=C['text_muted']),
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5, font=dict(color=C['text_sec'])),
-            hovermode='x unified'
+            hovermode='x unified',
+            hoverlabel=dict(bgcolor=C['bg_card'], font_size=13, font_color=C['text'])
         )
         st.plotly_chart(fig, use_container_width=True)
 
@@ -1143,114 +1365,114 @@ function startScan(){{
         healthy_count = int(df[df['category'] == 'healthy']['count'].sum()) if 'healthy' in df['category'].values else 0
         st.markdown(f"<div style='color:{C['text_sec']}; font-size:0.85rem;'>Total items: <strong>{total_items_trend}</strong> &middot; Healthy choices: <strong style='color:{C['green']};'>{healthy_count}</strong></div>", unsafe_allow_html=True)
 
-        # AI Health Coach & Healthy Recipes - side by side cards
-        st.markdown(f"<div style='height:20px;'></div>", unsafe_allow_html=True)
-        col_coach, col_recipes = st.columns(2)
-
-        with col_coach:
-            st.markdown(f"""
-                <div class='card' style='min-height:200px;'>
-                    <div style='display:flex; align-items:center; gap:10px; margin-bottom:12px;'>
-                        <div style='width:36px; height:36px; border-radius:10px; background:rgba(91,155,157,0.15); display:flex; align-items:center; justify-content:center;'>
-                            <i class='fa-solid fa-heart-pulse' style='color:{C["teal"]}; font-size:1rem;'></i>
-                        </div>
-                        <div>
-                            <div style='font-weight:700; font-size:0.95rem;'>Grocery Health Coach</div>
-                            <div style='font-size:0.7rem; color:{C["text_muted"]};'>Score your shopping habits</div>
-                        </div>
-                    </div>
-            """, unsafe_allow_html=True)
-
-            if st.session_state.ai_insights:
-                for i, insight in enumerate(st.session_state.ai_insights[:5]):
-                    emoji = insight.get('emoji', '')
-                    title = insight.get('title', 'Insight')
-                    body = insight.get('insight', '')
-                    st.markdown(f"<div style='font-size:0.8rem; margin-bottom:8px;'><strong>{emoji} {title}</strong><br><span style='color:{C['text_sec']};'>{body}</span></div>", unsafe_allow_html=True)
-                if st.button("Refresh Insights", key="refresh_insights", use_container_width=True):
-                    st.session_state.ai_insights = None; st.rerun()
-            elif st.session_state._loading_insights:
-                st.markdown(f"""<div class='ai-loading'>
-                    <div class='ai-loading-text'>Hold on...fetching details</div>
-                    <div class='ai-loading-sub'>Analyzing your shopping patterns</div>
-                </div>""", unsafe_allow_html=True)
-                try:
-                    insights = generate_health_insights(raw, all_data, days)
-                    if insights:
-                        st.session_state.ai_insights = insights
-                    else: st.warning("Could not generate insights.")
-                except Exception as e: st.error(f"Error: {e}")
-                st.session_state._loading_insights = False
-                st.rerun()
-            else:
-                if st.button("🧠  Get AI Insights", use_container_width=True, type="primary", key="get_insights_btn"):
-                    st.session_state._loading_insights = True
-                    st.rerun()
-
-            st.markdown("</div>", unsafe_allow_html=True)
-
-        with col_recipes:
-            today_str = datetime.now().strftime("%Y-%m-%d")
-            if st.session_state.recipes_date != today_str:
-                st.session_state.daily_recipes = None
-                st.session_state.recipes_date = today_str
-
-            st.markdown(f"""
-                <div class='card' style='min-height:200px;'>
-                    <div style='display:flex; align-items:center; gap:10px; margin-bottom:12px;'>
-                        <div style='width:36px; height:36px; border-radius:10px; background:rgba(91,140,62,0.15); display:flex; align-items:center; justify-content:center;'>
-                            <i class='fa-solid fa-utensils' style='color:{C["olive"]}; font-size:1rem;'></i>
-                        </div>
-                        <div>
-                            <div style='font-weight:700; font-size:0.95rem;'>Cook With Your Haul</div>
-                            <div style='font-size:0.7rem; color:{C["text_muted"]};'>Recipe ideas from what you buy</div>
-                        </div>
-                    </div>
-            """, unsafe_allow_html=True)
-
-            if st.session_state.daily_recipes:
-                for recipe in st.session_state.daily_recipes[:2]:
-                    r_name = recipe.get('name', 'Recipe')
-                    r_type = recipe.get('meal_type', '')
-                    r_time = recipe.get('prep_time', '')
-                    r_desc = recipe.get('description', '')
-                    r_url = recipe.get('recipe_url', '')
-                    if not r_url:
-                        continue
-                    st.markdown(f"""<div style='font-size:0.8rem; margin-bottom:10px;'>
-                        <strong>{r_name}</strong><br>
-                        <span style='color:{C["text_sec"]}; font-size:0.75rem;'>{r_desc}</span><br>
-                        <span style='color:{C["text_muted"]}; font-size:0.7rem;'>{r_type} &middot; {r_time}</span><br>
-                        <a href='{r_url}' target='_blank' style='color:{C["teal"]}; font-size:0.75rem; text-decoration:none; font-weight:600;'>View full recipe on BBC Food &rarr;</a>
-                    </div>""", unsafe_allow_html=True)
-                if st.button("New Recipes", key="refresh_recipes", use_container_width=True):
-                    st.session_state.daily_recipes = None; st.rerun()
-            elif st.session_state._loading_recipes:
-                st.markdown(f"""<div class='ai-loading'>
-                    <div class='ai-loading-text'>Hold on...fetching details</div>
-                    <div class='ai-loading-sub'>Finding healthy BBC Food recipes</div>
-                </div>""", unsafe_allow_html=True)
-                try:
-                    recipes = generate_daily_recipes()
-                    if recipes:
-                        st.session_state.daily_recipes = recipes
-                        st.session_state.recipes_date = today_str
-                    else: st.warning("Could not load recipes.")
-                except Exception as e: st.error(f"Error: {e}")
-                st.session_state._loading_recipes = False
-                st.rerun()
-            else:
-                if st.button("🌿  Discover Recipes", use_container_width=True, type="primary", key="discover_recipes_btn"):
-                    st.session_state._loading_recipes = True
-                    st.rerun()
-
-            st.markdown("</div>", unsafe_allow_html=True)
-
     else:
         if all_data and len(all_data) > 0:
-            st.info(f"You have {len(all_data)} logged items, but none in the last {days} day(s). Try a different time range.")
+            st.markdown(f"<div style='color:{C['text_muted']}; font-size:0.85rem; padding:12px 0;'>No data in the last {days} day(s). Try a different time range above.</div>", unsafe_allow_html=True)
         else:
-            st.info("No grocery hauls yet. Use the Grocery Scanner or Grocery Planner to log your first haul!")
+            st.markdown(f"<div style='color:{C['text_muted']}; font-size:0.85rem; padding:12px 0;'>No grocery hauls yet — scan or search items to start tracking!</div>", unsafe_allow_html=True)
+
+    # AI Health Coach & Healthy Recipes — always visible (even with 0 items)
+    st.markdown(f"<div style='height:20px;'></div>", unsafe_allow_html=True)
+    col_coach, col_recipes = st.columns(2)
+
+    with col_coach:
+        st.markdown(f"""
+            <div class='card' style='min-height:200px;'>
+                <div style='display:flex; align-items:center; gap:10px; margin-bottom:12px;'>
+                    <div style='width:36px; height:36px; border-radius:10px; background:rgba(91,155,157,0.15); display:flex; align-items:center; justify-content:center;'>
+                        <i class='fa-solid fa-heart-pulse' style='color:{C["teal"]}; font-size:1rem;'></i>
+                    </div>
+                    <div>
+                        <div style='font-weight:700; font-size:0.95rem;'>Grocery Health Coach</div>
+                        <div style='font-size:0.7rem; color:{C["text_muted"]};'>Score your shopping habits</div>
+                    </div>
+                </div>
+        """, unsafe_allow_html=True)
+
+        if st.session_state.ai_insights:
+            for i, insight in enumerate(st.session_state.ai_insights[:5]):
+                emoji = insight.get('emoji', '')
+                title = insight.get('title', 'Insight')
+                body = insight.get('insight', '')
+                st.markdown(f"<div style='font-size:0.8rem; margin-bottom:8px;'><strong>{emoji} {title}</strong><br><span style='color:{C['text_sec']};'>{body}</span></div>", unsafe_allow_html=True)
+            if st.button("Refresh Insights", key="refresh_insights", use_container_width=True):
+                st.session_state.ai_insights = None; st.rerun()
+        elif st.session_state._loading_insights:
+            st.markdown(f"""<div class='ai-loading'>
+                <div class='ai-loading-text'>Hold on...fetching details</div>
+                <div class='ai-loading-sub'>Analyzing your shopping patterns</div>
+            </div>""", unsafe_allow_html=True)
+            try:
+                insights = generate_health_insights(raw, all_data, days)
+                if insights:
+                    st.session_state.ai_insights = insights
+                else: st.warning("Could not generate insights.")
+            except Exception as e: st.error(f"Error: {e}")
+            st.session_state._loading_insights = False
+            st.rerun()
+        else:
+            if st.button("🧠  Get AI Insights", use_container_width=True, type="primary", key="get_insights_btn"):
+                st.session_state._loading_insights = True
+                st.rerun()
+
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    with col_recipes:
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        if st.session_state.recipes_date != today_str:
+            st.session_state.daily_recipes = None
+            st.session_state.recipes_date = today_str
+
+        st.markdown(f"""
+            <div class='card' style='min-height:200px;'>
+                <div style='display:flex; align-items:center; gap:10px; margin-bottom:12px;'>
+                    <div style='width:36px; height:36px; border-radius:10px; background:rgba(91,140,62,0.15); display:flex; align-items:center; justify-content:center;'>
+                        <i class='fa-solid fa-utensils' style='color:{C["olive"]}; font-size:1rem;'></i>
+                    </div>
+                    <div>
+                        <div style='font-weight:700; font-size:0.95rem;'>Cook With Your Haul</div>
+                        <div style='font-size:0.7rem; color:{C["text_muted"]};'>Recipe ideas from what you buy</div>
+                    </div>
+                </div>
+        """, unsafe_allow_html=True)
+
+        if st.session_state.daily_recipes:
+            for recipe in st.session_state.daily_recipes[:2]:
+                r_name = recipe.get('name', 'Recipe')
+                r_type = recipe.get('meal_type', '')
+                r_time = recipe.get('prep_time', '')
+                r_desc = recipe.get('description', '')
+                r_url = recipe.get('recipe_url', '')
+                if not r_url:
+                    continue
+                st.markdown(f"""<div style='font-size:0.8rem; margin-bottom:10px;'>
+                    <strong>{r_name}</strong><br>
+                    <span style='color:{C["text_sec"]}; font-size:0.75rem;'>{r_desc}</span><br>
+                    <span style='color:{C["text_muted"]}; font-size:0.7rem;'>{r_type} &middot; {r_time}</span><br>
+                    <a href='{r_url}' target='_blank' style='color:{C["teal"]}; font-size:0.75rem; text-decoration:none; font-weight:600;'>View full recipe on BBC Food &rarr;</a>
+                </div>""", unsafe_allow_html=True)
+            if st.button("New Recipes", key="refresh_recipes", use_container_width=True):
+                st.session_state.daily_recipes = None; st.rerun()
+        elif st.session_state._loading_recipes:
+            st.markdown(f"""<div class='ai-loading'>
+                <div class='ai-loading-text'>Hold on...fetching details</div>
+                <div class='ai-loading-sub'>Finding healthy BBC Food recipes</div>
+            </div>""", unsafe_allow_html=True)
+            try:
+                recipes = generate_daily_recipes()
+                if recipes:
+                    st.session_state.daily_recipes = recipes
+                    st.session_state.recipes_date = today_str
+                else: st.warning("Could not load recipes.")
+            except Exception as e: st.error(f"Error: {e}")
+            st.session_state._loading_recipes = False
+            st.rerun()
+        else:
+            if st.button("🌿  Discover Recipes", use_container_width=True, type="primary", key="discover_recipes_btn"):
+                st.session_state._loading_recipes = True
+                st.rerun()
+
+        st.markdown("</div>", unsafe_allow_html=True)
 
     # Disclaimer at bottom of dashboard
     st.markdown(f"""
@@ -1385,10 +1607,12 @@ function pickDate(day){{
 
         if search_item:
             search_results = search_vantage_db(search_item, limit=10)
-            if search_results:
+            # Filter out placeholder/default 10.0 scores — these are unmatched DB entries
+            valid_results = [r for r in search_results if r['vms_score'] != 10.0] if search_results else []
+            if valid_results:
                 st.markdown('<div class="results-scroll-container">', unsafe_allow_html=True)
                 cal_user_allergies = get_user_allergies(st.session_state.user_id)
-                for idx, result in enumerate(search_results):
+                for idx, result in enumerate(valid_results):
                     h_sc = vms_to_health_score(result['vms_score'])
                     clr = score_color(h_sc, 'health')
                     d_sc = vms_to_display_score(result['vms_score'])
@@ -1411,8 +1635,8 @@ function pickDate(day){{
             else:
                 st.markdown(f"""
                     <div class='friendly-error'>
-                        <div class='friendly-error-title'>Item Not Found Yet</div>
-                        <div class='friendly-error-text'>Our database is growing every day! Try a different search term.</div>
+                        <div class='friendly-error-title'>Item Not Found</div>
+                        <div class='friendly-error-text'>We couldn't find reliable nutrition data for this item. Try a more specific product name or a similar alternative.</div>
                     </div>
                 """, unsafe_allow_html=True)
 
@@ -1441,6 +1665,88 @@ function pickDate(day){{
                         st.rerun()
         else:
             st.markdown(f"<div style='color:{C['text_muted']}; font-size:0.85rem; padding:12px;'>No grocery haul logged for this date. Search above to add items before you shop!</div>", unsafe_allow_html=True)
+
+
+# ============================
+# ACCOUNT PAGE
+# ============================
+elif st.session_state.page == 'account':
+    uid = st.session_state.user_id
+    st.markdown(f"""
+        <div style='margin-bottom:20px;'>
+            <h2 style='margin:0; font-weight:800; font-size:1.8rem;'>👤 My Account</h2>
+            <div style='color:{C["text_muted"]}; font-size:0.85rem; margin-top:4px;'>Manage your FoodVantage profile</div>
+        </div>
+    """, unsafe_allow_html=True)
+
+    # Profile card
+    _, mid_acc, _ = st.columns([1, 2, 1])
+    with mid_acc:
+        st.markdown(f"""
+            <div class='card' style='padding:24px; margin-bottom:16px; text-align:center;'>
+                <div style='width:72px; height:72px; border-radius:50%; background:rgba(91,155,157,0.15);
+                     display:flex; align-items:center; justify-content:center; margin:0 auto 12px;'>
+                    <span style='font-size:2.2rem;'>👤</span>
+                </div>
+                <div style='font-weight:700; font-size:1.2rem; color:{C["text"]};'>{uid}</div>
+                <div style='font-size:0.8rem; color:{C["text_muted"]}; margin-top:4px;'>FoodVantage Member</div>
+            </div>
+        """, unsafe_allow_html=True)
+
+        # --- Change Password ---
+        with st.expander("🔑 Change Password", expanded=False):
+            old_p = st.text_input("Current password", type="password", key="acc_old_pass")
+            new_p = st.text_input("New password (min 8 chars)", type="password", key="acc_new_pass")
+            new_p2 = st.text_input("Confirm new password", type="password", key="acc_new_pass2")
+            if st.button("Update Password", use_container_width=True, type="primary", key="acc_change_pass"):
+                if not old_p or not new_p or not new_p2:
+                    st.error("Please fill in all fields.")
+                elif len(new_p) < 8:
+                    st.error("New password must be at least 8 characters.")
+                elif new_p != new_p2:
+                    st.error("New passwords do not match.")
+                else:
+                    if change_password(uid, old_p, new_p):
+                        st.success("Password changed successfully!")
+                    else:
+                        st.error("Current password is incorrect.")
+
+        # --- Logout ---
+        st.markdown(f"<div style='height:8px;'></div>", unsafe_allow_html=True)
+        if st.button("🚪  Logout", use_container_width=True, key="acc_logout"):
+            _reset_scanner()
+            st.session_state.logged_in = False
+            st.session_state.user_id = None
+            st.session_state.page = 'dashboard'
+            st.session_state.ai_insights = None
+            st.session_state.meal_plan = None
+            st.session_state.daily_recipes = None
+            st.session_state.user_allergies = None
+            st.rerun()
+
+        # --- Delete Account ---
+        st.markdown(f"<div style='height:8px;'></div>", unsafe_allow_html=True)
+        with st.expander("⚠️ Delete Account", expanded=False):
+            st.markdown(f"<div style='font-size:0.85rem; color:{C['red']}; margin-bottom:10px;'>This will permanently delete your account and all your data. This cannot be undone.</div>", unsafe_allow_html=True)
+            del_confirm = st.text_input("Type your username to confirm deletion", key="acc_del_confirm", placeholder=uid)
+            del_pass = st.text_input("Enter your password", type="password", key="acc_del_pass")
+            if st.button("Delete My Account", use_container_width=True, key="acc_delete_btn"):
+                if del_confirm.strip() != uid:
+                    st.error("Username does not match.")
+                elif not authenticate_user(uid, del_pass):
+                    st.error("Incorrect password.")
+                else:
+                    delete_account(uid)
+                    st.session_state.logged_in = False
+                    st.session_state.user_id = None
+                    st.session_state.page = 'dashboard'
+                    st.session_state.ai_insights = None
+                    st.session_state.meal_plan = None
+                    st.session_state.daily_recipes = None
+                    st.session_state.user_allergies = None
+                    st.success("Account deleted.")
+                    time.sleep(1)
+                    st.rerun()
 
 
 # ============================
