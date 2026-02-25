@@ -18,11 +18,14 @@ venv/
 .DS_Store
 Thumbs.db
 
-# DuckDB - ignore ALL .db files
+# DuckDB - ignore ALL .db files except user data
 *.db
+*.db-wal
+*.db-shm
+*.wal
 
-# User data database (auto-created, don't commit)
-data/user_data.db
+# BUT track the user data database
+!data/user_data.db
 
 # Temp files
 *.tmp
@@ -33,11 +36,6 @@ data/.cache/
 
 # Keep the source data
 !data/food_data.parquet
-# Database files
-*.db
-*.db-wal
-*.db-shm
-*.wal
 
 # Backup files
 *.backup

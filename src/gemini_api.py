@@ -1077,7 +1077,7 @@ _db_thread_local = threading.local()
 def get_db_connection():
     """Return a per-thread DuckDB connection to the user data store."""
     if not getattr(_db_thread_local, 'con', None):
-        con = duckdb.connect('/tmp/user_data.db', read_only=False)
+        con = duckdb.connect('data/user_data.db', read_only=False)
         con.execute("CREATE TABLE IF NOT EXISTS users (username VARCHAR PRIMARY KEY, password_hash VARCHAR)")
         try: con.execute("CREATE SEQUENCE IF NOT EXISTS seq_cal_id START 1")
         except: pass
