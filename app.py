@@ -78,6 +78,7 @@ C = {
     'text': '#E8EAF0',
     'text_sec': '#a0a0b4',
     'text_muted': '#9090b0',
+    'muted_purple': '#a89bc0',
     'green': '#4CAF50',
     'yellow': '#F9A825',
     'red': '#E53935',
@@ -186,29 +187,59 @@ st.markdown(f"""
 
     /* === BUTTONS === */
     .stButton > button {{
-        background: rgba(238,164,183,0.07) !important;
-        color: {C['teal_light']} !important;
-        border: 1px solid rgba(238,164,183,0.25) !important;
+        background: rgba(238,164,183,0.03) !important;
+        color: {C['muted_purple']} !important;
+        border: 1px solid rgba(168,155,192,0.2) !important;
         border-radius: 12px !important;
         font-family: 'Inter', sans-serif !important;
         font-weight: 600 !important;
         padding: 0.5rem 1.5rem !important;
         transition: all 0.2s ease !important;
         letter-spacing: 0.1px;
-        box-shadow: 0 0 8px rgba(238,164,183,0.08) !important;
+        box-shadow: 0 0 6px rgba(168,155,192,0.06) !important;
         backdrop-filter: blur(4px);
     }}
     .stButton > button:hover {{
-        background: rgba(238,164,183,0.14) !important;
-        border-color: rgba(238,164,183,0.5) !important;
-        box-shadow: 0 0 16px rgba(238,164,183,0.22) !important;
+        background: rgba(168,155,192,0.08) !important;
+        border-color: rgba(168,155,192,0.38) !important;
+        box-shadow: 0 0 12px rgba(168,155,192,0.15) !important;
         transform: translateY(-1px) !important;
         color: white !important;
     }}
     .stButton > button[kind="secondary"] {{
-        background: rgba(36,36,48,0.45) !important;
-        border: 1px solid rgba(238,164,183,0.15) !important;
+        background: rgba(20,20,28,0.6) !important;
+        border: 1px solid rgba(168,155,192,0.12) !important;
         color: {C['text_sec']} !important;
+    }}
+
+    /* === AI ACTION BUTTONS (dark opaque, like dashboard tiles) === */
+    .ai-btn-purple .stButton > button {{
+        background: {C['bg_elevated']} !important;
+        border: 1px solid {C['border']} !important;
+        color: {C['muted_purple']} !important;
+        box-shadow: none !important;
+        backdrop-filter: none !important;
+    }}
+    .ai-btn-purple .stButton > button:hover {{
+        background: #2a2a38 !important;
+        border-color: rgba(168,155,192,0.4) !important;
+        color: #c4b8de !important;
+        box-shadow: 0 0 10px rgba(168,155,192,0.12) !important;
+        transform: translateY(-1px) !important;
+    }}
+    .ai-btn-yellow .stButton > button {{
+        background: {C['bg_elevated']} !important;
+        border: 1px solid {C['border']} !important;
+        color: {C['yellow']} !important;
+        box-shadow: none !important;
+        backdrop-filter: none !important;
+    }}
+    .ai-btn-yellow .stButton > button:hover {{
+        background: #2a2a38 !important;
+        border-color: rgba(249,168,37,0.4) !important;
+        color: #ffc84a !important;
+        box-shadow: 0 0 10px rgba(249,168,37,0.12) !important;
+        transform: translateY(-1px) !important;
     }}
 
     .stHorizontalBlock div[data-testid="column"] .stButton > button {{
@@ -220,7 +251,7 @@ st.markdown(f"""
         font-weight: 700 !important;
     }}
     [data-testid="stMetricLabel"] {{
-        color: {C['teal']} !important;
+        color: {C['muted_purple']} !important;
     }}
 
     /* === EXPANDERS === */
@@ -369,7 +400,7 @@ st.markdown(f"""
         font-size: 0.7rem;
         font-weight: 700;
         letter-spacing: 1.2px;
-        color: {C['teal']};
+        color: {C['muted_purple']};
         text-transform: uppercase;
         margin-bottom: 8px;
     }}
@@ -401,7 +432,7 @@ st.markdown(f"""
     .streak-header {{
         font-size: 1rem;
         font-weight: 700;
-        color: {C['teal']};
+        color: {C['muted_purple']};
         margin-bottom: 2px;
     }}
     .streak-sub {{
@@ -441,7 +472,7 @@ st.markdown(f"""
     .streak-stat-val {{
         font-size: 1.1rem;
         font-weight: 800;
-        color: {C['teal']};
+        color: {C['muted_purple']};
     }}
     .streak-stat-label {{
         font-size: 0.65rem;
@@ -1540,9 +1571,11 @@ function startScan(){{
             st.session_state._loading_insights = False
             st.rerun()
         else:
+            st.markdown('<div class="ai-btn-purple">', unsafe_allow_html=True)
             if st.button("🧠  Get AI Insights", use_container_width=True, type="primary", key="get_insights_btn"):
                 st.session_state._loading_insights = True
                 st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
 
         st.markdown("</div>", unsafe_allow_html=True)
 
@@ -1597,9 +1630,11 @@ function startScan(){{
             st.session_state._loading_recipes = False
             st.rerun()
         else:
+            st.markdown('<div class="ai-btn-yellow">', unsafe_allow_html=True)
             if st.button("🌿  Discover Recipes", use_container_width=True, type="primary", key="discover_recipes_btn"):
                 st.session_state._loading_recipes = True
                 st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
 
         st.markdown("</div>", unsafe_allow_html=True)
 
@@ -2002,9 +2037,11 @@ elif st.session_state.page == 'log':
         st.rerun()
     elif not st.session_state.meal_plan:
         st.markdown(f"<div style='color:{C['text_sec']}; font-size:0.85rem; margin-bottom:8px;'>Based on what you've been buying, get a personalized 7-day meal plan tailored to your grocery hauls.</div>", unsafe_allow_html=True)
+        st.markdown('<div class="ai-btn-purple">', unsafe_allow_html=True)
         if st.button("Generate AI Meal Plan", use_container_width=True, type="primary"):
             st.session_state._loading_meal_plan = True
             st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
 
     if st.session_state.meal_plan:
         day_order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
