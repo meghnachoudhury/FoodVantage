@@ -1263,24 +1263,6 @@ function startScan(){{
                 </div>
             """, unsafe_allow_html=True)
 
-        # Scan line animation — shown while awaiting user capture
-        if st.session_state.get('scanning'):
-            components.html(f"""
-<style>
-@keyframes scanline{{0%{{top:8%}}50%{{top:82%}}100%{{top:8%}}}}
-.sl-wrap{{position:relative;height:48px;border-radius:10px;overflow:hidden;
-          background:linear-gradient(180deg,rgba(242,180,197,0.04) 0%,rgba(124,158,56,0.04) 100%);
-          border:1px solid rgba(242,180,197,0.12);margin-bottom:4px;}}
-.sl{{position:absolute;left:0;right:0;height:2px;
-     background:linear-gradient(90deg,transparent 0%,{C['teal']} 30%,#ffffff88 50%,{C['teal']} 70%,transparent 100%);
-     box-shadow:0 0 8px {C['teal']};
-     animation:scanline 1.6s ease-in-out infinite;}}
-.sl-label{{position:absolute;right:12px;bottom:6px;font-size:0.65rem;
-           font-family:'Inter',sans-serif;color:{C['teal']};opacity:0.7;letter-spacing:0.5px;}}
-</style>
-<div class="sl-wrap"><div class="sl"></div><div class="sl-label">SCANNING</div></div>
-""", height=56, scrolling=False)
-
         if back_camera_input is not None:
             image = back_camera_input(key=f"hud_cam_{st.session_state.scan_count}")
         else:
