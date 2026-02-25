@@ -366,13 +366,13 @@ st.markdown(f"""
         border-style: solid;
     }}
     .corner-tl {{ top: 28px; left: 28px; border-width: 3px 0 0 3px; border-radius: 6px 0 0 0;
-                  animation: jitter-tl 5s ease-in-out infinite; }}
+                  animation: jitter-tl 2s ease-in-out infinite; }}
     .corner-tr {{ top: 28px; right: 28px; border-width: 3px 3px 0 0; border-radius: 0 6px 0 0;
-                  animation: jitter-tr 5s ease-in-out infinite; }}
+                  animation: jitter-tr 2s ease-in-out infinite; }}
     .corner-bl {{ bottom: 28px; left: 28px; border-width: 0 0 3px 3px; border-radius: 0 0 0 6px;
-                  animation: jitter-bl 5s ease-in-out infinite; }}
+                  animation: jitter-bl 2s ease-in-out infinite; }}
     .corner-br {{ bottom: 28px; right: 28px; border-width: 0 3px 3px 0; border-radius: 0 0 6px 0;
-                  animation: jitter-br 5s ease-in-out infinite; }}
+                  animation: jitter-br 2s ease-in-out infinite; }}
     .scanner-icon {{
         width: 64px; height: 64px;
         border-radius: 50%;
@@ -642,7 +642,7 @@ st.markdown(f"""
         50% {{ opacity: 0; }}
     }}
     .logo-dot-blink {{
-        animation: blink-dot 1.1s ease-in-out infinite;
+        animation: blink-dot 2.8s ease-in-out infinite;
         display: inline-block;
     }}
 
@@ -1162,10 +1162,10 @@ body{{background:{C['bg_card']};font-family:'Inter',sans-serif;overflow:hidden;}
 @keyframes jitter-br{{0%,75%{{transform:translate(0,0);opacity:.4}}80%{{transform:translate(5px,5px);opacity:1}}85%{{transform:translate(3px,3px);opacity:1}}90%{{transform:translate(5px,5px);opacity:1}}95%{{transform:translate(0,0);opacity:.4}}100%{{transform:translate(0,0);opacity:.4}}}}
 .vf{{position:relative;height:190px;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:20px;overflow:hidden;}}
 .corner{{position:absolute;width:45px;height:45px;border-color:{C['teal']};border-style:solid;}}
-.tl{{top:28px;left:28px;border-width:3px 0 0 3px;border-radius:6px 0 0 0;animation:jitter-tl 5s ease-in-out infinite;}}
-.tr{{top:28px;right:28px;border-width:3px 3px 0 0;border-radius:0 6px 0 0;animation:jitter-tr 5s ease-in-out infinite;}}
-.bl{{bottom:28px;left:28px;border-width:0 0 3px 3px;border-radius:0 0 0 6px;animation:jitter-bl 5s ease-in-out infinite;}}
-.br{{bottom:28px;right:28px;border-width:0 3px 3px 0;border-radius:0 0 6px 0;animation:jitter-br 5s ease-in-out infinite;}}
+.tl{{top:28px;left:28px;border-width:3px 0 0 3px;border-radius:6px 0 0 0;animation:jitter-tl 2s ease-in-out infinite;}}
+.tr{{top:28px;right:28px;border-width:3px 3px 0 0;border-radius:0 6px 0 0;animation:jitter-tr 2s ease-in-out infinite;}}
+.bl{{bottom:28px;left:28px;border-width:0 0 3px 3px;border-radius:0 0 0 6px;animation:jitter-bl 2s ease-in-out infinite;}}
+.br{{bottom:28px;right:28px;border-width:0 3px 3px 0;border-radius:0 0 6px 0;animation:jitter-br 2s ease-in-out infinite;}}
 .icon-btn{{width:64px;height:64px;border-radius:50%;background:rgba(238,164,183,0.15);display:flex;align-items:center;justify-content:center;margin-bottom:14px;cursor:pointer;transition:background .2s,transform .1s;}}
 .icon-btn:hover{{background:rgba(238,164,183,0.3);transform:scale(1.1);}}
 .icon-btn i{{font-size:28px;color:{C['teal']};}}
@@ -1197,6 +1197,7 @@ function startScan(){{
             st.session_state.scan_status = None
             st.session_state.detected_items = []
             st.session_state._captured_image = None
+            st.session_state.scan_history = []
             st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
     else:
@@ -1244,10 +1245,56 @@ function startScan(){{
                 </div>
             """, unsafe_allow_html=True)
 
+        # Scan line animation — shown while awaiting user capture
+        if st.session_state.get('scanning'):
+            components.html(f"""
+<style>
+@keyframes scanline{{0%{{top:8%}}50%{{top:82%}}100%{{top:8%}}}}
+.sl-wrap{{position:relative;height:48px;border-radius:10px;overflow:hidden;
+          background:linear-gradient(180deg,rgba(242,180,197,0.04) 0%,rgba(124,158,56,0.04) 100%);
+          border:1px solid rgba(242,180,197,0.12);margin-bottom:4px;}}
+.sl{{position:absolute;left:0;right:0;height:2px;
+     background:linear-gradient(90deg,transparent 0%,{C['teal']} 30%,#ffffff88 50%,{C['teal']} 70%,transparent 100%);
+     box-shadow:0 0 8px {C['teal']};
+     animation:scanline 1.6s ease-in-out infinite;}}
+.sl-label{{position:absolute;right:12px;bottom:6px;font-size:0.65rem;
+           font-family:'Inter',sans-serif;color:{C['teal']};opacity:0.7;letter-spacing:0.5px;}}
+</style>
+<div class="sl-wrap"><div class="sl"></div><div class="sl-label">SCANNING</div></div>
+""", height=56, scrolling=False)
+
         if back_camera_input is not None:
             image = back_camera_input(key=f"hud_cam_{st.session_state.scan_count}")
         else:
             image = st.camera_input("Scan item", key=f"hud_cam_{st.session_state.scan_count}")
+
+        # Floating health score bubble for the latest scanned item
+        scan_history = st.session_state.get('scan_history', [])
+        if scan_history:
+            latest = scan_history[-1]
+            st.markdown(f"""
+                <div style="display:flex;align-items:center;gap:14px;
+                            background:{C['bg_card']};border:1px solid {latest['color']}44;
+                            border-left:4px solid {latest['color']};
+                            border-radius:14px;padding:12px 16px;margin:10px 0;">
+                    <div style="width:52px;height:52px;border-radius:50%;
+                                background:{latest['color']}22;border:2px solid {latest['color']};
+                                display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                        <span style="font-size:1.2rem;font-weight:900;color:{latest['color']};">
+                            {latest['display_score']}
+                        </span>
+                    </div>
+                    <div>
+                        <div style="font-weight:700;font-size:0.95rem;color:{C['text']};
+                                    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px;">
+                            {latest['name']}
+                        </div>
+                        <div style="font-size:0.75rem;color:{latest['color']};font-weight:600;margin-top:2px;">
+                            {latest['rating']} &nbsp;·&nbsp; <span style="color:{C['text_muted']};">Health Score /10</span>
+                        </div>
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
 
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
@@ -1270,8 +1317,35 @@ function startScan(){{
                 st.session_state._captured_image = None
                 st.session_state.scan_error = None
                 st.session_state.scan_count += 1
+                st.session_state.scan_history = []
                 st.rerun()
             st.markdown('</div>', unsafe_allow_html=True)
+
+        # Scanned items history list (all items captured this session)
+        if scan_history:
+            st.markdown(f"""
+                <div style="margin-top:14px;">
+                    <div style="font-size:0.75rem;font-weight:700;color:{C['text_muted']};
+                                text-transform:uppercase;letter-spacing:0.6px;margin-bottom:8px;">
+                        This Session — {len(scan_history)} item{'s' if len(scan_history)!=1 else ''} scanned
+                    </div>
+            """, unsafe_allow_html=True)
+            for idx, item in enumerate(reversed(scan_history)):
+                st.markdown(f"""
+                    <div style="display:flex;align-items:center;justify-content:space-between;
+                                background:{C['bg_card']};border:1px solid {C['border']};
+                                border-radius:10px;padding:9px 14px;margin-bottom:6px;">
+                        <div style="font-size:0.88rem;font-weight:600;color:{C['text']};
+                                    flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-right:12px;">
+                            {len(scan_history)-idx}. {item['name']}
+                        </div>
+                        <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+                            <span style="font-size:1rem;font-weight:900;color:{item['color']};">{item['display_score']}</span>
+                            <span style="font-size:0.7rem;color:{C['text_muted']};">/10</span>
+                        </div>
+                    </div>
+                """, unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
 
         # Scanning logic - two-phase: capture acknowledgement, then analyze
         # Phase 1: Image captured - show acknowledgement and prevent duplicate scans
@@ -1295,6 +1369,17 @@ function startScan(){{
                     st.session_state.scan_error = None
                     st.session_state.scanning = True
                     st.session_state.scan_count += 1
+                    # Append primary result to scan history for floating bubble + list
+                    r0 = results[0]
+                    hs0 = vms_to_health_score(r0['vms_score'])
+                    if 'scan_history' not in st.session_state:
+                        st.session_state.scan_history = []
+                    st.session_state.scan_history.append({
+                        'name': r0['name'],
+                        'display_score': vms_to_display_score(r0['vms_score']),
+                        'color': score_color(hs0, 'health'),
+                        'rating': r0['rating'],
+                    })
                 else:
                     st.session_state.scan_status = None
                     st.session_state.scan_error = "Item not found in database — try a clearer angle or different wording"
