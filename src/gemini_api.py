@@ -19,7 +19,7 @@ load_dotenv()
 # Text + vision AI via OpenAI-compatible endpoint
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
 GEMINI_AGENT_MODEL = "gemini-2.5-flash"
-GEMINI_SCANNER_MODEL = "gemini-2.5-flash-lite"
+GEMINI_SCANNER_MODEL = "gemini-2.5-flash"
 
 # === DIGITALOCEAN GRADIENT AI CONFIGURATION (for hackathon integration) ===
 GRADIENT_BASE_URL = "https://inference.do-ai.run/v1/"
@@ -33,10 +33,17 @@ _JSON_SYSTEM = "You are a JSON API. Return ONLY valid JSON with no markdown, no 
 # For scanner (vision) use budget=0 (no thinking). For agent text tasks use a
 # small budget (512 tokens) to still allow a brief reasoning pass.
 _NO_THINKING = {"extra_body": {"google": {"thinkingConfig": {"thinkingBudget": 0}}}}
+# Middle-ground scanner reasoning budget: improves OCR/label extraction accuracy
+# without the long delays of full thinking.
+_SCANNER_LIGHT_THINKING = {"extra_body": {"google": {"thinkingConfig": {"thinkingBudget": 128}}}}
 _LIGHT_THINKING = {"extra_body": {"google": {"thinkingConfig": {"thinkingBudget": 512}}}}
 
-_MAX_TOKENS_VISION = 1024   # scanner only needs a short JSON array
+_MAX_TOKENS_VISION = 1536   # scanner JSON can include multiple label-heavy items
 _MAX_TOKENS_TEXT = 4096
+
+
+class ScannerAnalysisError(Exception):
+    """Raised when scanner AI analysis fails (timeout/quota/network/model)."""
 
 def safe_parse_json(text, expected='object'):
     """Robustly parse JSON from Gemini — strips code fences, fixes trailing commas."""
@@ -739,15 +746,16 @@ Be PRECISE. Return ONLY the JSON array, no other text."""
                     }
                 ],
                 max_tokens=_MAX_TOKENS_VISION,
-                **_NO_THINKING
+                timeout=22,
+                **_SCANNER_LIGHT_THINKING
             )
 
             response_text = (response.choices[0].message.content or "").strip()
             finish_reason = getattr(response.choices[0], 'finish_reason', None)
             print(f"[Gemini] finish_reason={finish_reason}, response length={len(response_text)}")
             if not response_text:
-                print(f"[Gemini] WARNING: Empty response (finish_reason={finish_reason}). Thinking may have consumed entire token budget.")
-                raise Exception(f"AI returned empty response (finish_reason={finish_reason}). Try again.")
+                print(f"[Gemini] WARNING: Empty response (finish_reason={finish_reason}).")
+                raise ScannerAnalysisError(f"AI returned empty response (finish_reason={finish_reason}).")
             print(f"[Gemini] Raw response: {response_text}")
 
             detected_items = safe_parse_json(response_text, expected='array')
@@ -760,8 +768,8 @@ Be PRECISE. Return ONLY the JSON array, no other text."""
                 print(f"✅ [Gemini] Single item detected: {product_name}")
 
         except Exception as api_error:
-            print(f"[GPT-4o ERROR] {api_error}")
-            raise api_error
+            print(f"[GEMINI SCANNER ERROR] {api_error}")
+            raise ScannerAnalysisError(str(api_error)) from api_error
         
         # FIX 3: Search for ALL detected items
         all_results = []
@@ -795,13 +803,14 @@ Be PRECISE. Return ONLY the JSON array, no other text."""
             
             return None
         
+    except ScannerAnalysisError:
+        raise
     except Exception as e:
         error_msg = str(e)
         print(f"❌ [SCAN ERROR] {error_msg}")
         import traceback
         traceback.print_exc()
-        
-        return None
+        raise ScannerAnalysisError(error_msg) from e
 
 # === 3B. AI HEALTH COACH AGENT ===
 def generate_health_insights(trend_data, history_data, days_range):
