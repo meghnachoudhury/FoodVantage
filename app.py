@@ -24,7 +24,10 @@ from gemini_api import (
     get_total_items_logged, get_items_today,
     get_user_allergies, save_user_allergies, check_item_allergies, ALLERGY_KEYWORDS
 )
-from streamlit_back_camera_input import back_camera_input
+try:
+    from streamlit_back_camera_input import back_camera_input
+except ImportError:
+    back_camera_input = None
 
 st.set_page_config(page_title="FoodVantage", page_icon="🥗", layout="wide", initial_sidebar_state="expanded")
 
@@ -1078,7 +1081,10 @@ function startScan(){{
                 </div>
             """, unsafe_allow_html=True)
 
-        image = back_camera_input(key=f"hud_cam_{st.session_state.scan_count}")
+        if back_camera_input is not None:
+            image = back_camera_input(key=f"hud_cam_{st.session_state.scan_count}")
+        else:
+            image = st.camera_input("Scan item", key=f"hud_cam_{st.session_state.scan_count}")
 
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
