@@ -187,7 +187,7 @@ st.markdown(f"""
 
     /* === BUTTONS === */
     .stButton > button {{
-        background: rgba(238,164,183,0.12) !important;
+        background: rgba(238,164,183,0.3) !important;
         color: {C['teal_light']} !important;
         border: 1px solid rgba(238,164,183,0.3) !important;
         border-radius: 12px !important;
