@@ -24,13 +24,21 @@ from gemini_api import (
     get_total_items_logged, get_items_today,
     get_user_allergies, save_user_allergies, check_item_allergies, ALLERGY_KEYWORDS
 )
-from streamlit_back_camera_input import back_camera_input
+try:
+    from streamlit_back_camera_input import back_camera_input
+except ImportError:
+    back_camera_input = None
 
 st.set_page_config(page_title="FoodVantage", page_icon="🥗", layout="wide", initial_sidebar_state="expanded")
 
 # --- SESSION STATE ---
 if 'logged_in' not in st.session_state: st.session_state.logged_in = False
 if 'user_id' not in st.session_state: st.session_state.user_id = None
+# Migration guard: old sessions had logged_in=True with user_id="demo_user".
+# Force those sessions back to the login screen.
+if st.session_state.get('user_id') == 'demo_user':
+    st.session_state.logged_in = False
+    st.session_state.user_id = None
 if 'auth_tab' not in st.session_state: st.session_state.auth_tab = 'login'   # login | signup | forgot
 if 'page' not in st.session_state: st.session_state.page = 'dashboard'
 if 'camera_active' not in st.session_state: st.session_state.camera_active = False
@@ -59,23 +67,23 @@ if 'cal_month' not in st.session_state: st.session_state.cal_month = datetime.no
 
 # --- DARK THEME COLOR PALETTE ---
 C = {
-    'bg': '#0F1117',
-    'bg_card': '#1A1D25',
-    'bg_elevated': '#222630',
-    'bg_input': '#1E2230',
-    'sidebar_bg': '#141720',
-    'teal': '#5B9B9D',
-    'teal_light': '#7EC8CA',
-    'olive': '#5B8C3E',
+    'bg': '#101014',
+    'bg_card': '#17171d',
+    'bg_elevated': '#242430',
+    'bg_input': '#1e1e2a',
+    'sidebar_bg': '#131318',
+    'teal': '#eea4b7',
+    'teal_light': '#f5c5d4',
+    'olive': '#7c9e38',
     'text': '#E8EAF0',
-    'text_sec': '#9CA3B0',
-    'text_muted': '#6B7280',
+    'text_sec': '#a0a0b4',
+    'text_muted': '#9090b0',
     'green': '#4CAF50',
     'yellow': '#F9A825',
     'red': '#E53935',
     'orange': '#E8967A',
     'border': '#2A2E38',
-    'streak_bg': '#1C2030',
+    'streak_bg': '#1e1e28',
 }
 
 # Helper: portion size label
@@ -157,7 +165,7 @@ st.markdown(f"""
     }}
     input[type="text"]:focus {{
         border-color: {C['teal']} !important;
-        box-shadow: 0 0 0 2px rgba(91,155,157,0.2) !important;
+        box-shadow: 0 0 0 2px rgba(238,164,183,0.2) !important;
     }}
     .stTextInput > div > div > input {{
         background-color: {C['bg_input']} !important;
@@ -178,7 +186,7 @@ st.markdown(f"""
 
     /* === BUTTONS === */
     .stButton > button {{
-        background: linear-gradient(135deg, {C['teal']} 0%, #4A8A8C 100%) !important;
+        background: linear-gradient(135deg, {C['teal']} 0%, #d88ea5 100%) !important;
         color: white !important;
         border: none !important;
         border-radius: 12px !important;
@@ -189,7 +197,7 @@ st.markdown(f"""
         letter-spacing: 0.1px;
     }}
     .stButton > button:hover {{
-        box-shadow: 0 4px 16px rgba(91,155,157,0.3) !important;
+        box-shadow: 0 4px 16px rgba(238,164,183,0.3) !important;
         transform: translateY(-1px) !important;
     }}
     .stButton > button[kind="secondary"] {{
@@ -331,7 +339,7 @@ st.markdown(f"""
     .scanner-icon {{
         width: 64px; height: 64px;
         border-radius: 50%;
-        background: rgba(91,155,157,0.15);
+        background: rgba(238,164,183,0.15);
         display: flex; align-items: center; justify-content: center;
         margin-bottom: 16px;
     }}
@@ -444,7 +452,7 @@ st.markdown(f"""
         padding: 0.3rem 0.6rem !important;
     }}
     .trend-tabs-compact .stButton > button[kind="primary"] {{
-        background: linear-gradient(135deg, {C['teal']} 0%, #4A8A8C 100%) !important;
+        background: linear-gradient(135deg, {C['teal']} 0%, #d88ea5 100%) !important;
         border: none !important;
         border-radius: 14px !important;
         min-height: 44px;
@@ -496,9 +504,9 @@ st.markdown(f"""
         transition: all 0.15s ease;
         text-decoration: none;
     }}
-    .nav-btn:hover {{ background: rgba(91,155,157,0.1); color: {C['text']}; }}
+    .nav-btn:hover {{ background: rgba(238,164,183,0.1); color: {C['text']}; }}
     .nav-btn.active {{
-        background: rgba(91,155,157,0.15);
+        background: rgba(238,164,183,0.15);
         color: {C['teal_light']};
         font-weight: 600;
     }}
@@ -534,13 +542,13 @@ st.markdown(f"""
         letter-spacing: 0 !important;
     }}
     .sidebar-nav .stButton > button:hover {{
-        background: rgba(91,155,157,0.1) !important;
+        background: rgba(238,164,183,0.1) !important;
         color: {C['text']} !important;
         transform: none !important;
         box-shadow: none !important;
     }}
     .sidebar-nav .stButton > button[kind="primary"] {{
-        background: rgba(91,155,157,0.15) !important;
+        background: rgba(238,164,183,0.15) !important;
         color: {C['teal_light']} !important;
         font-weight: 600 !important;
         box-shadow: none !important;
@@ -626,6 +634,98 @@ st.markdown(f"""
         color: {C['text_muted']};
     }}
     </style>
+""", unsafe_allow_html=True)
+
+# --- Botanical Corner Illustrations ---
+st.markdown(f"""
+<div style="position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:0;overflow:hidden;">
+
+  <!-- TOP-RIGHT corner botanical cluster -->
+  <div style="position:absolute;top:0;right:0;width:240px;height:240px;opacity:0.28;">
+    <svg viewBox="0 0 240 240" width="240" height="240" xmlns="http://www.w3.org/2000/svg">
+      <!-- Large back leaf -->
+      <path d="M228,8 C210,38 188,85 178,135 C168,178 172,208 178,235
+               C186,205 190,172 198,128 C212,76 226,32 228,8 Z"
+            fill="#7c9e38" opacity="0.55"/>
+      <!-- Medium centre leaf -->
+      <path d="M240,28 C218,58 194,108 182,158 C170,200 174,228 181,240
+               C190,225 192,195 201,150 C217,97 237,52 240,28 Z"
+            fill="#7c9e38" opacity="0.65"/>
+      <!-- Slim front leaf -->
+      <path d="M210,0 C204,22 200,58 198,94 C196,130 198,158 202,182
+               C204,156 207,127 210,90 C215,54 216,22 210,0 Z"
+            fill="#96b348" opacity="0.45"/>
+      <!-- Horizontal accent leaf -->
+      <path d="M240,96 C210,90 175,92 148,110
+               C175,116 210,114 240,96 Z"
+            fill="#7c9e38" opacity="0.40"/>
+      <!-- Stem line -->
+      <path d="M230,230 Q195,165 162,108" stroke="#7c9e38" stroke-width="1.8" fill="none" opacity="0.45"/>
+      <!-- Pink accent dots -->
+      <circle cx="162" cy="126" r="5.5" fill="{C['teal']}" opacity="0.55"/>
+      <circle cx="178" cy="155" r="4"   fill="{C['teal']}" opacity="0.50"/>
+      <circle cx="150" cy="142" r="3"   fill="{C['teal']}" opacity="0.45"/>
+      <circle cx="182" cy="174" r="4.5" fill="{C['teal_light']}" opacity="0.42"/>
+      <!-- Olive dots -->
+      <circle cx="144" cy="110" r="3.5" fill="#7c9e38" opacity="0.45"/>
+      <circle cx="166" cy="98"  r="2.5" fill="#7c9e38" opacity="0.38"/>
+    </svg>
+  </div>
+
+  <!-- BOTTOM-LEFT corner botanical cluster (mirror of top-right) -->
+  <div style="position:absolute;bottom:0;left:0;width:240px;height:240px;opacity:0.28;transform:rotate(180deg);">
+    <svg viewBox="0 0 240 240" width="240" height="240" xmlns="http://www.w3.org/2000/svg">
+      <path d="M228,8 C210,38 188,85 178,135 C168,178 172,208 178,235
+               C186,205 190,172 198,128 C212,76 226,32 228,8 Z"
+            fill="#7c9e38" opacity="0.55"/>
+      <path d="M240,28 C218,58 194,108 182,158 C170,200 174,228 181,240
+               C190,225 192,195 201,150 C217,97 237,52 240,28 Z"
+            fill="#7c9e38" opacity="0.65"/>
+      <path d="M210,0 C204,22 200,58 198,94 C196,130 198,158 202,182
+               C204,156 207,127 210,90 C215,54 216,22 210,0 Z"
+            fill="#96b348" opacity="0.45"/>
+      <path d="M240,96 C210,90 175,92 148,110
+               C175,116 210,114 240,96 Z"
+            fill="#7c9e38" opacity="0.40"/>
+      <path d="M230,230 Q195,165 162,108" stroke="#7c9e38" stroke-width="1.8" fill="none" opacity="0.45"/>
+      <circle cx="162" cy="126" r="5.5" fill="{C['teal']}" opacity="0.55"/>
+      <circle cx="178" cy="155" r="4"   fill="{C['teal']}" opacity="0.50"/>
+      <circle cx="150" cy="142" r="3"   fill="{C['teal']}" opacity="0.45"/>
+      <circle cx="182" cy="174" r="4.5" fill="{C['teal_light']}" opacity="0.42"/>
+      <circle cx="144" cy="110" r="3.5" fill="#7c9e38" opacity="0.45"/>
+      <circle cx="166" cy="98"  r="2.5" fill="#7c9e38" opacity="0.38"/>
+    </svg>
+  </div>
+
+  <!-- TOP-LEFT corner small accent -->
+  <div style="position:absolute;top:0;left:0;width:160px;height:160px;opacity:0.16;transform:scaleX(-1);">
+    <svg viewBox="0 0 240 240" width="160" height="160" xmlns="http://www.w3.org/2000/svg">
+      <path d="M228,8 C210,38 188,85 178,135 C168,178 172,208 178,235
+               C186,205 190,172 198,128 C212,76 226,32 228,8 Z"
+            fill="#7c9e38" opacity="0.7"/>
+      <path d="M210,0 C204,22 200,58 198,94 C196,130 198,158 202,182
+               C204,156 207,127 210,90 C215,54 216,22 210,0 Z"
+            fill="#96b348" opacity="0.55"/>
+      <circle cx="162" cy="126" r="5" fill="{C['teal']}" opacity="0.55"/>
+      <circle cx="150" cy="108" r="3" fill="{C['teal']}" opacity="0.45"/>
+    </svg>
+  </div>
+
+  <!-- BOTTOM-RIGHT corner small accent -->
+  <div style="position:absolute;bottom:0;right:0;width:160px;height:160px;opacity:0.16;transform:rotate(180deg) scaleX(-1);">
+    <svg viewBox="0 0 240 240" width="160" height="160" xmlns="http://www.w3.org/2000/svg">
+      <path d="M228,8 C210,38 188,85 178,135 C168,178 172,208 178,235
+               C186,205 190,172 198,128 C212,76 226,32 228,8 Z"
+            fill="#7c9e38" opacity="0.7"/>
+      <path d="M210,0 C204,22 200,58 198,94 C196,130 198,158 202,182
+               C204,156 207,127 210,90 C215,54 216,22 210,0 Z"
+            fill="#96b348" opacity="0.55"/>
+      <circle cx="162" cy="126" r="5" fill="{C['teal']}" opacity="0.55"/>
+      <circle cx="150" cy="108" r="3" fill="{C['teal']}" opacity="0.45"/>
+    </svg>
+  </div>
+
+</div>
 """, unsafe_allow_html=True)
 
 def render_logo(size="1.6rem"):
@@ -779,7 +879,7 @@ if not st.session_state.logged_in:
                 <div style='font-size:2.6rem; font-weight:800; letter-spacing:-0.5px;'>
                     <span style='color:{C["text"]};'>foodvantage</span><span class='logo-dot-blink' style='color:{C["teal"]};'>.</span>
                 </div>
-                <div style='font-size:0.95rem; color:#C4A35A; margin-top:8px; font-weight:500;'>Know what's in your cart before it's in your body.</div>
+                <div style='font-size:0.95rem; color:{C['teal']}; margin-top:8px; font-weight:500;'>Know what's in your cart before it's in your body.</div>
             </div>
         """, unsafe_allow_html=True)
 
@@ -900,7 +1000,7 @@ if st.session_state.page == 'dashboard':
             <div style='font-size:2.4rem; font-weight:800; letter-spacing:-0.5px; line-height:1;'>
                 <span style='color:{C["text"]};'>foodvantage</span><span class='logo-dot-blink' style='color:{C["teal"]};'>.</span>
             </div>
-            <div style='font-size:0.95rem; font-weight:500; color:#C4A35A; margin-top:10px; letter-spacing:0.2px;'>
+            <div style='font-size:0.95rem; font-weight:500; color:{C['teal']}; margin-top:10px; letter-spacing:0.2px;'>
                 Know what's in your cart before it's in your body.
             </div>
         </div>
@@ -997,8 +1097,8 @@ body{{background:{C['bg_card']};font-family:'Inter',sans-serif;overflow:hidden;}
 .tr{{top:28px;right:28px;border-width:3px 3px 0 0;border-radius:0 6px 0 0;animation:jitter-tr 5s ease-in-out infinite;}}
 .bl{{bottom:28px;left:28px;border-width:0 0 3px 3px;border-radius:0 0 0 6px;animation:jitter-bl 5s ease-in-out infinite;}}
 .br{{bottom:28px;right:28px;border-width:0 3px 3px 0;border-radius:0 0 6px 0;animation:jitter-br 5s ease-in-out infinite;}}
-.icon-btn{{width:64px;height:64px;border-radius:50%;background:rgba(91,155,157,0.15);display:flex;align-items:center;justify-content:center;margin-bottom:14px;cursor:pointer;transition:background .2s,transform .1s;}}
-.icon-btn:hover{{background:rgba(91,155,157,0.3);transform:scale(1.1);}}
+.icon-btn{{width:64px;height:64px;border-radius:50%;background:rgba(238,164,183,0.15);display:flex;align-items:center;justify-content:center;margin-bottom:14px;cursor:pointer;transition:background .2s,transform .1s;}}
+.icon-btn:hover{{background:rgba(238,164,183,0.3);transform:scale(1.1);}}
 .icon-btn i{{font-size:28px;color:{C['teal']};}}
 .rt{{font-size:1rem;font-weight:600;color:{C['text']};margin-bottom:4px;}}
 .ht{{font-size:0.8rem;color:{C['text_muted']};}}
@@ -1073,7 +1173,10 @@ function startScan(){{
                 </div>
             """, unsafe_allow_html=True)
 
-        image = back_camera_input(key=f"hud_cam_{st.session_state.scan_count}")
+        if back_camera_input is not None:
+            image = back_camera_input(key=f"hud_cam_{st.session_state.scan_count}")
+        else:
+            image = st.camera_input("Scan item", key=f"hud_cam_{st.session_state.scan_count}")
 
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
@@ -1190,7 +1293,7 @@ function startScan(){{
                         </div>
                     </div>
                     <div style='display:flex; align-items:center; gap:8px; margin-top:8px;'>
-                        <div style='background:rgba(91,155,157,0.08); padding:4px 12px; border-radius:20px;'>
+                        <div style='background:rgba(238,164,183,0.08); padding:4px 12px; border-radius:20px;'>
                             <span style='color:{C["text_muted"]}; font-size:0.7rem;'>Higher score = healthier choice &middot; </span>
                             <span style='color:{health_clr}; font-weight:600; font-size:0.7rem;'>{rating}</span>
                         </div>
@@ -1319,7 +1422,7 @@ function startScan(){{
                 x=df_pivot.index, y=df_pivot['healthy'], name='Healthy',
                 mode='lines+markers', line=dict(color=C['teal'], width=2.5, shape='spline'),
                 marker=dict(size=7, color=C['teal']), fill='tozeroy',
-                fillcolor='rgba(91,155,157,0.1)',
+                fillcolor='rgba(238,164,183,0.1)',
                 text=hover_texts, hovertemplate='%{text}<extra></extra>'
             ))
         if 'moderate' in df_pivot.columns:
@@ -1379,7 +1482,7 @@ function startScan(){{
         st.markdown(f"""
             <div class='card' style='min-height:200px;'>
                 <div style='display:flex; align-items:center; gap:10px; margin-bottom:12px;'>
-                    <div style='width:36px; height:36px; border-radius:10px; background:rgba(91,155,157,0.15); display:flex; align-items:center; justify-content:center;'>
+                    <div style='width:36px; height:36px; border-radius:10px; background:rgba(238,164,183,0.15); display:flex; align-items:center; justify-content:center;'>
                         <i class='fa-solid fa-heart-pulse' style='color:{C["teal"]}; font-size:1rem;'></i>
                     </div>
                     <div>
@@ -1426,7 +1529,7 @@ function startScan(){{
         st.markdown(f"""
             <div class='card' style='min-height:200px;'>
                 <div style='display:flex; align-items:center; gap:10px; margin-bottom:12px;'>
-                    <div style='width:36px; height:36px; border-radius:10px; background:rgba(91,140,62,0.15); display:flex; align-items:center; justify-content:center;'>
+                    <div style='width:36px; height:36px; border-radius:10px; background:rgba(124,158,56,0.15); display:flex; align-items:center; justify-content:center;'>
                         <i class='fa-solid fa-utensils' style='color:{C["olive"]}; font-size:1rem;'></i>
                     </div>
                     <div>
@@ -1598,7 +1701,7 @@ function pickDate(day){{
 
         # Add item — friendly onboarding text
         st.markdown(f"""
-            <div style='background:rgba(91,155,157,0.08); border:1px solid rgba(91,155,157,0.2); border-radius:12px; padding:10px 14px; margin-bottom:10px;'>
+            <div style='background:rgba(238,164,183,0.08); border:1px solid rgba(238,164,183,0.2); border-radius:12px; padding:10px 14px; margin-bottom:10px;'>
                 <div style='font-size:0.8rem; font-weight:600; color:{C["teal"]}; margin-bottom:3px;'>Forgot to scan before buying? No problem!</div>
                 <div style='font-size:0.75rem; color:{C["text_muted"]};'>Search any item below — we'll look up its health score and log it to your haul.</div>
             </div>
@@ -1684,7 +1787,7 @@ elif st.session_state.page == 'account':
     with mid_acc:
         st.markdown(f"""
             <div class='card' style='padding:24px; margin-bottom:16px; text-align:center;'>
-                <div style='width:72px; height:72px; border-radius:50%; background:rgba(91,155,157,0.15);
+                <div style='width:72px; height:72px; border-radius:50%; background:rgba(238,164,183,0.15);
                      display:flex; align-items:center; justify-content:center; margin:0 auto 12px;'>
                     <span style='font-size:2.2rem;'>👤</span>
                 </div>
