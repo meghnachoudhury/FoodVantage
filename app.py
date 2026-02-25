@@ -1956,7 +1956,7 @@ function pickDate(day){{
                     with col_b:
                         st.markdown(f"<div style='text-align:center; color:{clr}; font-weight:bold;'>{d_sc}/10</div>", unsafe_allow_html=True)
                     with col_c:
-                        if st.button("➕", key=f"add_cal_{idx}_{sel_date}", help=f"Add {result['name']}"):
+                        if st.button("＋", key=f"add_cal_{idx}_{sel_date}", help=f"Add {result['name']}"):
                             add_calendar_item_db(st.session_state.user_id, sel_date.strftime("%Y-%m-%d"),
                                                  result['name'], round(result['vms_score'], 1))
                             st.success("Added!")
