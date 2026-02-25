@@ -719,10 +719,16 @@ def vision_live_scan_dark(image_bytes):
         img_b64 = base64.b64encode(img_bytes).decode('utf-8')
 
         # Enhanced prompt for item detection + nutrition lookup intent
-        prompt = """You are a grocery item detection ai. You have to recognize the item captured in the image using identification metrics like shape, color, container, brand of item if visible, and product name if caught in the image, and fetch nutrition data related to it if it has been posted by the brand for that product to finally display the results for "item detected".
+        prompt = """You are a grocery item detection ai. You have to recognize the item captured in the image using identification metrics like shape, color, container, brand of item if visible, and product name if caught in the image, and fetch nutrition data related to it if it has been posted by the brand for that product to finally display the results for "item detected"
+CRITICAL RULES:
+1. Count EACH item separately (1 apple, 2 bananas = 3 total items)
+2. For PACKAGED goods: Use exact product name from label or try to identify and recognize the shape, color, extra text in the packaging (when brand and main face side of product not captured), and type of product and container if not directly visible.
+3. For FRESH produce: Use common name, count each piece. Remember even though some packaged items may contain fruit in it, does not mean it is healthy. (For example, orange juice)
+4. List ALL items you see in the frame
+5. Scan the ENTIRE visible areaReturn a JSON array like: ["Apple", "Banana", "Banana", "Orange", "Coca Cola"]
 
-Return ONLY a JSON array of detected grocery item names (strings), for example: ["Apple", "Coca Cola"].
-No markdown, no explanation, no extra keys."""
+If you see 2 apples, list "Apples" with "quantity 2".
+Be PRECISE. Return ONLY the JSON array, no other text."""
 
         client = get_gemini_client()
         if not client:
