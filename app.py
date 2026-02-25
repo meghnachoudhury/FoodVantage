@@ -2005,7 +2005,7 @@ elif st.session_state.page == 'account':
     uid = st.session_state.user_id
     st.markdown(f"""
         <div style='margin-bottom:20px;'>
-            <h2 style='margin:0; font-weight:800; font-size:1.8rem;'>👤 My Account</h2>
+            <h2 style='margin:0; font-weight:800; font-size:1.8rem;'><i class="fa-solid fa-user" style="color: rgb(235, 186, 222);"></i> My Account</h2>
             <div style='color:{C["text_muted"]}; font-size:0.85rem; margin-top:4px;'>Manage your FoodVantage profile</div>
         </div>
     """, unsafe_allow_html=True)
