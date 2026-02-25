@@ -24,13 +24,21 @@ from gemini_api import (
     get_total_items_logged, get_items_today,
     get_user_allergies, save_user_allergies, check_item_allergies, ALLERGY_KEYWORDS
 )
-from streamlit_back_camera_input import back_camera_input
+try:
+    from streamlit_back_camera_input import back_camera_input
+except ImportError:
+    back_camera_input = None
 
 st.set_page_config(page_title="FoodVantage", page_icon="🥗", layout="wide", initial_sidebar_state="expanded")
 
 # --- SESSION STATE ---
 if 'logged_in' not in st.session_state: st.session_state.logged_in = False
 if 'user_id' not in st.session_state: st.session_state.user_id = None
+# Migration guard: old sessions had logged_in=True with user_id="demo_user".
+# Force those sessions back to the login screen.
+if st.session_state.get('user_id') == 'demo_user':
+    st.session_state.logged_in = False
+    st.session_state.user_id = None
 if 'auth_tab' not in st.session_state: st.session_state.auth_tab = 'login'   # login | signup | forgot
 if 'page' not in st.session_state: st.session_state.page = 'dashboard'
 if 'camera_active' not in st.session_state: st.session_state.camera_active = False
@@ -59,23 +67,24 @@ if 'cal_month' not in st.session_state: st.session_state.cal_month = datetime.no
 
 # --- DARK THEME COLOR PALETTE ---
 C = {
-    'bg': '#0F1117',
-    'bg_card': '#1A1D25',
-    'bg_elevated': '#222630',
-    'bg_input': '#1E2230',
-    'sidebar_bg': '#141720',
-    'teal': '#5B9B9D',
-    'teal_light': '#7EC8CA',
-    'olive': '#5B8C3E',
+    'bg': '#101014',
+    'bg_card': '#17171d',
+    'bg_elevated': '#242430',
+    'bg_input': '#1e1e2a',
+    'sidebar_bg': '#131318',
+    'teal': '#f2b4c5',
+    'teal_light': '#f8d0dd',
+    'olive': '#7c9e38',
     'text': '#E8EAF0',
-    'text_sec': '#9CA3B0',
-    'text_muted': '#6B7280',
+    'text_sec': '#a0a0b4',
+    'text_muted': '#9090b0',
+    'muted_purple': '#d8cfee',
     'green': '#4CAF50',
     'yellow': '#F9A825',
     'red': '#E53935',
     'orange': '#E8967A',
     'border': '#2A2E38',
-    'streak_bg': '#1C2030',
+    'streak_bg': '#1e1e28',
 }
 
 # Helper: portion size label
@@ -157,7 +166,7 @@ st.markdown(f"""
     }}
     input[type="text"]:focus {{
         border-color: {C['teal']} !important;
-        box-shadow: 0 0 0 2px rgba(91,155,157,0.2) !important;
+        box-shadow: 0 0 0 2px rgba(238,164,183,0.2) !important;
     }}
     .stTextInput > div > div > input {{
         background-color: {C['bg_input']} !important;
@@ -178,23 +187,59 @@ st.markdown(f"""
 
     /* === BUTTONS === */
     .stButton > button {{
-        background: linear-gradient(135deg, {C['teal']} 0%, #4A8A8C 100%) !important;
-        color: white !important;
-        border: none !important;
+        background: rgba(238,164,183,0.2) !important;
+        color: {C['teal_light']} !important;
+        border: 1px solid rgba(238,164,183,0.3) !important;
         border-radius: 12px !important;
         font-family: 'Inter', sans-serif !important;
         font-weight: 600 !important;
         padding: 0.5rem 1.5rem !important;
         transition: all 0.2s ease !important;
         letter-spacing: 0.1px;
+        box-shadow: 0 0 8px rgba(238,164,183,0.1) !important;
+        backdrop-filter: blur(4px);
     }}
     .stButton > button:hover {{
-        box-shadow: 0 4px 16px rgba(91,155,157,0.3) !important;
+        background: rgba(238,164,183,0.2) !important;
+        border-color: rgba(238,164,183,0.55) !important;
+        box-shadow: 0 0 16px rgba(238,164,183,0.22) !important;
         transform: translateY(-1px) !important;
+        color: white !important;
     }}
     .stButton > button[kind="secondary"] {{
+        background: rgba(20,20,28,0.6) !important;
+        border: 1px solid rgba(238,164,183,0.15) !important;
+        color: {C['text_sec']} !important;
+    }}
+
+    /* === AI ACTION BUTTONS (dark opaque, like dashboard tiles) === */
+    .ai-btn-purple .stButton > button {{
         background: {C['bg_elevated']} !important;
         border: 1px solid {C['border']} !important;
+        color: {C['muted_purple']} !important;
+        box-shadow: none !important;
+        backdrop-filter: none !important;
+    }}
+    .ai-btn-purple .stButton > button:hover {{
+        background: #2a2a38 !important;
+        border-color: rgba(168,155,192,0.4) !important;
+        color: #c4b8de !important;
+        box-shadow: 0 0 10px rgba(168,155,192,0.12) !important;
+        transform: translateY(-1px) !important;
+    }}
+    .ai-btn-yellow .stButton > button {{
+        background: {C['bg_elevated']} !important;
+        border: 1px solid {C['border']} !important;
+        color: {C['yellow']} !important;
+        box-shadow: none !important;
+        backdrop-filter: none !important;
+    }}
+    .ai-btn-yellow .stButton > button:hover {{
+        background: #2a2a38 !important;
+        border-color: rgba(249,168,37,0.4) !important;
+        color: #ffc84a !important;
+        box-shadow: 0 0 10px rgba(249,168,37,0.12) !important;
+        transform: translateY(-1px) !important;
     }}
 
     .stHorizontalBlock div[data-testid="column"] .stButton > button {{
@@ -206,7 +251,7 @@ st.markdown(f"""
         font-weight: 700 !important;
     }}
     [data-testid="stMetricLabel"] {{
-        color: {C['text_sec']} !important;
+        color: {C['muted_purple']} !important;
     }}
 
     /* === EXPANDERS === */
@@ -321,17 +366,17 @@ st.markdown(f"""
         border-style: solid;
     }}
     .corner-tl {{ top: 28px; left: 28px; border-width: 3px 0 0 3px; border-radius: 6px 0 0 0;
-                  animation: jitter-tl 5s ease-in-out infinite; }}
+                  animation: jitter-tl 2s ease-in-out infinite; }}
     .corner-tr {{ top: 28px; right: 28px; border-width: 3px 3px 0 0; border-radius: 0 6px 0 0;
-                  animation: jitter-tr 5s ease-in-out infinite; }}
+                  animation: jitter-tr 2s ease-in-out infinite; }}
     .corner-bl {{ bottom: 28px; left: 28px; border-width: 0 0 3px 3px; border-radius: 0 0 0 6px;
-                  animation: jitter-bl 5s ease-in-out infinite; }}
+                  animation: jitter-bl 2s ease-in-out infinite; }}
     .corner-br {{ bottom: 28px; right: 28px; border-width: 0 3px 3px 0; border-radius: 0 0 6px 0;
-                  animation: jitter-br 5s ease-in-out infinite; }}
+                  animation: jitter-br 2s ease-in-out infinite; }}
     .scanner-icon {{
         width: 64px; height: 64px;
         border-radius: 50%;
-        background: rgba(91,155,157,0.15);
+        background: rgba(238,164,183,0.15);
         display: flex; align-items: center; justify-content: center;
         margin-bottom: 16px;
     }}
@@ -355,7 +400,7 @@ st.markdown(f"""
         font-size: 0.7rem;
         font-weight: 700;
         letter-spacing: 1.2px;
-        color: {C['text_muted']};
+        color: {C['muted_purple']};
         text-transform: uppercase;
         margin-bottom: 8px;
     }}
@@ -387,7 +432,7 @@ st.markdown(f"""
     .streak-header {{
         font-size: 1rem;
         font-weight: 700;
-        color: {C['text']};
+        color: {C['muted_purple']};
         margin-bottom: 2px;
     }}
     .streak-sub {{
@@ -427,7 +472,7 @@ st.markdown(f"""
     .streak-stat-val {{
         font-size: 1.1rem;
         font-weight: 800;
-        color: {C['text']};
+        color: {C['muted_purple']};
     }}
     .streak-stat-label {{
         font-size: 0.65rem;
@@ -437,16 +482,19 @@ st.markdown(f"""
 
     /* === TREND TABS (compact in right column) === */
     .trend-tabs-compact .stButton > button {{
-        background: {C['bg_elevated']} !important;
-        border: 1px solid {C['border']} !important;
+        background: rgba(36,36,48,0.35) !important;
+        border: 1px solid rgba(238,164,183,0.15) !important;
         border-radius: 8px !important;
         font-size: 0.8rem !important;
         padding: 0.3rem 0.6rem !important;
+        color: {C['text_muted']} !important;
     }}
     .trend-tabs-compact .stButton > button[kind="primary"] {{
-        background: linear-gradient(135deg, {C['teal']} 0%, #4A8A8C 100%) !important;
-        border: none !important;
-        border-radius: 14px !important;
+        background: rgba(238,164,183,0.1) !important;
+        border: 1px solid rgba(238,164,183,0.45) !important;
+        border-radius: 8px !important;
+        color: {C['teal_light']} !important;
+        box-shadow: 0 0 10px rgba(238,164,183,0.2) !important;
         min-height: 44px;
     }}
 
@@ -496,9 +544,9 @@ st.markdown(f"""
         transition: all 0.15s ease;
         text-decoration: none;
     }}
-    .nav-btn:hover {{ background: rgba(91,155,157,0.1); color: {C['text']}; }}
+    .nav-btn:hover {{ background: rgba(238,164,183,0.1); color: {C['text']}; }}
     .nav-btn.active {{
-        background: rgba(91,155,157,0.15);
+        background: rgba(238,164,183,0.15);
         color: {C['teal_light']};
         font-weight: 600;
     }}
@@ -534,16 +582,17 @@ st.markdown(f"""
         letter-spacing: 0 !important;
     }}
     .sidebar-nav .stButton > button:hover {{
-        background: rgba(91,155,157,0.1) !important;
+        background: rgba(238,164,183,0.1) !important;
         color: {C['text']} !important;
         transform: none !important;
         box-shadow: none !important;
     }}
     .sidebar-nav .stButton > button[kind="primary"] {{
-        background: rgba(91,155,157,0.15) !important;
+        background: rgba(238,164,183,0.08) !important;
+        border: 1px solid rgba(238,164,183,0.4) !important;
         color: {C['teal_light']} !important;
         font-weight: 600 !important;
-        box-shadow: none !important;
+        box-shadow: 0 0 12px rgba(238,164,183,0.18) !important;
     }}
 
     /* === AI LOADING INDICATOR === */
@@ -593,7 +642,7 @@ st.markdown(f"""
         50% {{ opacity: 0; }}
     }}
     .logo-dot-blink {{
-        animation: blink-dot 1.1s ease-in-out infinite;
+        animation: blink-dot 2.8s ease-in-out infinite;
         display: inline-block;
     }}
 
@@ -625,7 +674,127 @@ st.markdown(f"""
         background: transparent;
         color: {C['text_muted']};
     }}
+
+    /* === OLIVE SCAN BUTTONS === */
+    .olive-btn .stButton > button {{
+        background: rgba(124,158,56,0.2) !important;
+    }}
+    .olive-btn .stButton > button:hover {{
+        background: rgba(124,158,56,0.3) !important;
+        box-shadow: 0 4px 16px rgba(124,158,56,0.2) !important;
+    }}
     </style>
+""", unsafe_allow_html=True)
+
+# --- Botanical Corner Illustrations ---
+st.markdown(f"""
+<div style="position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:0;overflow:hidden;">
+
+  <!-- TOP-RIGHT: elegant herb sprig with paired leaves + berry accents -->
+  <div style="position:absolute;top:-8px;right:-8px;width:280px;height:280px;opacity:0.22;">
+    <svg viewBox="0 0 280 280" width="280" height="280" xmlns="http://www.w3.org/2000/svg">
+      <!-- Main curved stem from corner inward -->
+      <path d="M272,6 C258,28 240,58 220,90 C200,122 180,152 164,180 C152,200 144,220 140,238"
+            stroke="#7c9e38" stroke-width="1.8" fill="none" opacity="0.85"/>
+      <!-- Leaf pair 1 -->
+      <path d="M252,26 C262,16 274,12 269,26 C265,38 253,42 252,26Z" fill="#7c9e38" opacity="0.7"/>
+      <path d="M252,26 C242,18 236,10 244,22 C248,28 251,34 252,26Z" fill="#96b348" opacity="0.55"/>
+      <line x1="252" y1="26" x2="268" y2="16" stroke="#b0cc68" stroke-width="0.8" opacity="0.5"/>
+      <line x1="252" y1="26" x2="240" y2="16" stroke="#b0cc68" stroke-width="0.8" opacity="0.5"/>
+      <!-- Leaf pair 2 -->
+      <path d="M234,52 C246,40 260,36 254,52 C249,65 234,68 234,52Z" fill="#7c9e38" opacity="0.65"/>
+      <path d="M234,52 C222,42 216,32 226,46 C230,54 233,61 234,52Z" fill="#96b348" opacity="0.5"/>
+      <line x1="234" y1="52" x2="250" y2="40" stroke="#b0cc68" stroke-width="0.8" opacity="0.45"/>
+      <line x1="234" y1="52" x2="220" y2="40" stroke="#b0cc68" stroke-width="0.8" opacity="0.45"/>
+      <!-- Leaf pair 3 -->
+      <path d="M212,82 C226,68 242,64 235,82 C229,97 212,100 212,82Z" fill="#7c9e38" opacity="0.6"/>
+      <path d="M212,82 C198,70 192,58 204,74 C208,82 211,91 212,82Z" fill="#96b348" opacity="0.48"/>
+      <line x1="212" y1="82" x2="230" y2="68" stroke="#b0cc68" stroke-width="0.8" opacity="0.4"/>
+      <line x1="212" y1="82" x2="196" y2="68" stroke="#b0cc68" stroke-width="0.8" opacity="0.4"/>
+      <!-- Leaf pair 4 -->
+      <path d="M192,114 C208,98 226,94 218,114 C211,130 192,134 192,114Z" fill="#7c9e38" opacity="0.55"/>
+      <path d="M192,114 C176,100 170,88 183,104 C187,114 191,124 192,114Z" fill="#96b348" opacity="0.44"/>
+      <!-- Leaf pair 5 -->
+      <path d="M172,146 C188,130 208,126 199,146 C192,162 172,166 172,146Z" fill="#7c9e38" opacity="0.48"/>
+      <path d="M172,146 C156,132 150,120 164,138 C168,148 171,158 172,146Z" fill="#96b348" opacity="0.38"/>
+      <!-- Pink berry cluster -->
+      <circle cx="160" cy="174" r="5.5" fill="{C['teal']}" opacity="0.65"/>
+      <circle cx="148" cy="188" r="3.8" fill="{C['teal']}" opacity="0.55"/>
+      <circle cx="168" cy="186" r="3.2" fill="{C['teal_light']}" opacity="0.5"/>
+      <circle cx="142" cy="202" r="2.6" fill="{C['teal']}" opacity="0.42"/>
+      <!-- Tiny olive dots along stem -->
+      <circle cx="248" cy="40" r="2.2" fill="#96b348" opacity="0.4"/>
+      <circle cx="230" cy="66" r="1.8" fill="#96b348" opacity="0.35"/>
+    </svg>
+  </div>
+
+  <!-- BOTTOM-LEFT: same sprig rotated 180° -->
+  <div style="position:absolute;bottom:-8px;left:-8px;width:280px;height:280px;opacity:0.22;transform:rotate(180deg);">
+    <svg viewBox="0 0 280 280" width="280" height="280" xmlns="http://www.w3.org/2000/svg">
+      <path d="M272,6 C258,28 240,58 220,90 C200,122 180,152 164,180 C152,200 144,220 140,238"
+            stroke="#7c9e38" stroke-width="1.8" fill="none" opacity="0.85"/>
+      <path d="M252,26 C262,16 274,12 269,26 C265,38 253,42 252,26Z" fill="#7c9e38" opacity="0.7"/>
+      <path d="M252,26 C242,18 236,10 244,22 C248,28 251,34 252,26Z" fill="#96b348" opacity="0.55"/>
+      <line x1="252" y1="26" x2="268" y2="16" stroke="#b0cc68" stroke-width="0.8" opacity="0.5"/>
+      <line x1="252" y1="26" x2="240" y2="16" stroke="#b0cc68" stroke-width="0.8" opacity="0.5"/>
+      <path d="M234,52 C246,40 260,36 254,52 C249,65 234,68 234,52Z" fill="#7c9e38" opacity="0.65"/>
+      <path d="M234,52 C222,42 216,32 226,46 C230,54 233,61 234,52Z" fill="#96b348" opacity="0.5"/>
+      <line x1="234" y1="52" x2="250" y2="40" stroke="#b0cc68" stroke-width="0.8" opacity="0.45"/>
+      <line x1="234" y1="52" x2="220" y2="40" stroke="#b0cc68" stroke-width="0.8" opacity="0.45"/>
+      <path d="M212,82 C226,68 242,64 235,82 C229,97 212,100 212,82Z" fill="#7c9e38" opacity="0.6"/>
+      <path d="M212,82 C198,70 192,58 204,74 C208,82 211,91 212,82Z" fill="#96b348" opacity="0.48"/>
+      <line x1="212" y1="82" x2="230" y2="68" stroke="#b0cc68" stroke-width="0.8" opacity="0.4"/>
+      <line x1="212" y1="82" x2="196" y2="68" stroke="#b0cc68" stroke-width="0.8" opacity="0.4"/>
+      <path d="M192,114 C208,98 226,94 218,114 C211,130 192,134 192,114Z" fill="#7c9e38" opacity="0.55"/>
+      <path d="M192,114 C176,100 170,88 183,104 C187,114 191,124 192,114Z" fill="#96b348" opacity="0.44"/>
+      <path d="M172,146 C188,130 208,126 199,146 C192,162 172,166 172,146Z" fill="#7c9e38" opacity="0.48"/>
+      <path d="M172,146 C156,132 150,120 164,138 C168,148 171,158 172,146Z" fill="#96b348" opacity="0.38"/>
+      <circle cx="160" cy="174" r="5.5" fill="{C['teal']}" opacity="0.65"/>
+      <circle cx="148" cy="188" r="3.8" fill="{C['teal']}" opacity="0.55"/>
+      <circle cx="168" cy="186" r="3.2" fill="{C['teal_light']}" opacity="0.5"/>
+      <circle cx="142" cy="202" r="2.6" fill="{C['teal']}" opacity="0.42"/>
+      <circle cx="248" cy="40" r="2.2" fill="#96b348" opacity="0.4"/>
+      <circle cx="230" cy="66" r="1.8" fill="#96b348" opacity="0.35"/>
+    </svg>
+  </div>
+
+  <!-- TOP-LEFT: smaller accent sprig -->
+  <div style="position:absolute;top:-6px;left:-6px;width:190px;height:190px;opacity:0.15;">
+    <svg viewBox="0 0 200 200" width="190" height="190" xmlns="http://www.w3.org/2000/svg">
+      <!-- Stem goes from top-left corner down-right -->
+      <path d="M6,194 C18,172 38,146 62,118 C86,90 112,66 130,44 C144,26 150,10 148,2"
+            stroke="#7c9e38" stroke-width="1.5" fill="none" opacity="0.85"/>
+      <!-- Leaf pair 1 -->
+      <path d="M130,44 C140,34 152,28 148,44 C144,57 130,60 130,44Z" fill="#7c9e38" opacity="0.65"/>
+      <path d="M130,44 C118,36 112,26 122,38 C126,46 129,54 130,44Z" fill="#96b348" opacity="0.5"/>
+      <line x1="130" y1="44" x2="146" y2="32" stroke="#b0cc68" stroke-width="0.8" opacity="0.45"/>
+      <line x1="130" y1="44" x2="116" y2="32" stroke="#b0cc68" stroke-width="0.8" opacity="0.45"/>
+      <!-- Leaf pair 2 -->
+      <path d="M108,72 C120,60 136,56 128,72 C122,86 108,90 108,72Z" fill="#7c9e38" opacity="0.58"/>
+      <path d="M108,72 C96,62 90,50 100,64 C104,72 107,81 108,72Z" fill="#96b348" opacity="0.44"/>
+      <!-- Berry accents -->
+      <circle cx="90" cy="100" r="4.5" fill="{C['teal']}" opacity="0.6"/>
+      <circle cx="78" cy="114" r="3" fill="{C['teal_light']}" opacity="0.5"/>
+    </svg>
+  </div>
+
+  <!-- BOTTOM-RIGHT: smaller accent sprig (mirror of top-left) -->
+  <div style="position:absolute;bottom:-6px;right:-6px;width:190px;height:190px;opacity:0.15;transform:rotate(180deg);">
+    <svg viewBox="0 0 200 200" width="190" height="190" xmlns="http://www.w3.org/2000/svg">
+      <path d="M6,194 C18,172 38,146 62,118 C86,90 112,66 130,44 C144,26 150,10 148,2"
+            stroke="#7c9e38" stroke-width="1.5" fill="none" opacity="0.85"/>
+      <path d="M130,44 C140,34 152,28 148,44 C144,57 130,60 130,44Z" fill="#7c9e38" opacity="0.65"/>
+      <path d="M130,44 C118,36 112,26 122,38 C126,46 129,54 130,44Z" fill="#96b348" opacity="0.5"/>
+      <line x1="130" y1="44" x2="146" y2="32" stroke="#b0cc68" stroke-width="0.8" opacity="0.45"/>
+      <line x1="130" y1="44" x2="116" y2="32" stroke="#b0cc68" stroke-width="0.8" opacity="0.45"/>
+      <path d="M108,72 C120,60 136,56 128,72 C122,86 108,90 108,72Z" fill="#7c9e38" opacity="0.58"/>
+      <path d="M108,72 C96,62 90,50 100,64 C104,72 107,81 108,72Z" fill="#96b348" opacity="0.44"/>
+      <circle cx="90" cy="100" r="4.5" fill="{C['teal']}" opacity="0.6"/>
+      <circle cx="78" cy="114" r="3" fill="{C['teal_light']}" opacity="0.5"/>
+    </svg>
+  </div>
+
+</div>
 """, unsafe_allow_html=True)
 
 def render_logo(size="1.6rem"):
@@ -705,9 +874,9 @@ with st.sidebar:
         # Navigation
         page = st.session_state.page
         nav_items = [
-            ('dashboard', '🏠', 'Dashboard'),
-            ('calendar', '📅', 'Calendar'),
-            ('log',       '🍳', 'Cook With It'),
+            ('dashboard', '𖠿', 'Dashboard'),
+            ('calendar', '🗓︎', 'Calendar'),
+            ('log',       '🥘', 'Cook With It'),
         ]
         st.markdown('<div class="sidebar-nav">', unsafe_allow_html=True)
         for pg, icon, label in nav_items:
@@ -728,7 +897,7 @@ with st.sidebar:
 
         # Logout button at very bottom
         st.markdown(f"<div style='height:12px;'></div>", unsafe_allow_html=True)
-        if st.button("🚪  Logout", key="sidebar_logout", use_container_width=True, type="secondary"):
+        if st.button("⎋  Logout", key="sidebar_logout", use_container_width=True, type="secondary"):
             _reset_scanner()
             st.session_state.logged_in = False
             st.session_state.user_id = None
@@ -779,7 +948,7 @@ if not st.session_state.logged_in:
                 <div style='font-size:2.6rem; font-weight:800; letter-spacing:-0.5px;'>
                     <span style='color:{C["text"]};'>foodvantage</span><span class='logo-dot-blink' style='color:{C["teal"]};'>.</span>
                 </div>
-                <div style='font-size:0.95rem; color:#C4A35A; margin-top:8px; font-weight:500;'>Know what's in your cart before it's in your body.</div>
+                <div style='font-size:0.95rem; color:{C['teal']}; margin-top:8px; font-weight:500;'>Know what's in your cart before it's in your body.</div>
             </div>
         """, unsafe_allow_html=True)
 
@@ -900,7 +1069,7 @@ if st.session_state.page == 'dashboard':
             <div style='font-size:2.4rem; font-weight:800; letter-spacing:-0.5px; line-height:1;'>
                 <span style='color:{C["text"]};'>foodvantage</span><span class='logo-dot-blink' style='color:{C["teal"]};'>.</span>
             </div>
-            <div style='font-size:0.95rem; font-weight:500; color:#C4A35A; margin-top:10px; letter-spacing:0.2px;'>
+            <div style='font-size:0.95rem; font-weight:500; color:{C['teal']}; margin-top:10px; letter-spacing:0.2px;'>
                 Know what's in your cart before it's in your body.
             </div>
         </div>
@@ -993,12 +1162,12 @@ body{{background:{C['bg_card']};font-family:'Inter',sans-serif;overflow:hidden;}
 @keyframes jitter-br{{0%,75%{{transform:translate(0,0);opacity:.4}}80%{{transform:translate(5px,5px);opacity:1}}85%{{transform:translate(3px,3px);opacity:1}}90%{{transform:translate(5px,5px);opacity:1}}95%{{transform:translate(0,0);opacity:.4}}100%{{transform:translate(0,0);opacity:.4}}}}
 .vf{{position:relative;height:190px;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:20px;overflow:hidden;}}
 .corner{{position:absolute;width:45px;height:45px;border-color:{C['teal']};border-style:solid;}}
-.tl{{top:28px;left:28px;border-width:3px 0 0 3px;border-radius:6px 0 0 0;animation:jitter-tl 5s ease-in-out infinite;}}
-.tr{{top:28px;right:28px;border-width:3px 3px 0 0;border-radius:0 6px 0 0;animation:jitter-tr 5s ease-in-out infinite;}}
-.bl{{bottom:28px;left:28px;border-width:0 0 3px 3px;border-radius:0 0 0 6px;animation:jitter-bl 5s ease-in-out infinite;}}
-.br{{bottom:28px;right:28px;border-width:0 3px 3px 0;border-radius:0 0 6px 0;animation:jitter-br 5s ease-in-out infinite;}}
-.icon-btn{{width:64px;height:64px;border-radius:50%;background:rgba(91,155,157,0.15);display:flex;align-items:center;justify-content:center;margin-bottom:14px;cursor:pointer;transition:background .2s,transform .1s;}}
-.icon-btn:hover{{background:rgba(91,155,157,0.3);transform:scale(1.1);}}
+.tl{{top:28px;left:28px;border-width:3px 0 0 3px;border-radius:6px 0 0 0;animation:jitter-tl 2s ease-in-out infinite;}}
+.tr{{top:28px;right:28px;border-width:3px 3px 0 0;border-radius:0 6px 0 0;animation:jitter-tr 2s ease-in-out infinite;}}
+.bl{{bottom:28px;left:28px;border-width:0 0 3px 3px;border-radius:0 0 0 6px;animation:jitter-bl 2s ease-in-out infinite;}}
+.br{{bottom:28px;right:28px;border-width:0 3px 3px 0;border-radius:0 0 6px 0;animation:jitter-br 2s ease-in-out infinite;}}
+.icon-btn{{width:64px;height:64px;border-radius:50%;background:rgba(238,164,183,0.15);display:flex;align-items:center;justify-content:center;margin-bottom:14px;cursor:pointer;transition:background .2s,transform .1s;}}
+.icon-btn:hover{{background:rgba(238,164,183,0.3);transform:scale(1.1);}}
 .icon-btn i{{font-size:28px;color:{C['teal']};}}
 .rt{{font-size:1rem;font-weight:600;color:{C['text']};margin-bottom:4px;}}
 .ht{{font-size:0.8rem;color:{C['text_muted']};}}
@@ -1018,6 +1187,7 @@ function startScan(){{
   }}
 }}
 </script></body></html>""", height=200, scrolling=False)
+        st.markdown('<div class="olive-btn">', unsafe_allow_html=True)
         if st.button("Start Live Scan", type="primary", use_container_width=True):
             st.session_state.camera_active = True
             st.session_state.scanning = True
@@ -1027,7 +1197,9 @@ function startScan(){{
             st.session_state.scan_status = None
             st.session_state.detected_items = []
             st.session_state._captured_image = None
+            st.session_state.scan_history = []
             st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
     else:
         # Scanner active - show HUD
         # Inline scan status indicator - auto-dismisses when items are detected
@@ -1068,15 +1240,65 @@ function startScan(){{
             preview = ", ".join(st.session_state.detected_items[:3])
             st.markdown(f"""
                 <div class="scanner-result">
-                    <div class="scanner-result-title">👁️ Items Detected</div>
+                    <div class="scanner-result-title">🔍 Items Detected</div>
                     <div class="scanner-result-text">{preview}</div>
                 </div>
             """, unsafe_allow_html=True)
 
-        image = back_camera_input(key=f"hud_cam_{st.session_state.scan_count}")
+        # Scan line animation — shown while awaiting user capture
+        if st.session_state.get('scanning'):
+            components.html(f"""
+<style>
+@keyframes scanline{{0%{{top:8%}}50%{{top:82%}}100%{{top:8%}}}}
+.sl-wrap{{position:relative;height:48px;border-radius:10px;overflow:hidden;
+          background:linear-gradient(180deg,rgba(242,180,197,0.04) 0%,rgba(124,158,56,0.04) 100%);
+          border:1px solid rgba(242,180,197,0.12);margin-bottom:4px;}}
+.sl{{position:absolute;left:0;right:0;height:2px;
+     background:linear-gradient(90deg,transparent 0%,{C['teal']} 30%,#ffffff88 50%,{C['teal']} 70%,transparent 100%);
+     box-shadow:0 0 8px {C['teal']};
+     animation:scanline 1.6s ease-in-out infinite;}}
+.sl-label{{position:absolute;right:12px;bottom:6px;font-size:0.65rem;
+           font-family:'Inter',sans-serif;color:{C['teal']};opacity:0.7;letter-spacing:0.5px;}}
+</style>
+<div class="sl-wrap"><div class="sl"></div><div class="sl-label">SCANNING</div></div>
+""", height=56, scrolling=False)
+
+        if back_camera_input is not None:
+            image = back_camera_input(key=f"hud_cam_{st.session_state.scan_count}")
+        else:
+            image = st.camera_input("Scan item", key=f"hud_cam_{st.session_state.scan_count}")
+
+        # Floating health score bubble for the latest scanned item
+        scan_history = st.session_state.get('scan_history', [])
+        if scan_history:
+            latest = scan_history[-1]
+            st.markdown(f"""
+                <div style="display:flex;align-items:center;gap:14px;
+                            background:{C['bg_card']};border:1px solid {latest['color']}44;
+                            border-left:4px solid {latest['color']};
+                            border-radius:14px;padding:12px 16px;margin:10px 0;">
+                    <div style="width:52px;height:52px;border-radius:50%;
+                                background:{latest['color']}22;border:2px solid {latest['color']};
+                                display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                        <span style="font-size:1.2rem;font-weight:900;color:{latest['color']};">
+                            {latest['display_score']}
+                        </span>
+                    </div>
+                    <div>
+                        <div style="font-weight:700;font-size:0.95rem;color:{C['text']};
+                                    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px;">
+                            {latest['name']}
+                        </div>
+                        <div style="font-size:0.75rem;color:{latest['color']};font-weight:600;margin-top:2px;">
+                            {latest['rating']} &nbsp;·&nbsp; <span style="color:{C['text_muted']};">Health Score /10</span>
+                        </div>
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
 
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
+            st.markdown('<div class="olive-btn">', unsafe_allow_html=True)
             if st.session_state.get('scan_error'):
                 if st.button("Scan Again", use_container_width=True):
                     st.session_state.scan_error = None
@@ -1095,7 +1317,35 @@ function startScan(){{
                 st.session_state._captured_image = None
                 st.session_state.scan_error = None
                 st.session_state.scan_count += 1
+                st.session_state.scan_history = []
                 st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
+
+        # Scanned items history list (all items captured this session)
+        if scan_history:
+            st.markdown(f"""
+                <div style="margin-top:14px;">
+                    <div style="font-size:0.75rem;font-weight:700;color:{C['text_muted']};
+                                text-transform:uppercase;letter-spacing:0.6px;margin-bottom:8px;">
+                        This Session — {len(scan_history)} item{'s' if len(scan_history)!=1 else ''} scanned
+                    </div>
+            """, unsafe_allow_html=True)
+            for idx, item in enumerate(reversed(scan_history)):
+                st.markdown(f"""
+                    <div style="display:flex;align-items:center;justify-content:space-between;
+                                background:{C['bg_card']};border:1px solid {C['border']};
+                                border-radius:10px;padding:9px 14px;margin-bottom:6px;">
+                        <div style="font-size:0.88rem;font-weight:600;color:{C['text']};
+                                    flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-right:12px;">
+                            {len(scan_history)-idx}. {item['name']}
+                        </div>
+                        <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+                            <span style="font-size:1rem;font-weight:900;color:{item['color']};">{item['display_score']}</span>
+                            <span style="font-size:0.7rem;color:{C['text_muted']};">/10</span>
+                        </div>
+                    </div>
+                """, unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
 
         # Scanning logic - two-phase: capture acknowledgement, then analyze
         # Phase 1: Image captured - show acknowledgement and prevent duplicate scans
@@ -1119,6 +1369,17 @@ function startScan(){{
                     st.session_state.scan_error = None
                     st.session_state.scanning = True
                     st.session_state.scan_count += 1
+                    # Append primary result to scan history for floating bubble + list
+                    r0 = results[0]
+                    hs0 = vms_to_health_score(r0['vms_score'])
+                    if 'scan_history' not in st.session_state:
+                        st.session_state.scan_history = []
+                    st.session_state.scan_history.append({
+                        'name': r0['name'],
+                        'display_score': vms_to_display_score(r0['vms_score']),
+                        'color': score_color(hs0, 'health'),
+                        'rating': r0['rating'],
+                    })
                 else:
                     st.session_state.scan_status = None
                     st.session_state.scan_error = "Item not found in database — try a clearer angle or different wording"
@@ -1139,6 +1400,7 @@ function startScan(){{
     # Scan results with full item details, nutrition, and grocery list integration
     if st.session_state.scan_results:
         # "Scan Again" at the TOP so the user can immediately go to next item
+        st.markdown('<div class="olive-btn">', unsafe_allow_html=True)
         if st.button("🔄 Scan Again", use_container_width=True, key="scan_again_btn_top"):
             st.session_state.scan_results = None
             st.session_state.selected_result = None
@@ -1146,6 +1408,7 @@ function startScan(){{
             st.session_state.detected_items = []
             st.session_state.scan_count += 1
             st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
 
         st.markdown(f"<h4 style='font-weight:700; margin-top:12px;'>Scan Results</h4>", unsafe_allow_html=True)
         st.markdown(f"<div style='color:{C['text_sec']}; font-size:0.85rem; margin-bottom:12px;'>Found {len(st.session_state.scan_results)} item(s) in frame</div>", unsafe_allow_html=True)
@@ -1190,7 +1453,7 @@ function startScan(){{
                         </div>
                     </div>
                     <div style='display:flex; align-items:center; gap:8px; margin-top:8px;'>
-                        <div style='background:rgba(91,155,157,0.08); padding:4px 12px; border-radius:20px;'>
+                        <div style='background:rgba(238,164,183,0.08); padding:4px 12px; border-radius:20px;'>
                             <span style='color:{C["text_muted"]}; font-size:0.7rem;'>Higher score = healthier choice &middot; </span>
                             <span style='color:{health_clr}; font-weight:600; font-size:0.7rem;'>{rating}</span>
                         </div>
@@ -1240,6 +1503,7 @@ function startScan(){{
                 """, unsafe_allow_html=True)
 
             # Add to Grocery List button for each scanned item
+            st.markdown('<div class="olive-btn">', unsafe_allow_html=True)
             if st.button(f"+ Add to Grocery List", key=f"scan_add_{i}", use_container_width=True):
                 add_calendar_item_db(
                     st.session_state.user_id,
@@ -1259,6 +1523,7 @@ function startScan(){{
                 st.session_state.scan_count += 1
                 time.sleep(0.5)
                 st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
 
 
     # Health Trends - header with tabs on the right
@@ -1319,7 +1584,7 @@ function startScan(){{
                 x=df_pivot.index, y=df_pivot['healthy'], name='Healthy',
                 mode='lines+markers', line=dict(color=C['teal'], width=2.5, shape='spline'),
                 marker=dict(size=7, color=C['teal']), fill='tozeroy',
-                fillcolor='rgba(91,155,157,0.1)',
+                fillcolor='rgba(238,164,183,0.1)',
                 text=hover_texts, hovertemplate='%{text}<extra></extra>'
             ))
         if 'moderate' in df_pivot.columns:
@@ -1379,7 +1644,7 @@ function startScan(){{
         st.markdown(f"""
             <div class='card' style='min-height:200px;'>
                 <div style='display:flex; align-items:center; gap:10px; margin-bottom:12px;'>
-                    <div style='width:36px; height:36px; border-radius:10px; background:rgba(91,155,157,0.15); display:flex; align-items:center; justify-content:center;'>
+                    <div style='width:36px; height:36px; border-radius:10px; background:rgba(238,164,183,0.15); display:flex; align-items:center; justify-content:center;'>
                         <i class='fa-solid fa-heart-pulse' style='color:{C["teal"]}; font-size:1rem;'></i>
                     </div>
                     <div>
@@ -1411,9 +1676,11 @@ function startScan(){{
             st.session_state._loading_insights = False
             st.rerun()
         else:
+            st.markdown('<div class="ai-btn-purple">', unsafe_allow_html=True)
             if st.button("🧠  Get AI Insights", use_container_width=True, type="primary", key="get_insights_btn"):
                 st.session_state._loading_insights = True
                 st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
 
         st.markdown("</div>", unsafe_allow_html=True)
 
@@ -1426,7 +1693,7 @@ function startScan(){{
         st.markdown(f"""
             <div class='card' style='min-height:200px;'>
                 <div style='display:flex; align-items:center; gap:10px; margin-bottom:12px;'>
-                    <div style='width:36px; height:36px; border-radius:10px; background:rgba(91,140,62,0.15); display:flex; align-items:center; justify-content:center;'>
+                    <div style='width:36px; height:36px; border-radius:10px; background:rgba(124,158,56,0.15); display:flex; align-items:center; justify-content:center;'>
                         <i class='fa-solid fa-utensils' style='color:{C["olive"]}; font-size:1rem;'></i>
                     </div>
                     <div>
@@ -1468,9 +1735,11 @@ function startScan(){{
             st.session_state._loading_recipes = False
             st.rerun()
         else:
+            st.markdown('<div class="ai-btn-yellow">', unsafe_allow_html=True)
             if st.button("🌿  Discover Recipes", use_container_width=True, type="primary", key="discover_recipes_btn"):
                 st.session_state._loading_recipes = True
                 st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
 
         st.markdown("</div>", unsafe_allow_html=True)
 
@@ -1598,7 +1867,7 @@ function pickDate(day){{
 
         # Add item — friendly onboarding text
         st.markdown(f"""
-            <div style='background:rgba(91,155,157,0.08); border:1px solid rgba(91,155,157,0.2); border-radius:12px; padding:10px 14px; margin-bottom:10px;'>
+            <div style='background:rgba(238,164,183,0.08); border:1px solid rgba(238,164,183,0.2); border-radius:12px; padding:10px 14px; margin-bottom:10px;'>
                 <div style='font-size:0.8rem; font-weight:600; color:{C["teal"]}; margin-bottom:3px;'>Forgot to scan before buying? No problem!</div>
                 <div style='font-size:0.75rem; color:{C["text_muted"]};'>Search any item below — we'll look up its health score and log it to your haul.</div>
             </div>
@@ -1684,7 +1953,7 @@ elif st.session_state.page == 'account':
     with mid_acc:
         st.markdown(f"""
             <div class='card' style='padding:24px; margin-bottom:16px; text-align:center;'>
-                <div style='width:72px; height:72px; border-radius:50%; background:rgba(91,155,157,0.15);
+                <div style='width:72px; height:72px; border-radius:50%; background:rgba(238,164,183,0.15);
                      display:flex; align-items:center; justify-content:center; margin:0 auto 12px;'>
                     <span style='font-size:2.2rem;'>👤</span>
                 </div>
@@ -1873,9 +2142,11 @@ elif st.session_state.page == 'log':
         st.rerun()
     elif not st.session_state.meal_plan:
         st.markdown(f"<div style='color:{C['text_sec']}; font-size:0.85rem; margin-bottom:8px;'>Based on what you've been buying, get a personalized 7-day meal plan tailored to your grocery hauls.</div>", unsafe_allow_html=True)
+        st.markdown('<div class="ai-btn-purple">', unsafe_allow_html=True)
         if st.button("Generate AI Meal Plan", use_container_width=True, type="primary"):
             st.session_state._loading_meal_plan = True
             st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
 
     if st.session_state.meal_plan:
         day_order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
