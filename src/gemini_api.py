@@ -18,8 +18,8 @@ load_dotenv()
 # === AI MODEL CONFIGURATION ===
 # Text + vision AI via OpenAI-compatible endpoint
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
-GEMINI_AGENT_MODEL = "gemini-2.0-flash"
-GEMINI_SCANNER_MODEL = "gemini-2.0-flash"
+GEMINI_AGENT_MODEL = "gemini-2.5-flash"
+GEMINI_SCANNER_MODEL = "gemini-2.5-flash"
 
 # === DIGITALOCEAN GRADIENT AI CONFIGURATION (for hackathon integration) ===
 GRADIENT_BASE_URL = "https://inference.do-ai.run/v1/"
