@@ -13,6 +13,12 @@ import requests
 import re
 from datetime import datetime, timedelta
 
+from calibration import (
+    row_confidence as _row_confidence,
+    temperature_scale_confidence as _temperature_scale_confidence,
+    confidence_weighted_score as _confidence_weighted_score,
+)
+
 load_dotenv()
 
 # === AI MODEL CONFIGURATION ===
@@ -188,6 +194,7 @@ def _sodium_per_100g(nutriments, serving_g):
     # OFF salt is grams NaCl; sodium is ~39.3% of salt by mass.
     return salt * 0.393, f"{salt_basis}_from_salt"
 
+
 def calculate_vms_science(row):
     try:
         name, _, cal, sug, fib, prot, fat, sod, _, nova = row
@@ -353,6 +360,12 @@ def _normalized_tokens(text: str):
     return [t for t in cleaned.split() if len(t) > 1]
 
 
+_GENERIC_QUERY_TOKENS = {
+    'food', 'item', 'brand', 'product', 'snack', 'drink', 'beverage',
+    'simply', 'original', 'classic', 'flavor', 'flavoured', 'flavored'
+}
+
+
 def _scanner_match_confidence(query: str, result: dict) -> float:
     """Heuristic confidence used to pick scanner matches from search candidates."""
     q_tokens = set(_normalized_tokens(query))
@@ -370,6 +383,19 @@ def _scanner_match_confidence(query: str, result: dict) -> float:
     exact_bonus = 0.35 if q_text and (q_text == n_text or q_text in n_text) else 0.0
 
     return (0.65 * overlap) + (0.35 * jaccard) + exact_bonus
+
+
+def _query_has_specific_tokens(query: str) -> bool:
+    tokens = [t for t in _normalized_tokens(query) if t not in _GENERIC_QUERY_TOKENS]
+    return len(tokens) >= 1
+
+
+def _token_overlap_count(query: str, result: dict) -> int:
+    q_tokens = {t for t in _normalized_tokens(query) if t not in _GENERIC_QUERY_TOKENS}
+    if not q_tokens:
+        return 0
+    all_tokens = set(_normalized_tokens(result.get('name', ''))) | set(_normalized_tokens(result.get('brand', '')))
+    return len(q_tokens & all_tokens)
 
 
 def _has_minimum_nutrition(result: dict) -> bool:
@@ -426,7 +452,9 @@ def search_vantage_db(product_name: str, limit=5, fast_mode=False):
         
         output = []
         for r in results:
-            score = round(calculate_vms_science(r), 1)
+            raw_score = round(calculate_vms_science(r), 1)
+            confidence = _row_confidence(r)
+            score = _confidence_weighted_score(raw_score, confidence)
             rating = "Metabolic Green" if score < 3.0 else "Metabolic Yellow" if score < 7.0 else "Metabolic Red"
 
             full_name = r[0].title()
@@ -441,6 +469,8 @@ def search_vantage_db(product_name: str, limit=5, fast_mode=False):
                 "name": display_name,
                 "brand": brand,
                 "vms_score": score,
+                "raw_vms_score": raw_score,
+                "confidence": round(confidence, 3),
                 "rating": rating,
                 "raw": r
             })
@@ -544,7 +574,9 @@ def search_open_food_facts(product_name: str, limit=5, fast_mode=False):
 
                 row = [name, brand, calories, sugar, fiber, protein, fat, sodium, None, nova]
 
-                score = round(calculate_vms_science(row), 1)
+                raw_score = round(calculate_vms_science(row), 1)
+                confidence = _row_confidence(row)
+                score = _confidence_weighted_score(raw_score, confidence)
                 rating = "Metabolic Green" if score < 3.0 else "Metabolic Yellow" if score < 7.0 else "Metabolic Red"
 
                 display_name = f"{brand.title()} {name.title()}" if brand else name.title()
@@ -553,6 +585,8 @@ def search_open_food_facts(product_name: str, limit=5, fast_mode=False):
                     "name": display_name,
                     "brand": brand.title() if brand else "",
                     "vms_score": score,
+                    "raw_vms_score": raw_score,
+                    "confidence": round(confidence, 3),
                     "rating": rating,
                     "raw": row
                 }
@@ -719,6 +753,8 @@ Be PRECISE. Return ONLY the JSON array, no other text."""
         # FIX 3: Search for ALL detected items
         all_results = []
         for item in detected_items:
+            if not _query_has_specific_tokens(item):
+                continue
             results = search_vantage_db(item, limit=8, fast_mode=True)
             if results and len(results) > 0:
                 nutritionally_valid = [r for r in results if _has_minimum_nutrition(r)]
@@ -730,7 +766,9 @@ Be PRECISE. Return ONLY the JSON array, no other text."""
                     reverse=True
                 )
                 best = scored[0]
-                if _scanner_match_confidence(item, best) >= 0.6:
+                best_conf = _scanner_match_confidence(item, best)
+                overlap = _token_overlap_count(item, best)
+                if best_conf >= 0.6 and overlap >= 2:
                     all_results.append(best)
         
         if all_results:
