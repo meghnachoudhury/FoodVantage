@@ -1477,10 +1477,10 @@ body{{background:{C['bg_card']};font-family:'Inter',sans-serif;overflow:hidden;}
             # Otherwise, display per-100g directly (no heuristic scaling).
             if 'serving_g' in result:
                 scale = result['serving_g'] / 100.0
-                serving_note = f"per {int(result['serving_g'])}g serving"
+                serving_note = "per serving"
             else:
                 scale = 1.0
-                serving_note = "per 100g"
+                serving_note = "per serving"
 
             # Extract nutrition data (raw values are normalized to per 100g in backend)
             cal = round(float(raw[2] or 0) * scale, 1)
