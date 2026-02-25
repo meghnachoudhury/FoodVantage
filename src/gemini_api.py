@@ -353,6 +353,33 @@ def _normalized_tokens(text: str):
     return [t for t in cleaned.split() if len(t) > 1]
 
 
+def _token_query_terms(text: str):
+    """Scanner-oriented search tokens (drop noisy packaging words)."""
+    stopwords = {
+        'and', 'with', 'for', 'the', 'from', 'classic', 'roast', 'blend',
+        'flavor', 'flavour', 'original', 'instant', 'premium', 'natural',
+        'fresh', 'food', 'item', 'items', 'pack', 'can', 'bottle', 'jar',
+        'oz', 'ml', 'g', 'kg', 'lb', 'lbs'
+    }
+    tokens = []
+    for tok in _normalized_tokens(text):
+        if tok in stopwords:
+            continue
+        if tok.isdigit():
+            continue
+        if len(tok) < 3:
+            continue
+        tokens.append(tok)
+    # Preserve order while deduplicating
+    seen = set()
+    out = []
+    for tok in tokens:
+        if tok not in seen:
+            out.append(tok)
+            seen.add(tok)
+    return out
+
+
 def _scanner_match_confidence(query: str, result: dict) -> float:
     """Heuristic confidence used to pick scanner matches from search candidates."""
     q_tokens = set(_normalized_tokens(query))
@@ -401,6 +428,7 @@ def search_vantage_db(product_name: str, limit=5, fast_mode=False):
     if not con: return None
     try:
         safe_name = product_name.replace("'", "''")
+        search_terms = _token_query_terms(product_name)
         
         query = f"""
             SELECT * FROM products 
@@ -418,6 +446,25 @@ def search_vantage_db(product_name: str, limit=5, fast_mode=False):
         """
         
         results = con.execute(query).fetchall()
+
+        # Tokenized fallback for long/noisy scanner labels.
+        # Example: "illy instant classico classic roast" should still find
+        # products containing "illy" + "classico" even if the full phrase is absent.
+        if (not results or len(results) == 0) and search_terms:
+            token_clauses = [
+                f"(product_name ILIKE '%{t}%' OR COALESCE(brand, '') ILIKE '%{t}%')"
+                for t in search_terms[:5]
+            ]
+            if token_clauses:
+                fallback_query = f"""
+                    SELECT * FROM products
+                    WHERE {' AND '.join(token_clauses)}
+                    ORDER BY
+                        LENGTH(product_name),
+                        sugar DESC
+                    LIMIT {limit}
+                """
+                results = con.execute(fallback_query).fetchall()
         
         # If no results in local DB, try Open Food Facts API
         if not results or len(results) == 0:
@@ -730,7 +777,13 @@ Be PRECISE. Return ONLY the JSON array, no other text."""
                     reverse=True
                 )
                 best = scored[0]
-                if _scanner_match_confidence(item, best) >= 0.6:
+                conf = _scanner_match_confidence(item, best)
+                # 0.6 is too strict for label-heavy OCR/vision strings
+                # (e.g. includes roast/blend/size descriptors).
+                if conf >= 0.38:
+                    all_results.append(best)
+                elif conf >= 0.25 and len(detected_items) == 1:
+                    # Single-item scans should degrade gracefully instead of hard-failing.
                     all_results.append(best)
         
         if all_results:
