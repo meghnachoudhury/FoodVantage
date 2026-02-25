@@ -18,8 +18,8 @@ load_dotenv()
 # === AI MODEL CONFIGURATION ===
 # Text + vision AI via OpenAI-compatible endpoint
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
-GEMINI_AGENT_MODEL = "gemini-2.0-flash"
-GEMINI_SCANNER_MODEL = "gemini-2.0-flash"
+GEMINI_AGENT_MODEL = "gemini-2.5-flash"
+GEMINI_SCANNER_MODEL = "gemini-2.5-flash"
 
 # === DIGITALOCEAN GRADIENT AI CONFIGURATION (for hackathon integration) ===
 GRADIENT_BASE_URL = "https://inference.do-ai.run/v1/"
@@ -28,15 +28,16 @@ GRADIENT_MODEL = "llama3.3-70b-instruct"
 # System prompt that forces Gemini to return raw JSON without markdown wrapping
 _JSON_SYSTEM = "You are a JSON API. Return ONLY valid JSON with no markdown, no code fences, no explanation. Start your response directly with { or [."
 
-# gemini-2.0-flash is a non-thinking model: thinkingConfig is not applicable.
-# Keep these as empty dicts so existing **_LIGHT_THINKING / **_NO_THINKING
-# spreads in API calls become no-ops rather than sending unsupported parameters.
-_NO_THINKING = {}
-_SCANNER_LIGHT_THINKING = {}
-_LIGHT_THINKING = {}
+# gemini-2.5-flash has thinking ENABLED by default.
+# We must explicitly set thinkingBudget=0 to disable it for fast/reliable calls,
+# or a small budget for agent calls that benefit from light reasoning.
+# Without this, thinking tokens consume max_tokens causing empty/400 responses.
+_NO_THINKING = {"extra_body": {"google": {"thinkingConfig": {"thinkingBudget": 0}}}}
+_SCANNER_LIGHT_THINKING = {"extra_body": {"google": {"thinkingConfig": {"thinkingBudget": 0}}}}
+_LIGHT_THINKING = {"extra_body": {"google": {"thinkingConfig": {"thinkingBudget": 512}}}}
 
 _MAX_TOKENS_VISION = 1536   # scanner JSON can include multiple label-heavy items
-_MAX_TOKENS_TEXT = 4096
+_MAX_TOKENS_TEXT = 8192     # increased to give agents room alongside light thinking
 
 
 class ScannerAnalysisError(Exception):

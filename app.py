@@ -5,6 +5,7 @@ import os
 import base64
 import pandas as pd
 import hashlib
+import hmac
 import calendar as cal_module
 import time
 from datetime import datetime, timedelta
@@ -28,6 +29,35 @@ try:
     from streamlit_back_camera_input import back_camera_input
 except ImportError:
     back_camera_input = None
+
+# --- SESSION PERSISTENCE HELPERS ---
+_SESSION_SECRET = os.environ.get("SESSION_SECRET", "foodvantage-session-key-2024").encode()
+_SESSION_EXPIRY_DAYS = 30
+
+def _make_session_token(username: str) -> str:
+    expiry = int(time.time()) + _SESSION_EXPIRY_DAYS * 86400
+    payload = f"{username}:{expiry}"
+    sig = hmac.new(_SESSION_SECRET, payload.encode(), hashlib.sha256).hexdigest()
+    return base64.urlsafe_b64encode(f"{payload}:{sig}".encode()).decode()
+
+def _verify_session_token(token: str):
+    """Returns username if token is valid and not expired, None otherwise."""
+    try:
+        decoded = base64.urlsafe_b64decode(token.encode()).decode()
+        # rsplit from right preserves usernames containing ':'
+        parts = decoded.rsplit(":", 2)
+        if len(parts) != 3:
+            return None
+        username, expiry_str, sig = parts
+        if time.time() > int(expiry_str):
+            return None
+        payload = f"{username}:{expiry_str}"
+        expected = hmac.new(_SESSION_SECRET, payload.encode(), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(sig, expected):
+            return None
+        return username
+    except Exception:
+        return None
 
 st.set_page_config(page_title="FoodVantage", page_icon="🥗", layout="wide", initial_sidebar_state="collapsed")
 
@@ -63,6 +93,20 @@ if '_loading_meal_plan' not in st.session_state: st.session_state._loading_meal_
 if 'cal_date' not in st.session_state: st.session_state.cal_date = datetime.now().date()
 if 'cal_year' not in st.session_state: st.session_state.cal_year = datetime.now().year
 if 'cal_month' not in st.session_state: st.session_state.cal_month = datetime.now().month
+
+# Restore login from persistent signed URL token (survives page refresh)
+if not st.session_state.logged_in:
+    _tok = st.query_params.get("_s")
+    if _tok:
+        _restored = _verify_session_token(_tok)
+        if _restored:
+            st.session_state.logged_in = True
+            st.session_state.user_id = _restored
+        else:
+            try:
+                del st.query_params["_s"]
+            except Exception:
+                pass
 
 
 # --- DARK THEME COLOR PALETTE ---
@@ -914,6 +958,10 @@ with st.sidebar:
             st.session_state.meal_plan = None
             st.session_state.daily_recipes = None
             st.session_state.user_allergies = None
+            try:
+                del st.query_params["_s"]
+            except Exception:
+                pass
             st.rerun()
 
         # Streak Card
@@ -994,6 +1042,7 @@ if not st.session_state.logged_in:
                     st.session_state.user_id = login_user.strip()
                     st.session_state.page = 'dashboard'
                     st.session_state.user_allergies = None
+                    st.query_params["_s"] = _make_session_token(login_user.strip())
                     st.rerun()
                 else:
                     st.error("Invalid username or password.")
@@ -1183,18 +1232,11 @@ body{{background:{C['bg_card']};font-family:'Inter',sans-serif;overflow:hidden;}
 <div class="vf">
   <div class="corner tl"></div><div class="corner tr"></div>
   <div class="corner bl"></div><div class="corner br"></div>
-  <div class="icon-btn" onclick="startScan()"><i class="fa-solid fa-camera"></i></div>
+  <div class="icon-btn"><i class="fa-solid fa-camera"></i></div>
   <div class="rt">Scanner ready</div>
-  <div class="ht">Tap the camera icon or the button below</div>
+  <div class="ht">Tap the button below to start scanning</div>
 </div>
-<script>
-function startScan(){{
-  var btns=window.parent.document.querySelectorAll('button');
-  for(var i=0;i<btns.length;i++){{
-    if(btns[i].innerText.trim().includes('Start Live Scan')){{btns[i].click();return;}}
-  }}
-}}
-</script></body></html>""", height=200, scrolling=False)
+</body></html>""", height=200, scrolling=False)
         st.markdown('<div class="olive-btn">', unsafe_allow_html=True)
         if st.button("Start Live Scan", type="primary", use_container_width=True):
             st.session_state.camera_active = True
@@ -1996,6 +2038,10 @@ elif st.session_state.page == 'account':
             st.session_state.meal_plan = None
             st.session_state.daily_recipes = None
             st.session_state.user_allergies = None
+            try:
+                del st.query_params["_s"]
+            except Exception:
+                pass
             st.rerun()
 
         # --- Delete Account ---
