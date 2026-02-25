@@ -18,8 +18,8 @@ load_dotenv()
 # === AI MODEL CONFIGURATION ===
 # Text + vision AI via OpenAI-compatible endpoint
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
-GEMINI_AGENT_MODEL = "gemini-2.5-flash"
-GEMINI_SCANNER_MODEL = "gemini-2.5-flash"
+GEMINI_AGENT_MODEL = "gemini-2.0-flash"
+GEMINI_SCANNER_MODEL = "gemini-2.0-flash"
 
 # === DIGITALOCEAN GRADIENT AI CONFIGURATION (for hackathon integration) ===
 GRADIENT_BASE_URL = "https://inference.do-ai.run/v1/"
@@ -28,15 +28,12 @@ GRADIENT_MODEL = "llama3.3-70b-instruct"
 # System prompt that forces Gemini to return raw JSON without markdown wrapping
 _JSON_SYSTEM = "You are a JSON API. Return ONLY valid JSON with no markdown, no code fences, no explanation. Start your response directly with { or [."
 
-# Speed optimisation: disable Gemini's "thinking" mode for structured JSON tasks.
-# Thinking tokens consume the max_tokens budget first and slow response by 5-15s.
-# For scanner (vision) use budget=0 (no thinking). For agent text tasks use a
-# small budget (512 tokens) to still allow a brief reasoning pass.
-_NO_THINKING = {"extra_body": {"google": {"thinkingConfig": {"thinkingBudget": 0}}}}
-# Middle-ground scanner reasoning budget: improves OCR/label extraction accuracy
-# without the long delays of full thinking.
-_SCANNER_LIGHT_THINKING = {"extra_body": {"google": {"thinkingConfig": {"thinkingBudget": 128}}}}
-_LIGHT_THINKING = {"extra_body": {"google": {"thinkingConfig": {"thinkingBudget": 512}}}}
+# gemini-2.0-flash is a non-thinking model: thinkingConfig is not applicable.
+# Keep these as empty dicts so existing **_LIGHT_THINKING / **_NO_THINKING
+# spreads in API calls become no-ops rather than sending unsupported parameters.
+_NO_THINKING = {}
+_SCANNER_LIGHT_THINKING = {}
+_LIGHT_THINKING = {}
 
 _MAX_TOKENS_VISION = 1536   # scanner JSON can include multiple label-heavy items
 _MAX_TOKENS_TEXT = 4096
@@ -725,9 +722,11 @@ CRITICAL RULES:
 2. For PACKAGED goods: Use exact product name from label or try to identify and recognize the shape, color, extra text in the packaging (when brand and main face side of product not captured), and type of product and container if not directly visible.
 3. For FRESH produce: Use common name, count each piece. Remember even though some packaged items may contain fruit in it, does not mean it is healthy. (For example, orange juice)
 4. List ALL items you see in the frame
-5. Scan the ENTIRE visible areaReturn a JSON array like: ["Apple", "Banana", "Banana", "Orange", "Coca Cola"]
+5. Scan the ENTIRE visible area
 
-If you see 2 apples, list "Apples" with "quantity 2".
+Return a JSON array like: ["Apple", "Banana", "Banana", "Orange", "Coca Cola"]
+
+If you see 2 apples, list "Apple" twice.
 Be PRECISE. Return ONLY the JSON array, no other text."""
 
         client = get_gemini_client()
