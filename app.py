@@ -874,7 +874,7 @@ with st.sidebar:
         page = st.session_state.page
         nav_items = [
             ('dashboard', '𖠿', 'Dashboard'),
-            ('calendar', '📅', 'Calendar'),
+            ('calendar', '🗓︎', 'Calendar'),
             ('log',       '🥘', 'Cook With It'),
         ]
         st.markdown('<div class="sidebar-nav">', unsafe_allow_html=True)
@@ -896,7 +896,7 @@ with st.sidebar:
 
         # Logout button at very bottom
         st.markdown(f"<div style='height:12px;'></div>", unsafe_allow_html=True)
-        if st.button("🚪  Logout", key="sidebar_logout", use_container_width=True, type="secondary"):
+        if st.button("⎋  Logout", key="sidebar_logout", use_container_width=True, type="secondary"):
             _reset_scanner()
             st.session_state.logged_in = False
             st.session_state.user_id = None
@@ -1238,7 +1238,7 @@ function startScan(){{
             preview = ", ".join(st.session_state.detected_items[:3])
             st.markdown(f"""
                 <div class="scanner-result">
-                    <div class="scanner-result-title">👁️ Items Detected</div>
+                    <div class="scanner-result-title">🔍 Items Detected</div>
                     <div class="scanner-result-text">{preview}</div>
                 </div>
             """, unsafe_allow_html=True)
