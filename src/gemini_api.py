@@ -1136,14 +1136,52 @@ Return ONLY valid JSON array, no other text:
 # writes from two simultaneous users cause race conditions and silent data corruption.
 _db_thread_local = threading.local()
 
+
+def _init_user_db_schema(con):
+    """Ensure required auth/calendar/allergy tables exist."""
+    con.execute("CREATE TABLE IF NOT EXISTS users (username VARCHAR PRIMARY KEY, password_hash VARCHAR)")
+    try:
+        con.execute("CREATE SEQUENCE IF NOT EXISTS seq_cal_id START 1")
+    except Exception:
+        pass
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS calendar (
+            id INTEGER DEFAULT nextval('seq_cal_id'),
+            username VARCHAR,
+            date DATE,
+            item_name VARCHAR,
+            score FLOAT,
+            category VARCHAR
+        )
+    """)
+    con.execute("CREATE TABLE IF NOT EXISTS allergies (username VARCHAR, allergy_name VARCHAR)")
+
 def get_db_connection():
     """Return a per-thread DuckDB connection to the user data store."""
     if not getattr(_db_thread_local, 'con', None):
-        con = duckdb.connect('data/user_data.db', read_only=False)
-        con.execute("CREATE TABLE IF NOT EXISTS users (username VARCHAR PRIMARY KEY, password_hash VARCHAR)")
-        try: con.execute("CREATE SEQUENCE IF NOT EXISTS seq_cal_id START 1")
-        except: pass
-        con.execute("CREATE TABLE IF NOT EXISTS calendar (id INTEGER DEFAULT nextval('seq_cal_id'), username VARCHAR, date DATE, item_name VARCHAR, score FLOAT, category VARCHAR)")
+        db_path = 'data/user_data.db'
+        os.makedirs(os.path.dirname(db_path), exist_ok=True)
+
+        # Recover from zero-byte database files (common after failed deploy/startup).
+        if os.path.exists(db_path) and os.path.getsize(db_path) == 0:
+            os.remove(db_path)
+
+        try:
+            con = duckdb.connect(db_path, read_only=False)
+        except duckdb.IOException as e:
+            # Last-resort recovery for corrupted/non-duckdb files.
+            if "not a valid DuckDB database file" in str(e):
+                backup_path = f"{db_path}.corrupt"
+                if os.path.exists(backup_path):
+                    os.remove(backup_path)
+                if os.path.exists(db_path):
+                    os.replace(db_path, backup_path)
+                con = duckdb.connect(db_path, read_only=False)
+                print(f"[AUTH] Rebuilt invalid user DB. Backup saved to {backup_path}")
+            else:
+                raise
+
+        _init_user_db_schema(con)
         _db_thread_local.con = con
     return _db_thread_local.con
 
