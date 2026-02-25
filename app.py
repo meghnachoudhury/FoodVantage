@@ -90,6 +90,9 @@ if 'allergy_popup_open' not in st.session_state: st.session_state.allergy_popup_
 if '_loading_insights' not in st.session_state: st.session_state._loading_insights = False
 if '_loading_recipes' not in st.session_state: st.session_state._loading_recipes = False
 if '_loading_meal_plan' not in st.session_state: st.session_state._loading_meal_plan = False
+if '_ai_insights_error' not in st.session_state: st.session_state._ai_insights_error = None
+if '_ai_recipes_error' not in st.session_state: st.session_state._ai_recipes_error = None
+if '_ai_meal_plan_error' not in st.session_state: st.session_state._ai_meal_plan_error = None
 if 'cal_date' not in st.session_state: st.session_state.cal_date = datetime.now().date()
 if 'cal_year' not in st.session_state: st.session_state.cal_year = datetime.now().year
 if 'cal_month' not in st.session_state: st.session_state.cal_month = datetime.now().month
@@ -1427,7 +1430,7 @@ body{{background:{C['bg_card']};font-family:'Inter',sans-serif;overflow:hidden;}
                 elif "empty response" in err_lower:
                     st.session_state.scan_error = "Could not read label clearly — please try a steadier angle"
                 else:
-                    st.session_state.scan_error = "AI scan unavailable — please retry in a moment"
+                    st.session_state.scan_error = f"Scan error: {error_msg[:120]}"
                 st.session_state.scan_status = None
                 st.session_state._captured_image = None
                 st.session_state.scanning = True
@@ -1718,13 +1721,19 @@ body{{background:{C['bg_card']};font-family:'Inter',sans-serif;overflow:hidden;}
                 insights = generate_health_insights(raw, all_data, days)
                 if insights:
                     st.session_state.ai_insights = insights
-                else: st.warning("Could not generate insights.")
-            except Exception as e: st.error(f"Error: {e}")
+                    st.session_state._ai_insights_error = None
+                else:
+                    st.session_state._ai_insights_error = "No insights returned — please try again."
+            except Exception as e:
+                st.session_state._ai_insights_error = str(e)
             st.session_state._loading_insights = False
             st.rerun()
         else:
+            if st.session_state._ai_insights_error:
+                st.error(f"AI error: {st.session_state._ai_insights_error}")
             st.markdown('<div class="ai-btn-purple">', unsafe_allow_html=True)
             if st.button("🧠  Get AI Insights", use_container_width=True, type="primary", key="get_insights_btn"):
+                st.session_state._ai_insights_error = None
                 st.session_state._loading_insights = True
                 st.rerun()
             st.markdown('</div>', unsafe_allow_html=True)
@@ -1777,13 +1786,19 @@ body{{background:{C['bg_card']};font-family:'Inter',sans-serif;overflow:hidden;}
                 if recipes:
                     st.session_state.daily_recipes = recipes
                     st.session_state.recipes_date = today_str
-                else: st.warning("Could not load recipes.")
-            except Exception as e: st.error(f"Error: {e}")
+                    st.session_state._ai_recipes_error = None
+                else:
+                    st.session_state._ai_recipes_error = "No recipes returned — please try again."
+            except Exception as e:
+                st.session_state._ai_recipes_error = str(e)
             st.session_state._loading_recipes = False
             st.rerun()
         else:
+            if st.session_state._ai_recipes_error:
+                st.error(f"AI error: {st.session_state._ai_recipes_error}")
             st.markdown('<div class="ai-btn-yellow">', unsafe_allow_html=True)
             if st.button("🌿  Discover Recipes", use_container_width=True, type="primary", key="discover_recipes_btn"):
+                st.session_state._ai_recipes_error = None
                 st.session_state._loading_recipes = True
                 st.rerun()
             st.markdown('</div>', unsafe_allow_html=True)
@@ -2187,14 +2202,20 @@ elif st.session_state.page == 'log':
             plan = generate_meal_plan(history_data, st.session_state.user_id)
             if plan:
                 st.session_state.meal_plan = plan
-            else: st.warning("Could not generate meal plan.")
-        except Exception as e: st.error(f"Error: {e}")
+                st.session_state._ai_meal_plan_error = None
+            else:
+                st.session_state._ai_meal_plan_error = "No meal plan returned — please try again."
+        except Exception as e:
+            st.session_state._ai_meal_plan_error = str(e)
         st.session_state._loading_meal_plan = False
         st.rerun()
     elif not st.session_state.meal_plan:
+        if st.session_state._ai_meal_plan_error:
+            st.error(f"AI error: {st.session_state._ai_meal_plan_error}")
         st.markdown(f"<div style='color:{C['text_sec']}; font-size:0.85rem; margin-bottom:8px;'>Based on what you've been buying, get a personalized 7-day meal plan tailored to your grocery hauls.</div>", unsafe_allow_html=True)
         st.markdown('<div class="ai-btn-purple">', unsafe_allow_html=True)
         if st.button("Generate AI Meal Plan", use_container_width=True, type="primary"):
+            st.session_state._ai_meal_plan_error = None
             st.session_state._loading_meal_plan = True
             st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
