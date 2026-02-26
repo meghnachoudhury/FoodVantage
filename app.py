@@ -745,10 +745,10 @@ st.markdown(f"""
 
     /* === OLIVE SCAN BUTTONS === */
     .olive-btn .stButton > button {{
-        background: rgba(124,158,56,0.2) !important;
+        background: rgba(54,94,67,0.2) !important;
     }}
     .olive-btn .stButton > button:hover {{
-        background: rgba(124,158,56,0.3) !important;
+        background: rgba(54,94,67,0.3) !important;
         box-shadow: 0 4px 16px rgba(124,158,56,0.2) !important;
     }}
 
@@ -1121,7 +1121,7 @@ if st.session_state.page == 'dashboard':
     """, unsafe_allow_html=True)
 
     # Active Focus Scanner
-    st.markdown(f"<h3 style='font-weight:700; margin-top:24px;'>&#128722; Grocery Scanner</h3>", unsafe_allow_html=True)
+    st.markdown(f"<h3 style='font-weight:700; margin-top:24px;'>🍏 Grocery Scanner</h3>", unsafe_allow_html=True)
 
     if not st.session_state.camera_active:
         # Scanner viewfinder rendered in components.html() so onclick works
