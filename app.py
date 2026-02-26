@@ -1647,7 +1647,7 @@ body{{background:{C['bg_card']};font-family:'Inter',sans-serif;overflow:hidden;}
             if st.session_state._ai_insights_error:
                 st.error(f"AI error: {st.session_state._ai_insights_error}")
             st.markdown('<div class="ai-btn-purple">', unsafe_allow_html=True)
-            if st.button("🧠  Get AI Insights", use_container_width=True, type="primary", key="get_insights_btn"):
+            if st.button("Get AI Insights", use_container_width=True, type="primary", key="get_insights_btn"):
                 st.session_state._ai_insights_error = None
                 st.session_state._loading_insights = True
                 st.rerun()
@@ -1712,7 +1712,7 @@ body{{background:{C['bg_card']};font-family:'Inter',sans-serif;overflow:hidden;}
             if st.session_state._ai_recipes_error:
                 st.error(f"AI error: {st.session_state._ai_recipes_error}")
             st.markdown('<div class="ai-btn-yellow">', unsafe_allow_html=True)
-            if st.button("🌿  Discover Recipes", use_container_width=True, type="primary", key="discover_recipes_btn"):
+            if st.button("Discover Recipes", use_container_width=True, type="primary", key="discover_recipes_btn"):
                 st.session_state._ai_recipes_error = None
                 st.session_state._loading_recipes = True
                 st.rerun()
