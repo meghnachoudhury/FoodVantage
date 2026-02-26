@@ -9,4 +9,5 @@ headless = true
 gatherUsageStats = false
 
 [client]
-showErrorDetails = true
+showErrorDetails = false
+toolbarMode = "minimal"
