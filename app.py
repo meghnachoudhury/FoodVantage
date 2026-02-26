@@ -19,7 +19,8 @@ from gemini_api import (
     get_db_connection, get_trend_data_db, get_all_calendar_data_db,
     get_gemini_api_key, authenticate_user,
     add_calendar_item_db, get_calendar_items_db, delete_item_db,
-    get_log_history_db, create_user, user_exists, reset_password,
+    get_log_history_db, get_last_shopping_items_db, get_user_stats_db,
+    create_user, user_exists, reset_password,
     change_password, delete_account,
     vms_to_health_score, calculate_overall_health_score, calculate_day_streak,
     get_total_items_logged, get_items_today,
@@ -93,6 +94,7 @@ if '_loading_meal_plan' not in st.session_state: st.session_state._loading_meal_
 if '_ai_insights_error' not in st.session_state: st.session_state._ai_insights_error = None
 if '_ai_recipes_error' not in st.session_state: st.session_state._ai_recipes_error = None
 if '_ai_meal_plan_error' not in st.session_state: st.session_state._ai_meal_plan_error = None
+if '_meal_plan_date' not in st.session_state: st.session_state._meal_plan_date = None
 if 'cal_date' not in st.session_state: st.session_state.cal_date = datetime.now().date()
 if 'cal_year' not in st.session_state: st.session_state.cal_year = datetime.now().year
 if 'cal_month' not in st.session_state: st.session_state.cal_month = datetime.now().month
@@ -599,6 +601,25 @@ st.markdown(f"""
     }}
     .nav-btn i {{ width: 20px; text-align: center; font-size: 0.95rem; }}
 
+    /* Solid Font Awesome icons injected before each sidebar nav button */
+    .nav-icon-dashboard button::before,
+    .nav-icon-calendar button::before,
+    .nav-icon-log button::before,
+    .nav-icon-account button::before {{
+        font-family: "Font Awesome 6 Free";
+        font-weight: 900;
+        margin-right: 10px;
+        color: {C['olive']};
+        font-size: 0.95rem;
+        width: 18px;
+        display: inline-block;
+        text-align: center;
+    }}
+    .nav-icon-dashboard button::before {{ content: "\f015"; }}
+    .nav-icon-calendar button::before  {{ content: "\f073"; }}
+    .nav-icon-log button::before       {{ content: "\f2e7"; }}
+    .nav-icon-account button::before   {{ content: "\f007"; }}
+
     /* === INFO / WARNING / SUCCESS overrides === */
     .stAlert {{
         background: {C['bg_card']} !important;
@@ -741,116 +762,6 @@ st.markdown(f"""
     </style>
 """, unsafe_allow_html=True)
 
-# --- Botanical Corner Illustrations ---
-st.markdown(f"""
-<div style="position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:0;overflow:hidden;">
-
-  <!-- TOP-RIGHT: elegant herb sprig with paired leaves + berry accents -->
-  <div style="position:absolute;top:-8px;right:-8px;width:280px;height:280px;opacity:0.22;">
-    <svg viewBox="0 0 280 280" width="280" height="280" xmlns="http://www.w3.org/2000/svg">
-      <!-- Main curved stem from corner inward -->
-      <path d="M272,6 C258,28 240,58 220,90 C200,122 180,152 164,180 C152,200 144,220 140,238"
-            stroke="#7c9e38" stroke-width="1.8" fill="none" opacity="0.85"/>
-      <!-- Leaf pair 1 -->
-      <path d="M252,26 C262,16 274,12 269,26 C265,38 253,42 252,26Z" fill="#7c9e38" opacity="0.7"/>
-      <path d="M252,26 C242,18 236,10 244,22 C248,28 251,34 252,26Z" fill="#96b348" opacity="0.55"/>
-      <line x1="252" y1="26" x2="268" y2="16" stroke="#b0cc68" stroke-width="0.8" opacity="0.5"/>
-      <line x1="252" y1="26" x2="240" y2="16" stroke="#b0cc68" stroke-width="0.8" opacity="0.5"/>
-      <!-- Leaf pair 2 -->
-      <path d="M234,52 C246,40 260,36 254,52 C249,65 234,68 234,52Z" fill="#7c9e38" opacity="0.65"/>
-      <path d="M234,52 C222,42 216,32 226,46 C230,54 233,61 234,52Z" fill="#96b348" opacity="0.5"/>
-      <line x1="234" y1="52" x2="250" y2="40" stroke="#b0cc68" stroke-width="0.8" opacity="0.45"/>
-      <line x1="234" y1="52" x2="220" y2="40" stroke="#b0cc68" stroke-width="0.8" opacity="0.45"/>
-      <!-- Leaf pair 3 -->
-      <path d="M212,82 C226,68 242,64 235,82 C229,97 212,100 212,82Z" fill="#7c9e38" opacity="0.6"/>
-      <path d="M212,82 C198,70 192,58 204,74 C208,82 211,91 212,82Z" fill="#96b348" opacity="0.48"/>
-      <line x1="212" y1="82" x2="230" y2="68" stroke="#b0cc68" stroke-width="0.8" opacity="0.4"/>
-      <line x1="212" y1="82" x2="196" y2="68" stroke="#b0cc68" stroke-width="0.8" opacity="0.4"/>
-      <!-- Leaf pair 4 -->
-      <path d="M192,114 C208,98 226,94 218,114 C211,130 192,134 192,114Z" fill="#7c9e38" opacity="0.55"/>
-      <path d="M192,114 C176,100 170,88 183,104 C187,114 191,124 192,114Z" fill="#96b348" opacity="0.44"/>
-      <!-- Leaf pair 5 -->
-      <path d="M172,146 C188,130 208,126 199,146 C192,162 172,166 172,146Z" fill="#7c9e38" opacity="0.48"/>
-      <path d="M172,146 C156,132 150,120 164,138 C168,148 171,158 172,146Z" fill="#96b348" opacity="0.38"/>
-      <!-- Pink berry cluster -->
-      <circle cx="160" cy="174" r="5.5" fill="{C['teal']}" opacity="0.65"/>
-      <circle cx="148" cy="188" r="3.8" fill="{C['teal']}" opacity="0.55"/>
-      <circle cx="168" cy="186" r="3.2" fill="{C['teal_light']}" opacity="0.5"/>
-      <circle cx="142" cy="202" r="2.6" fill="{C['teal']}" opacity="0.42"/>
-      <!-- Tiny olive dots along stem -->
-      <circle cx="248" cy="40" r="2.2" fill="#96b348" opacity="0.4"/>
-      <circle cx="230" cy="66" r="1.8" fill="#96b348" opacity="0.35"/>
-    </svg>
-  </div>
-
-  <!-- BOTTOM-LEFT: same sprig rotated 180° -->
-  <div style="position:absolute;bottom:-8px;left:-8px;width:280px;height:280px;opacity:0.22;transform:rotate(180deg);">
-    <svg viewBox="0 0 280 280" width="280" height="280" xmlns="http://www.w3.org/2000/svg">
-      <path d="M272,6 C258,28 240,58 220,90 C200,122 180,152 164,180 C152,200 144,220 140,238"
-            stroke="#7c9e38" stroke-width="1.8" fill="none" opacity="0.85"/>
-      <path d="M252,26 C262,16 274,12 269,26 C265,38 253,42 252,26Z" fill="#7c9e38" opacity="0.7"/>
-      <path d="M252,26 C242,18 236,10 244,22 C248,28 251,34 252,26Z" fill="#96b348" opacity="0.55"/>
-      <line x1="252" y1="26" x2="268" y2="16" stroke="#b0cc68" stroke-width="0.8" opacity="0.5"/>
-      <line x1="252" y1="26" x2="240" y2="16" stroke="#b0cc68" stroke-width="0.8" opacity="0.5"/>
-      <path d="M234,52 C246,40 260,36 254,52 C249,65 234,68 234,52Z" fill="#7c9e38" opacity="0.65"/>
-      <path d="M234,52 C222,42 216,32 226,46 C230,54 233,61 234,52Z" fill="#96b348" opacity="0.5"/>
-      <line x1="234" y1="52" x2="250" y2="40" stroke="#b0cc68" stroke-width="0.8" opacity="0.45"/>
-      <line x1="234" y1="52" x2="220" y2="40" stroke="#b0cc68" stroke-width="0.8" opacity="0.45"/>
-      <path d="M212,82 C226,68 242,64 235,82 C229,97 212,100 212,82Z" fill="#7c9e38" opacity="0.6"/>
-      <path d="M212,82 C198,70 192,58 204,74 C208,82 211,91 212,82Z" fill="#96b348" opacity="0.48"/>
-      <line x1="212" y1="82" x2="230" y2="68" stroke="#b0cc68" stroke-width="0.8" opacity="0.4"/>
-      <line x1="212" y1="82" x2="196" y2="68" stroke="#b0cc68" stroke-width="0.8" opacity="0.4"/>
-      <path d="M192,114 C208,98 226,94 218,114 C211,130 192,134 192,114Z" fill="#7c9e38" opacity="0.55"/>
-      <path d="M192,114 C176,100 170,88 183,104 C187,114 191,124 192,114Z" fill="#96b348" opacity="0.44"/>
-      <path d="M172,146 C188,130 208,126 199,146 C192,162 172,166 172,146Z" fill="#7c9e38" opacity="0.48"/>
-      <path d="M172,146 C156,132 150,120 164,138 C168,148 171,158 172,146Z" fill="#96b348" opacity="0.38"/>
-      <circle cx="160" cy="174" r="5.5" fill="{C['teal']}" opacity="0.65"/>
-      <circle cx="148" cy="188" r="3.8" fill="{C['teal']}" opacity="0.55"/>
-      <circle cx="168" cy="186" r="3.2" fill="{C['teal_light']}" opacity="0.5"/>
-      <circle cx="142" cy="202" r="2.6" fill="{C['teal']}" opacity="0.42"/>
-      <circle cx="248" cy="40" r="2.2" fill="#96b348" opacity="0.4"/>
-      <circle cx="230" cy="66" r="1.8" fill="#96b348" opacity="0.35"/>
-    </svg>
-  </div>
-
-  <!-- TOP-LEFT: smaller accent sprig -->
-  <div style="position:absolute;top:-6px;left:-6px;width:190px;height:190px;opacity:0.15;">
-    <svg viewBox="0 0 200 200" width="190" height="190" xmlns="http://www.w3.org/2000/svg">
-      <!-- Stem goes from top-left corner down-right -->
-      <path d="M6,194 C18,172 38,146 62,118 C86,90 112,66 130,44 C144,26 150,10 148,2"
-            stroke="#7c9e38" stroke-width="1.5" fill="none" opacity="0.85"/>
-      <!-- Leaf pair 1 -->
-      <path d="M130,44 C140,34 152,28 148,44 C144,57 130,60 130,44Z" fill="#7c9e38" opacity="0.65"/>
-      <path d="M130,44 C118,36 112,26 122,38 C126,46 129,54 130,44Z" fill="#96b348" opacity="0.5"/>
-      <line x1="130" y1="44" x2="146" y2="32" stroke="#b0cc68" stroke-width="0.8" opacity="0.45"/>
-      <line x1="130" y1="44" x2="116" y2="32" stroke="#b0cc68" stroke-width="0.8" opacity="0.45"/>
-      <!-- Leaf pair 2 -->
-      <path d="M108,72 C120,60 136,56 128,72 C122,86 108,90 108,72Z" fill="#7c9e38" opacity="0.58"/>
-      <path d="M108,72 C96,62 90,50 100,64 C104,72 107,81 108,72Z" fill="#96b348" opacity="0.44"/>
-      <!-- Berry accents -->
-      <circle cx="90" cy="100" r="4.5" fill="{C['teal']}" opacity="0.6"/>
-      <circle cx="78" cy="114" r="3" fill="{C['teal_light']}" opacity="0.5"/>
-    </svg>
-  </div>
-
-  <!-- BOTTOM-RIGHT: smaller accent sprig (mirror of top-left) -->
-  <div style="position:absolute;bottom:-6px;right:-6px;width:190px;height:190px;opacity:0.15;transform:rotate(180deg);">
-    <svg viewBox="0 0 200 200" width="190" height="190" xmlns="http://www.w3.org/2000/svg">
-      <path d="M6,194 C18,172 38,146 62,118 C86,90 112,66 130,44 C144,26 150,10 148,2"
-            stroke="#7c9e38" stroke-width="1.5" fill="none" opacity="0.85"/>
-      <path d="M130,44 C140,34 152,28 148,44 C144,57 130,60 130,44Z" fill="#7c9e38" opacity="0.65"/>
-      <path d="M130,44 C118,36 112,26 122,38 C126,46 129,54 130,44Z" fill="#96b348" opacity="0.5"/>
-      <line x1="130" y1="44" x2="146" y2="32" stroke="#b0cc68" stroke-width="0.8" opacity="0.45"/>
-      <line x1="130" y1="44" x2="116" y2="32" stroke="#b0cc68" stroke-width="0.8" opacity="0.45"/>
-      <path d="M108,72 C120,60 136,56 128,72 C122,86 108,90 108,72Z" fill="#7c9e38" opacity="0.58"/>
-      <path d="M108,72 C96,62 90,50 100,64 C104,72 107,81 108,72Z" fill="#96b348" opacity="0.44"/>
-      <circle cx="90" cy="100" r="4.5" fill="{C['teal']}" opacity="0.6"/>
-      <circle cx="78" cy="114" r="3" fill="{C['teal_light']}" opacity="0.5"/>
-    </svg>
-  </div>
-
-</div>
-""", unsafe_allow_html=True)
 
 def render_logo(size="1.6rem"):
     st.markdown(f"""<div style='margin-bottom: 6px;'>
@@ -929,24 +840,28 @@ with st.sidebar:
         # Navigation
         page = st.session_state.page
         nav_items = [
-            ('dashboard', '𖠿', 'Dashboard'),
-            ('calendar', '🗓︎', 'Calendar'),
-            ('log',       '🥘', 'Cook With It'),
+            ('dashboard', 'Dashboard'),
+            ('calendar',  'Calendar'),
+            ('log',       'Cook With It'),
         ]
         st.markdown('<div class="sidebar-nav">', unsafe_allow_html=True)
-        for pg, icon, label in nav_items:
+        for pg, label in nav_items:
             btn_type = "primary" if page == pg else "secondary"
-            if st.button(f"{icon}  {label}", key=f"nav_{pg}", use_container_width=True, type=btn_type):
+            st.markdown(f'<div class="nav-icon-{pg}">', unsafe_allow_html=True)
+            if st.button(label, key=f"nav_{pg}", use_container_width=True, type=btn_type):
                 _reset_scanner()
                 st.session_state.page = pg
                 st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
 
         # Me / Account button
         me_type = "primary" if page == 'account' else "secondary"
-        if st.button("👤  Me", key="nav_account", use_container_width=True, type=me_type):
+        st.markdown('<div class="nav-icon-account">', unsafe_allow_html=True)
+        if st.button("Me", key="nav_account", use_container_width=True, type=me_type):
             _reset_scanner()
             st.session_state.page = 'account'
             st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
 
         st.markdown('</div>', unsafe_allow_html=True)
 
@@ -1007,7 +922,7 @@ if not st.session_state.logged_in:
                 <div style='font-size:2.6rem; font-weight:800; letter-spacing:-0.5px;'>
                     <span style='color:{C["text"]};'>foodvantage</span><span class='logo-dot-blink' style='color:{C["teal"]};'>.</span>
                 </div>
-                <div style='font-size:0.95rem; color:{C['teal']}; margin-top:8px; font-weight:500;'>Know what's in your cart before it's in your body.</div>
+                <div style='font-size:0.95rem; color:{C["olive"]}; margin-top:8px; font-weight:500;'>Know what's in your cart before it's in your body.</div>
             </div>
         """, unsafe_allow_html=True)
 
@@ -1129,7 +1044,7 @@ if st.session_state.page == 'dashboard':
             <div style='font-size:2.4rem; font-weight:800; letter-spacing:-0.5px; line-height:1;'>
                 <span style='color:{C["text"]};'>foodvantage</span><span class='logo-dot-blink' style='color:{C["teal"]};'>.</span>
             </div>
-            <div style='font-size:0.95rem; font-weight:500; color:{C['teal']}; margin-top:10px; letter-spacing:0.2px;'>
+            <div style='font-size:0.95rem; font-weight:500; color:{C["olive"]}; margin-top:10px; letter-spacing:0.2px;'>
                 Know what's in your cart before it's in your body.
             </div>
         </div>
@@ -1473,14 +1388,14 @@ body{{background:{C['bg_card']};font-family:'Inter',sans-serif;overflow:hidden;}
             portion_label = " /serving" if needs_portion_size(result['name']) else ""
             raw = result['raw']
 
-            # If API provides serving size, scale per-100g values to that serving.
-            # Otherwise, display per-100g directly (no heuristic scaling).
+            # If the Open Food Facts API supplied a serving size, scale to it.
+            # Local-DB values are always stored per 100 g — label them accurately.
             if 'serving_g' in result:
                 scale = result['serving_g'] / 100.0
-                serving_note = "per serving"
+                serving_note = f"per serving ({int(result['serving_g'])}g)"
             else:
                 scale = 1.0
-                serving_note = "per serving"
+                serving_note = "per 100g"
 
             # Extract nutrition data (raw values are normalized to per 100g in backend)
             cal = round(float(raw[2] or 0) * scale, 1)
@@ -2083,6 +1998,24 @@ elif st.session_state.page == 'account':
                     time.sleep(1)
                     st.rerun()
 
+        # --- App Stats (visible to all users) ---
+        st.markdown(f"<div style='height:12px;'></div>", unsafe_allow_html=True)
+        with st.expander("📊  App Stats", expanded=False):
+            stats = get_user_stats_db()
+            if stats:
+                c1, c2 = st.columns(2)
+                with c1:
+                    st.markdown(f"<div style='text-align:center; padding:12px; background:{C['bg_elevated']}; border-radius:10px;'><div style='font-size:1.8rem; font-weight:800; color:{C['teal']};'>{stats['total']}</div><div style='font-size:0.75rem; color:{C['text_muted']};'>Registered users</div></div>", unsafe_allow_html=True)
+                with c2:
+                    st.markdown(f"<div style='text-align:center; padding:12px; background:{C['bg_elevated']}; border-radius:10px;'><div style='font-size:1.8rem; font-weight:800; color:{C['olive']};'>{stats['active']}</div><div style='font-size:0.75rem; color:{C['text_muted']};'>Active last 30 days</div></div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='height:10px;'></div>", unsafe_allow_html=True)
+                if stats['users']:
+                    for uname, last_active, items_logged in stats['users']:
+                        last_str = str(last_active) if last_active else "never"
+                        st.markdown(f"<div style='display:flex; justify-content:space-between; font-size:0.8rem; padding:6px 0; border-bottom:1px solid {C['border']};'><span style='color:{C['text_sec']};'>@{uname}</span><span style='color:{C['text_muted']};'>{items_logged} items &middot; last active {last_str}</span></div>", unsafe_allow_html=True)
+            else:
+                st.info("Could not load stats.")
+
 
 # ============================
 # MEAL PLAN PAGE
@@ -2195,13 +2128,14 @@ elif st.session_state.page == 'log':
     if st.session_state._loading_meal_plan:
         st.markdown(f"""<div class='ai-loading' style='padding:24px;'>
             <div class='ai-loading-text'>Hold on...fetching details</div>
-            <div class='ai-loading-sub'>Crafting your personalized 7-day meal plan</div>
+            <div class='ai-loading-sub'>Curating your 3-day plan from your last grocery haul</div>
         </div>""", unsafe_allow_html=True)
         try:
-            history_data = get_log_history_db(st.session_state.user_id)
-            plan = generate_meal_plan(history_data, st.session_state.user_id)
+            last_date, shopping_items = get_last_shopping_items_db(st.session_state.user_id)
+            plan = generate_meal_plan(shopping_items, st.session_state.user_id, last_date)
             if plan:
                 st.session_state.meal_plan = plan
+                st.session_state._meal_plan_date = str(last_date) if last_date else None
                 st.session_state._ai_meal_plan_error = None
             else:
                 st.session_state._ai_meal_plan_error = "No meal plan returned — please try again."
@@ -2212,7 +2146,15 @@ elif st.session_state.page == 'log':
     elif not st.session_state.meal_plan:
         if st.session_state._ai_meal_plan_error:
             st.error(f"AI error: {st.session_state._ai_meal_plan_error}")
-        st.markdown(f"<div style='color:{C['text_sec']}; font-size:0.85rem; margin-bottom:8px;'>Based on what you've been buying, get a personalized 7-day meal plan tailored to your grocery hauls.</div>", unsafe_allow_html=True)
+        _last_d, _ = get_last_shopping_items_db(st.session_state.user_id)
+        if _last_d:
+            try:
+                _fmt = _last_d.strftime("%-d %B %Y") if hasattr(_last_d, 'strftime') else str(_last_d)
+            except Exception:
+                _fmt = str(_last_d)
+            st.markdown(f"<div style='color:{C['text_sec']}; font-size:0.85rem; margin-bottom:8px;'>Based on what you bought on <strong>{_fmt}</strong>, get a curated 3-day meal plan using only those items.</div>", unsafe_allow_html=True)
+        else:
+            st.markdown(f"<div style='color:{C['text_sec']}; font-size:0.85rem; margin-bottom:8px;'>Scan and log your grocery haul first, then generate a curated 3-day meal plan from those items.</div>", unsafe_allow_html=True)
         st.markdown('<div class="ai-btn-purple">', unsafe_allow_html=True)
         if st.button("Generate AI Meal Plan", use_container_width=True, type="primary"):
             st.session_state._ai_meal_plan_error = None
@@ -2221,9 +2163,16 @@ elif st.session_state.page == 'log':
         st.markdown('</div>', unsafe_allow_html=True)
 
     if st.session_state.meal_plan:
-        day_order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+        day_order = ["Today", "Tomorrow", "Day After"]
         plan = st.session_state.meal_plan
         today_str = datetime.now().strftime("%Y-%m-%d")
+        _plan_date = st.session_state.get('_meal_plan_date')
+        if _plan_date:
+            try:
+                _plan_date_fmt = datetime.strptime(_plan_date, '%Y-%m-%d').strftime("%-d %B %Y")
+            except Exception:
+                _plan_date_fmt = _plan_date
+            st.markdown(f"<div style='color:{C['text_muted']}; font-size:0.8rem; margin-bottom:8px;'>Based on what you bought on <strong style='color:{C['text_sec']};'>{_plan_date_fmt}</strong></div>", unsafe_allow_html=True)
 
         for day_name in day_order:
             meals = plan.get(day_name, [])
