@@ -262,32 +262,46 @@ st.markdown(f"""
     }}
 
     /* === AI ACTION BUTTONS (dark opaque, like dashboard tiles) === */
-    .ai-btn-purple .stButton > button {{
+    @keyframes ai-glow-purple {{
+        0%, 100% {{ box-shadow: 0 0 0 0 rgba(168,155,192,0); }}
+        50% {{ box-shadow: 0 0 14px 3px rgba(168,155,192,0.28); }}
+    }}
+    @keyframes ai-glow-yellow {{
+        0%, 100% {{ box-shadow: 0 0 0 0 rgba(249,168,37,0); }}
+        50% {{ box-shadow: 0 0 14px 3px rgba(249,168,37,0.28); }}
+    }}
+    .ai-btn-purple .stButton > button,
+    [data-testid="stMarkdown"]:has(.ai-btn-purple) ~ [data-testid="stButton"] > button {{
         background: {C['bg_elevated']} !important;
         border: 1px solid {C['border']} !important;
         color: {C['muted_purple']} !important;
-        box-shadow: none !important;
         backdrop-filter: none !important;
+        animation: ai-glow-purple 2.4s ease-in-out infinite !important;
     }}
-    .ai-btn-purple .stButton > button:hover {{
+    .ai-btn-purple .stButton > button:hover,
+    [data-testid="stMarkdown"]:has(.ai-btn-purple) ~ [data-testid="stButton"] > button:hover {{
         background: #2a2a38 !important;
         border-color: rgba(168,155,192,0.4) !important;
         color: #c4b8de !important;
         box-shadow: 0 0 10px rgba(168,155,192,0.12) !important;
+        animation: none !important;
         transform: translateY(-1px) !important;
     }}
-    .ai-btn-yellow .stButton > button {{
+    .ai-btn-yellow .stButton > button,
+    [data-testid="stMarkdown"]:has(.ai-btn-yellow) ~ [data-testid="stButton"] > button {{
         background: {C['bg_elevated']} !important;
         border: 1px solid {C['border']} !important;
         color: {C['yellow']} !important;
-        box-shadow: none !important;
         backdrop-filter: none !important;
+        animation: ai-glow-yellow 2.4s ease-in-out infinite !important;
     }}
-    .ai-btn-yellow .stButton > button:hover {{
+    .ai-btn-yellow .stButton > button:hover,
+    [data-testid="stMarkdown"]:has(.ai-btn-yellow) ~ [data-testid="stButton"] > button:hover {{
         background: #2a2a38 !important;
         border-color: rgba(249,168,37,0.4) !important;
         color: #ffc84a !important;
         box-shadow: 0 0 10px rgba(249,168,37,0.12) !important;
+        animation: none !important;
         transform: translateY(-1px) !important;
     }}
 
@@ -710,7 +724,7 @@ st.markdown(f"""
         50% {{ opacity: 0; }}
     }}
     .logo-dot-blink {{
-        animation: blink-dot 2.8s ease-in-out infinite;
+        animation: blink-dot 2.8s ease-in-out infinite !important;
         display: inline-block;
     }}
 
