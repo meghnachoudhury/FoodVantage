@@ -1853,7 +1853,10 @@ function pickDate(day){{
 
         if search_item:
             search_results = search_vantage_db(search_item, limit=10)
-            valid_results = search_results if search_results else []
+            # Filter by relevance, not score — so genuinely unhealthy items
+            # (high VMS score) still show up. Only hide results where the
+            # product name has no actual relationship to what was searched.
+            valid_results = [r for r in search_results if r.get('relevance', 0) > 0] if search_results else []
             if valid_results:
                 st.markdown('<div class="results-scroll-container">', unsafe_allow_html=True)
                 cal_user_allergies = get_user_allergies(st.session_state.user_id)

@@ -543,6 +543,7 @@ def search_vantage_db(product_name: str, limit=5, fast_mode=False):
                 "brand": brand,
                 "vms_score": score,
                 "rating": rating,
+                "relevance": _name_relevance(display_name, product_name),
                 "raw": r
             })
 
@@ -693,6 +694,7 @@ def search_open_food_facts(product_name: str, limit=5, fast_mode=False):
                     "brand": brand.title() if brand else "",
                     "vms_score": score,
                     "rating": rating,
+                    "relevance": _name_relevance(display_name, product_name),
                     "raw": row
                 }
                 # Include actual serving size when available from the API
