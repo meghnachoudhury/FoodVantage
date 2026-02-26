@@ -1121,7 +1121,7 @@ if st.session_state.page == 'dashboard':
     """, unsafe_allow_html=True)
 
     # Active Focus Scanner
-    st.markdown(f"<h3 style='font-weight:700; margin-top:24px;'>&#128722; Grocery Scanner</h3>", unsafe_allow_html=True)
+    st.markdown(f"<h3 style='font-weight:700; margin-top:24px;'>🍏 Grocery Scanner</h3>", unsafe_allow_html=True)
 
     if not st.session_state.camera_active:
         # Scanner viewfinder rendered in components.html() so onclick works
