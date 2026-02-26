@@ -778,6 +778,46 @@ st.markdown(f"""
     </style>
 """, unsafe_allow_html=True)
 
+# JS-based animation injector — CSS selectors alone can't reliably pierce
+# Streamlit's Emotion CSS. Instead we find elements by class/text and set
+# `animation` as an inline important style, which always wins.
+components.html("""<script>
+(function() {
+    var P = window.parent.document;
+
+    function apply() {
+        // Logo blinking dot
+        P.querySelectorAll('.logo-dot-blink').forEach(function(el) {
+            el.style.setProperty('animation', 'blink-dot 2.8s ease-in-out infinite', 'important');
+            el.style.display = 'inline-block';
+        });
+
+        // AI action button glow pulse
+        P.querySelectorAll('button').forEach(function(btn) {
+            var txt = btn.textContent || '';
+            var anim = null;
+            if (txt.indexOf('Get AI Insights') !== -1 || txt.indexOf('Generate AI Meal Plan') !== -1) {
+                anim = 'ai-glow-purple 2.4s ease-in-out infinite';
+            } else if (txt.indexOf('Discover Recipes') !== -1) {
+                anim = 'ai-glow-yellow 2.4s ease-in-out infinite';
+            }
+            if (anim && !btn._fvAnimBound) {
+                btn._fvAnimBound = true;
+                var a = anim;
+                btn.addEventListener('mouseenter', function() { btn.style.removeProperty('animation'); });
+                btn.addEventListener('mouseleave', function() { btn.style.setProperty('animation', a, 'important'); });
+            }
+            if (anim) {
+                btn.style.setProperty('animation', anim, 'important');
+            }
+        });
+    }
+
+    new MutationObserver(apply).observe(P.body, {childList: true, subtree: true});
+    apply();
+})();
+</script>""", height=0)
+
 
 def render_logo(size="1.6rem"):
     st.markdown(f"""<div style='margin-bottom: 6px;'>
