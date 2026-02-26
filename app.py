@@ -1724,7 +1724,7 @@ body{{background:{C['bg_card']};font-family:'Inter',sans-serif;overflow:hidden;}
     st.markdown(f"""
         <div style='text-align:center; padding:20px 16px 8px; margin-top:24px; border-top:1px solid {C["border"]};'>
             <div style='font-size:0.75rem; color:{C["text_muted"]}; line-height:1.5;'>
-                While we are consistently and sincerely updating our algorithm, note that this is a grocery scanning app and will work best with grocery items, but approximate prepared food items.
+                While we are consistently and sincerely updating our algorithm, please note that this is a grocery scanning app. It will work best on grocery items. It can somewhat approximate prepared food dishes, but the result may not be accurate.
             </div>
         </div>
     """, unsafe_allow_html=True)
