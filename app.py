@@ -842,7 +842,7 @@ with st.sidebar:
         nav_items = [
             ('dashboard', 'Home'),
             ('calendar',  'Calendar'),
-            ('log',       'Cook With It'),
+            ('log',       'Planner'),
         ]
         st.markdown('<div class="sidebar-nav">', unsafe_allow_html=True)
         for pg, label in nav_items:
