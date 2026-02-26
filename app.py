@@ -1045,7 +1045,7 @@ if st.session_state.page == 'dashboard':
                 <span style='color:{C["text"]};'>foodvantage</span><span class='logo-dot-blink' style='color:{C["teal"]};'>.</span>
             </div>
             <div style='font-size:0.95rem; font-weight:500; color:{C["olive"]}; margin-top:10px; letter-spacing:0.2px;'>
-                Know what's in your cart before it's in your body.
+                Know what's in your cart before it's in your body.🌿
             </div>
         </div>
     """, unsafe_allow_html=True)
