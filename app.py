@@ -1871,7 +1871,7 @@ function pickDate(day){{
                     with col_b:
                         st.markdown(f"<div style='text-align:center; color:{clr}; font-weight:bold;'>{d_sc}/10</div>", unsafe_allow_html=True)
                     with col_c:
-                        if st.button("+", key=f"add_cal_{idx}_{sel_date}", help=f"Add {result['name']}"):
+                        if st.button("＋", key=f"add_cal_{idx}_{sel_date}", help=f"Add {result['name']}"):
                             add_calendar_item_db(st.session_state.user_id, sel_date.strftime("%Y-%m-%d"),
                                                  result['name'], round(result['vms_score'], 1))
                             st.success("Added!")
@@ -1920,7 +1920,7 @@ elif st.session_state.page == 'account':
     uid = st.session_state.user_id
     st.markdown(f"""
         <div style='margin-bottom:20px;'>
-            <h2 style='margin:0; font-weight:800; font-size:1.8rem;'>👤 My Account</h2>
+            <h2 style='margin:0; font-weight:800; font-size:1.8rem;'><i class="fa-solid fa-user" style="color: rgb(235, 186, 222);"></i> My Account</h2>
             <div style='color:{C["text_muted"]}; font-size:0.85rem; margin-top:4px;'>Manage your FoodVantage profile</div>
         </div>
     """, unsafe_allow_html=True)
@@ -2149,7 +2149,8 @@ elif st.session_state.page == 'log':
         _last_d, _ = get_last_shopping_items_db(st.session_state.user_id)
         if _last_d:
             try:
-                _fmt = _last_d.strftime("%-d %B %Y") if hasattr(_last_d, 'strftime') else str(_last_d)
+                _d = _last_d if hasattr(_last_d, 'strftime') else datetime.strptime(str(_last_d), '%Y-%m-%d')
+                _fmt = f"{_d.day} {_d.strftime('%B %Y')}"
             except Exception:
                 _fmt = str(_last_d)
             st.markdown(f"<div style='color:{C['text_sec']}; font-size:0.85rem; margin-bottom:8px;'>Based on what you bought on <strong>{_fmt}</strong>, get a curated 3-day meal plan using only those items.</div>", unsafe_allow_html=True)
@@ -2169,7 +2170,8 @@ elif st.session_state.page == 'log':
         _plan_date = st.session_state.get('_meal_plan_date')
         if _plan_date:
             try:
-                _plan_date_fmt = datetime.strptime(_plan_date, '%Y-%m-%d').strftime("%-d %B %Y")
+                _pd = datetime.strptime(_plan_date, '%Y-%m-%d')
+                _plan_date_fmt = f"{_pd.day} {_pd.strftime('%B %Y')}"
             except Exception:
                 _plan_date_fmt = _plan_date
             st.markdown(f"<div style='color:{C['text_muted']}; font-size:0.8rem; margin-bottom:8px;'>Based on what you bought on <strong style='color:{C['text_sec']};'>{_plan_date_fmt}</strong></div>", unsafe_allow_html=True)

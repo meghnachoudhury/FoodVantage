@@ -1006,9 +1006,10 @@ def generate_meal_plan(shopping_items, user_id, last_date=None):
         if last_date:
             try:
                 if hasattr(last_date, 'strftime'):
-                    date_str = last_date.strftime("%-d %B %Y")
+                    _d = last_date
                 else:
-                    date_str = datetime.strptime(str(last_date), '%Y-%m-%d').strftime("%-d %B %Y")
+                    _d = datetime.strptime(str(last_date), '%Y-%m-%d')
+                date_str = f"{_d.day} {_d.strftime('%B %Y')}"
             except Exception:
                 date_str = str(last_date)
 
