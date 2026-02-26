@@ -181,6 +181,13 @@ st.markdown('<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300
 st.markdown('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">', unsafe_allow_html=True)
 st.markdown(f"""
     <style>
+    /* === HIDE STREAMLIT HEADER / SOURCE LINK === */
+    /* toolbarMode=minimal alone doesn't remove Community Cloud's
+       platform-injected "View app source" link — CSS is required. */
+    #MainMenu {{ visibility: hidden !important; }}
+    header {{ visibility: hidden !important; }}
+    footer {{ visibility: hidden !important; }}
+
     /* === GLOBAL === */
     .stApp {{
         background-color: {C['bg']};
@@ -782,50 +789,101 @@ st.markdown(f"""
     </style>
 """, unsafe_allow_html=True)
 
-# JS-based animation injector — CSS selectors alone can't reliably pierce
-# Streamlit's Emotion CSS. Instead we find elements by class/text and set
-# `animation` as an inline important style, which always wins.
+# JS animation + style injector.
+# Three problems the old version had:
+#   1. No try/catch — a single cross-origin error silently killed everything.
+#   2. Keyframes were only in a body <style> from st.markdown(); React can
+#      reconcile that node away, making animation name references fail.
+#      Fix: inject @keyframes into <head> once — survives all re-renders.
+#   3. Olive button CSS used [data-testid="stMarkdown"] ~ [data-testid="stButton"]
+#      sibling combinator. In Streamlit 1.40+ each widget is wrapped in an
+#      Emotion-cache div, so the two testids are NOT siblings — selector never
+#      matches.  Fix: find buttons by their visible text and set inline styles.
 components.html("""<script>
 (function() {
-    var P = window.parent.document;
+    var P;
+    try { P = window.parent.document; } catch(e) { return; }
+
+    // Inject keyframes into <head> exactly once so the animation names are
+    // always resolvable, even after React reconciles the body content.
+    if (!P.getElementById('fv-keyframes')) {
+        var s = P.createElement('style');
+        s.id = 'fv-keyframes';
+        s.textContent =
+            '@keyframes blink-dot{0%,100%{opacity:1}50%{opacity:0}}' +
+            '@keyframes ai-glow-purple{0%,100%{box-shadow:0 0 0 0 rgba(168,155,192,0)}50%{box-shadow:0 0 14px 3px rgba(168,155,192,0.28)}}' +
+            '@keyframes ai-glow-yellow{0%,100%{box-shadow:0 0 0 0 rgba(249,168,37,0)}50%{box-shadow:0 0 14px 3px rgba(249,168,37,0.28)}}';
+        P.head.appendChild(s);
+    }
+
+    var OLIVE = ['Start Live Scan','Stop Scanning','Scan Again','Add to Grocery List'];
 
     function apply() {
-        // Logo blinking dot
+        // Blinking logo dot
         P.querySelectorAll('.logo-dot-blink').forEach(function(el) {
             el.style.setProperty('animation', 'blink-dot 2.8s ease-in-out infinite', 'important');
-            el.style.display = 'inline-block';
+            el.style.setProperty('display', 'inline-block', 'important');
         });
 
-        // AI action button glow pulse
         P.querySelectorAll('button').forEach(function(btn) {
-            var txt = btn.textContent || '';
+            var txt = (btn.textContent || '').trim();
+
+            // Olive scan buttons — matched by text, not DOM position
+            if (OLIVE.some(function(t) { return txt.indexOf(t) !== -1; })) {
+                btn.style.setProperty('background', '#365E43', 'important');
+                btn.style.setProperty('border', '1px solid rgba(54,94,67,0.9)', 'important');
+                btn.style.setProperty('color', '#d6ead9', 'important');
+                btn.style.setProperty('box-shadow', 'none', 'important');
+                if (!btn._olive) {
+                    btn._olive = true;
+                    btn.addEventListener('mouseenter', function() {
+                        btn.style.setProperty('background', '#2e5038', 'important');
+                        btn.style.setProperty('box-shadow', '0 4px 16px rgba(54,94,67,0.4)', 'important');
+                    });
+                    btn.addEventListener('mouseleave', function() {
+                        btn.style.setProperty('background', '#365E43', 'important');
+                        btn.style.setProperty('box-shadow', 'none', 'important');
+                    });
+                }
+            }
+
+            // AI action button glow pulse
             var anim = null;
             if (txt.indexOf('Get AI Insights') !== -1 || txt.indexOf('Generate AI Meal Plan') !== -1) {
                 anim = 'ai-glow-purple 2.4s ease-in-out infinite';
             } else if (txt.indexOf('Discover Recipes') !== -1) {
                 anim = 'ai-glow-yellow 2.4s ease-in-out infinite';
             }
-            if (anim && !btn._fvAnimBound) {
-                btn._fvAnimBound = true;
-                var a = anim;
-                btn.addEventListener('mouseenter', function() { btn.style.removeProperty('animation'); });
-                btn.addEventListener('mouseleave', function() { btn.style.setProperty('animation', a, 'important'); });
-            }
             if (anim) {
                 btn.style.setProperty('animation', anim, 'important');
+                if (!btn._fvAnimBound) {
+                    btn._fvAnimBound = true;
+                    var a = anim;
+                    btn.addEventListener('mouseenter', function() { btn.style.removeProperty('animation'); });
+                    btn.addEventListener('mouseleave', function() { btn.style.setProperty('animation', a, 'important'); });
+                }
             }
         });
     }
 
     new MutationObserver(apply).observe(P.body, {childList: true, subtree: true});
+    setTimeout(apply, 200);
+    setTimeout(apply, 800);
     apply();
 })();
 </script>""", height=0)
 
 
 def render_logo(size="1.6rem"):
-    st.markdown(f"""<div style='margin-bottom: 6px;'>
-        <span style='font-size: {size}; font-weight: 800; color: {C["text"]};'>foodvantage</span><span class='logo-dot-blink' style='font-size: {size}; font-weight: 800; color: {C["teal"]};'>.</span>
+    # Keyframe defined here (not just in the global block) so the animation
+    # name is always resolvable from the same stylesheet as the element.
+    st.markdown(f"""
+    <style>
+        @keyframes blink-dot{{0%,100%{{opacity:1}}50%{{opacity:0}}}}
+        .logo-dot-blink{{animation:blink-dot 2.8s ease-in-out infinite !important;display:inline-block}}
+    </style>
+    <div style='margin-bottom:6px;'>
+        <span style='font-size:{size};font-weight:800;color:{C["text"]};'>foodvantage</span><span class='logo-dot-blink' style='font-size:{size};font-weight:800;color:{C["teal"]};'>.</span>
     </div>""", unsafe_allow_html=True)
 
 def create_html_calendar(year, month, selected_day=None, logged_days=None):
