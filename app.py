@@ -840,7 +840,7 @@ with st.sidebar:
         # Navigation
         page = st.session_state.page
         nav_items = [
-            ('dashboard', 'Dashboard'),
+            ('dashboard', 'Home'),
             ('calendar',  'Calendar'),
             ('log',       'Cook With It'),
         ]
@@ -1054,7 +1054,7 @@ if st.session_state.page == 'dashboard':
     now = datetime.now()
     st.markdown(f"""
         <div style='margin-bottom:4px;'>
-            <h2 style='margin:0; font-weight:800; font-size:1.8rem;'>Dashboard</h2>
+            <h2 style='margin:0; font-weight:800; font-size:1.8rem;'>Home</h2>
             <div style='color:{C["text_muted"]}; font-size:0.85rem;'>{now.strftime('%A, %B %d, %Y')}</div>
         </div>
     """, unsafe_allow_html=True)
@@ -1853,8 +1853,10 @@ function pickDate(day){{
 
         if search_item:
             search_results = search_vantage_db(search_item, limit=10)
-            # Filter out placeholder/default 10.0 scores — these are unmatched DB entries
-            valid_results = [r for r in search_results if r['vms_score'] != 10.0] if search_results else []
+            # Filter by relevance, not score — so genuinely unhealthy items
+            # (high VMS score) still show up. Only hide results where the
+            # product name has no actual relationship to what was searched.
+            valid_results = [r for r in search_results if r.get('relevance', 0) > 0] if search_results else []
             if valid_results:
                 st.markdown('<div class="results-scroll-container">', unsafe_allow_html=True)
                 cal_user_allergies = get_user_allergies(st.session_state.user_id)
@@ -2149,7 +2151,8 @@ elif st.session_state.page == 'log':
         _last_d, _ = get_last_shopping_items_db(st.session_state.user_id)
         if _last_d:
             try:
-                _fmt = _last_d.strftime("%-d %B %Y") if hasattr(_last_d, 'strftime') else str(_last_d)
+                _d = _last_d if hasattr(_last_d, 'strftime') else datetime.strptime(str(_last_d), '%Y-%m-%d')
+                _fmt = f"{_d.day} {_d.strftime('%B %Y')}"
             except Exception:
                 _fmt = str(_last_d)
             st.markdown(f"<div style='color:{C['text_sec']}; font-size:0.85rem; margin-bottom:8px;'>Based on what you bought on <strong>{_fmt}</strong>, get a curated 3-day meal plan using only those items.</div>", unsafe_allow_html=True)
@@ -2169,7 +2172,8 @@ elif st.session_state.page == 'log':
         _plan_date = st.session_state.get('_meal_plan_date')
         if _plan_date:
             try:
-                _plan_date_fmt = datetime.strptime(_plan_date, '%Y-%m-%d').strftime("%-d %B %Y")
+                _pd = datetime.strptime(_plan_date, '%Y-%m-%d')
+                _plan_date_fmt = f"{_pd.day} {_pd.strftime('%B %Y')}"
             except Exception:
                 _plan_date_fmt = _plan_date
             st.markdown(f"<div style='color:{C['text_muted']}; font-size:0.8rem; margin-bottom:8px;'>Based on what you bought on <strong style='color:{C['text_sec']};'>{_plan_date_fmt}</strong></div>", unsafe_allow_html=True)

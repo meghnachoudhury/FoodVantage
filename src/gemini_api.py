@@ -496,7 +496,7 @@ def search_vantage_db(product_name: str, limit=5, fast_mode=False):
                 END,
                 LENGTH(product_name),
                 sugar ASC
-            LIMIT {limit * 3}
+            LIMIT {limit * 8}
         """
 
         results = con.execute(query).fetchall()
@@ -543,8 +543,38 @@ def search_vantage_db(product_name: str, limit=5, fast_mode=False):
                 "brand": brand,
                 "vms_score": score,
                 "rating": rating,
+                "relevance": _name_relevance(display_name, product_name),
                 "raw": r
             })
+
+        # Deduplicate by display name — local DB often has many rows for the same
+        # generic product (no brand). Keep the entry with the most nutritional
+        # fields present so the VMS score is most accurate.
+        deduped = {}
+        for item in output:
+            key = item["name"].lower().strip()
+            if key not in deduped:
+                deduped[key] = item
+            else:
+                r_old = deduped[key]["raw"]
+                r_new = item["raw"]
+                nz_old = sum(1 for v in r_old[2:8] if _safe_float(v) and _safe_float(v) > 0)
+                nz_new = sum(1 for v in r_new[2:8] if _safe_float(v) and _safe_float(v) > 0)
+                if nz_new > nz_old:
+                    deduped[key] = item
+        output = list(deduped.values())
+
+        # If local DB doesn't have enough unique results, supplement from Open
+        # Food Facts — OFF entries carry brand names and serving sizes.
+        if len(output) < limit:
+            off_results = search_open_food_facts(product_name, limit, fast_mode=fast_mode) or []
+            existing_keys = {item["name"].lower().strip() for item in output}
+            for off_item in off_results:
+                if off_item["name"].lower().strip() not in existing_keys:
+                    output.append(off_item)
+                    existing_keys.add(off_item["name"].lower().strip())
+                if len(output) >= limit:
+                    break
 
         # Re-rank by relevance (closer name match first), then healthier score.
         # This ensures "blueberry" and "blueberries" both surface the fresh
@@ -664,6 +694,7 @@ def search_open_food_facts(product_name: str, limit=5, fast_mode=False):
                     "brand": brand.title() if brand else "",
                     "vms_score": score,
                     "rating": rating,
+                    "relevance": _name_relevance(display_name, product_name),
                     "raw": row
                 }
                 # Include actual serving size when available from the API
@@ -1006,9 +1037,10 @@ def generate_meal_plan(shopping_items, user_id, last_date=None):
         if last_date:
             try:
                 if hasattr(last_date, 'strftime'):
-                    date_str = last_date.strftime("%-d %B %Y")
+                    _d = last_date
                 else:
-                    date_str = datetime.strptime(str(last_date), '%Y-%m-%d').strftime("%-d %B %Y")
+                    _d = datetime.strptime(str(last_date), '%Y-%m-%d')
+                date_str = f"{_d.day} {_d.strftime('%B %Y')}"
             except Exception:
                 date_str = str(last_date)
 
