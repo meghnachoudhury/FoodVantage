@@ -1208,7 +1208,7 @@ body{{background:{C['bg_card']};font-family:'Inter',sans-serif;overflow:hidden;}
   <div class="corner bl"></div><div class="corner br"></div>
   <div class="icon-btn"><i class="fa-solid fa-camera"></i></div>
   <div class="rt">Scanner ready</div>
-  <div class="ht">Tap the camera button or click on Start Live Scan to start scanning</div>
+  <div class="ht">Tap the camera or Scan button to start scanning</div>
 </div>
 </body></html>""", height=200, scrolling=False)
         st.markdown('<div class="olive-btn">', unsafe_allow_html=True)
