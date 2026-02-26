@@ -760,12 +760,16 @@ st.markdown(f"""
     /* === OLIVE SCAN BUTTONS === */
     [data-testid="stMarkdown"]:has(.olive-btn) + [data-testid="stButton"] > button,
     [data-testid="stMarkdown"]:has(.olive-btn) ~ [data-testid="stButton"] > button {{
-        background: rgba(54,94,67,0.2) !important;
+        background: #365E43 !important;
+        border: 1px solid rgba(54,94,67,0.9) !important;
+        color: #d6ead9 !important;
     }}
     [data-testid="stMarkdown"]:has(.olive-btn) + [data-testid="stButton"] > button:hover,
     [data-testid="stMarkdown"]:has(.olive-btn) ~ [data-testid="stButton"] > button:hover {{
-        background: rgba(54,94,67,0.3) !important;
-        box-shadow: 0 4px 16px rgba(54,94,67,0.2) !important;
+        background: #2e5038 !important;
+        box-shadow: 0 4px 16px rgba(54,94,67,0.4) !important;
+        border: 1px solid #365E43 !important;
+        color: #d6ead9 !important;
     }}
 
     /* === MOBILE: allow Streamlit columns to stack naturally === */
