@@ -984,79 +984,71 @@ Return ONLY valid JSON array, no other text:
 
 
 # === 3C. AI MEAL PLANNING AGENT ===
-def generate_meal_plan(user_history, user_id):
+def generate_meal_plan(shopping_items, user_id, last_date=None):
     """
-    AI Meal Planning Agent: Generates a personalized 7-day meal plan
-    based on user's eating history and preferences using Gemini AI.
+    AI Meal Planning Agent: Generates a 3-day meal plan (Today / Tomorrow / Day After)
+    curated exclusively from the items logged on the user's most recent shopping date.
 
     Args:
-        user_history: list of (date, item_name, score, category) tuples
+        shopping_items: list of (date, item_name, score, category) tuples from last haul
         user_id: string, the current user identifier
+        last_date: the date of the last shopping haul (date object or str)
     Returns:
-        dict with day names as keys, list of meal dicts as values, or None on error
+        dict with keys "Today", "Tomorrow", "Day After", each a list of meal dicts
     """
     client = get_gemini_client()
     if not client:
         raise Exception("No API key found. Add GEMINI_API_KEY to Streamlit secrets (Settings → Secrets).")
 
     try:
-        # Analyze user's history for patterns
-        total = len(user_history) if user_history else 0
-        healthy_items = [h for h in user_history if h[3] == 'healthy'] if user_history else []
-        unhealthy_items = [h for h in user_history if h[3] == 'unhealthy'] if user_history else []
+        # Format the shopping date for display
+        date_str = "your last shopping trip"
+        if last_date:
+            try:
+                if hasattr(last_date, 'strftime'):
+                    date_str = last_date.strftime("%-d %B %Y")
+                else:
+                    date_str = datetime.strptime(str(last_date), '%Y-%m-%d').strftime("%-d %B %Y")
+            except Exception:
+                date_str = str(last_date)
 
-        # Get unique items the user has consumed
-        liked_items = []
-        if user_history:
-            for _, item_name, score, category in user_history[:30]:
-                liked_items.append(f"- {item_name} (score: {score}, {category})")
+        # Build item list from the specific shopping date
+        item_lines = []
+        if shopping_items:
+            for _, item_name, score, category in shopping_items:
+                item_lines.append(f"- {item_name} (VMS score: {score}, {category})")
+        items_str = "\n".join(item_lines) if item_lines else "No items found — create a balanced 3-day plan from scratch."
 
-        items_str = "\n".join(liked_items) if liked_items else "No items logged yet - create a general healthy plan."
+        prompt = f"""You are an expert nutritionist AI. Generate a personalised 3-day meal plan using ONLY the grocery items the user bought on {date_str}, listed below.
 
-        healthy_pct = round((len(healthy_items) / total * 100), 1) if total > 0 else 0
-        unhealthy_pct = round((len(unhealthy_items) / total * 100), 1) if total > 0 else 0
-
-        prompt = f"""You are an expert nutritionist AI. Generate a personalized 7-day meal plan for this user.
-
-USER PROFILE:
-- Total items logged: {total}
-- Healthy choices: {healthy_pct}%
-- Unhealthy choices: {unhealthy_pct}%
-
-ITEMS THEY'VE CONSUMED RECENTLY:
+GROCERY ITEMS FROM {date_str}:
 {items_str}
 
-SCORING SYSTEM (Vantage Metabolic Score):
+SCORING SYSTEM (Vantage Metabolic Score — lower is healthier):
 - Score < 3.0 = Metabolic Green (healthy)
-- Score 3.0-7.0 = Metabolic Yellow (moderate)
+- Score 3.0–7.0 = Metabolic Yellow (moderate)
 - Score > 7.0 = Metabolic Red (unhealthy)
-- Lower scores are better
 
 RULES:
-1. Generate 3 meals per day (Breakfast, Lunch, Dinner) for 7 days
-2. Incorporate foods they already enjoy (when healthy)
-3. Suggest healthier alternatives to their unhealthy choices
-4. Keep estimated scores realistic (don't make everything 0)
-5. Include variety - don't repeat the same meal
-6. Make meals practical and easy to prepare
-7. Use common grocery items
+1. Each day has exactly 3 meals: Breakfast, Lunch, Dinner.
+2. Build every meal EXCLUSIVELY from the items listed above — combine them creatively.
+3. Label the three days exactly as "Today", "Tomorrow", "Day After".
+4. Assign a realistic estimated VMS health score (0–10) to each meal.
+5. Do NOT invent ingredients that are not in the list above.
+6. If the list is too limited, note that in meal names and use what is available.
 
 Return ONLY valid JSON, no other text:
 {{
-  "Monday": [
-    {{"meal": "Breakfast", "name": "Meal description", "estimated_score": 1.5}},
-    {{"meal": "Lunch", "name": "Meal description", "estimated_score": 2.0}},
-    {{"meal": "Dinner", "name": "Meal description", "estimated_score": 2.5}}
+  "Today": [
+    {{"meal": "Breakfast", "name": "Meal description using listed items", "estimated_score": 1.5}},
+    {{"meal": "Lunch",     "name": "Meal description using listed items", "estimated_score": 2.0}},
+    {{"meal": "Dinner",    "name": "Meal description using listed items", "estimated_score": 2.5}}
   ],
-  "Tuesday": [...],
-  "Wednesday": [...],
-  "Thursday": [...],
-  "Friday": [...],
-  "Saturday": [...],
-  "Sunday": [...]
+  "Tomorrow":  [...],
+  "Day After": [...]
 }}"""
 
-        print(f"[MEAL PLAN] Calling {_active_model('agent')} for user {user_id}...")
+        print(f"[MEAL PLAN] Calling {_active_model('agent')} for user {user_id}, date={date_str}...")
 
         response = client.chat.completions.create(
             model=_active_model('agent'),
@@ -1072,14 +1064,13 @@ Return ONLY valid JSON, no other text:
         finish_reason = getattr(response.choices[0], 'finish_reason', None)
         print(f"[MEAL PLAN] finish_reason={finish_reason}, response length={len(response_text)}")
         if not response_text:
-            print(f"[MEAL PLAN] WARNING: Empty response — thinking may have consumed token budget")
             raise Exception(f"AI returned empty response (finish_reason={finish_reason}). Try again.")
         print(f"[MEAL PLAN] Raw response: {response_text[:200]}...")
 
         meal_plan = safe_parse_json(response_text, expected='object')
         if meal_plan:
             total_meals = sum(len(v) for v in meal_plan.values() if isinstance(v, list))
-            print(f"✅ [MEAL PLAN] Generated plan with {total_meals} meals across {len(meal_plan)} days")
+            print(f"✅ [MEAL PLAN] 3-day plan with {total_meals} meals for {date_str}")
             return meal_plan
         raise Exception(f"AI returned non-JSON response: {response_text[:300]}")
 
@@ -1087,7 +1078,7 @@ Return ONLY valid JSON, no other text:
         print(f"❌ [MEAL PLAN ERROR] {e}")
         import traceback
         traceback.print_exc()
-        raise  # Re-raise so the UI can display the actual error
+        raise
 
 
 # === 3D. DAILY HEALTHY RECIPES AGENT ===
@@ -1531,11 +1522,58 @@ def delete_item_db(item_id):
 def get_log_history_db(username):
     try:
         con = get_db_connection()
-        return con.execute("SELECT date, item_name, score, category FROM calendar WHERE username = ? ORDER BY date DESC", 
+        return con.execute("SELECT date, item_name, score, category FROM calendar WHERE username = ? ORDER BY date DESC",
                           [username]).fetchall()
     except Exception as e:
         print(f"[LOG ERROR] {e}")
         return []
+
+
+def get_last_shopping_items_db(username):
+    """Return (last_date, items) for the user's most recent logged shopping date."""
+    try:
+        con = get_db_connection()
+        result = con.execute(
+            "SELECT MAX(date) FROM calendar WHERE username = ?", [username]
+        ).fetchone()
+        if not result or not result[0]:
+            return None, []
+        last_date = result[0]
+        items = con.execute(
+            "SELECT date, item_name, score, category FROM calendar "
+            "WHERE username = ? AND date = ? ORDER BY item_name",
+            [username, last_date]
+        ).fetchall()
+        return last_date, items
+    except Exception as e:
+        print(f"[SHOPPING ERROR] {e}")
+        return None, []
+
+
+def get_user_stats_db():
+    """Return aggregate user stats: total registered, active in last 30 days, per-user list."""
+    try:
+        con = get_db_connection()
+        total_users = con.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+        thirty_days_ago = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
+        active_users = con.execute(
+            "SELECT COUNT(DISTINCT username) FROM calendar WHERE CAST(date AS VARCHAR) >= ?",
+            [thirty_days_ago]
+        ).fetchone()[0]
+        user_list = con.execute("""
+            SELECT u.username,
+                   MAX(CAST(c.date AS VARCHAR)) AS last_active,
+                   COUNT(c.item_name)           AS items_logged
+            FROM users u
+            LEFT JOIN calendar c ON u.username = c.username
+            GROUP BY u.username
+            ORDER BY last_active DESC
+        """).fetchall()
+        return {'total': total_users, 'active': active_users, 'users': user_list}
+    except Exception as e:
+        print(f"[ADMIN ERROR] {e}")
+        return None
+
 
 def create_user(username, password):
     try:
