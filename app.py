@@ -922,7 +922,7 @@ if not st.session_state.logged_in:
                 <div style='font-size:2.6rem; font-weight:800; letter-spacing:-0.5px;'>
                     <span style='color:{C["text"]};'>foodvantage</span><span class='logo-dot-blink' style='color:{C["teal"]};'>.</span>
                 </div>
-                <div style='font-size:0.95rem; color:{C["olive"]}; margin-top:8px; font-weight:500;'>Know what's in your cart before it's in your body.</div>
+                <div style='font-size:0.95rem; color:{C["olive"]}; margin-top:8px; font-weight:500;'>Know what's in your cart before it's in your body.🌿</div>
             </div>
         """, unsafe_allow_html=True)
 
