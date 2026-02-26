@@ -840,7 +840,7 @@ with st.sidebar:
         # Navigation
         page = st.session_state.page
         nav_items = [
-            ('dashboard', 'Dashboard'),
+            ('dashboard', 'Home'),
             ('calendar',  'Calendar'),
             ('log',       'Cook With It'),
         ]
@@ -1054,7 +1054,7 @@ if st.session_state.page == 'dashboard':
     now = datetime.now()
     st.markdown(f"""
         <div style='margin-bottom:4px;'>
-            <h2 style='margin:0; font-weight:800; font-size:1.8rem;'>Dashboard</h2>
+            <h2 style='margin:0; font-weight:800; font-size:1.8rem;'>Home</h2>
             <div style='color:{C["text_muted"]}; font-size:0.85rem;'>{now.strftime('%A, %B %d, %Y')}</div>
         </div>
     """, unsafe_allow_html=True)
