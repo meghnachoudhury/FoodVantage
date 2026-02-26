@@ -745,10 +745,10 @@ st.markdown(f"""
 
     /* === OLIVE SCAN BUTTONS === */
     .olive-btn .stButton > button {{
-        background: rgba(124,158,56,0.2) !important;
+        background: rgba(54,94,67,0.2) !important;
     }}
     .olive-btn .stButton > button:hover {{
-        background: rgba(124,158,56,0.3) !important;
+        background: rgba(54,94,67,0.3) !important;
         box-shadow: 0 4px 16px rgba(124,158,56,0.2) !important;
     }}
 
