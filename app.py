@@ -1853,8 +1853,7 @@ function pickDate(day){{
 
         if search_item:
             search_results = search_vantage_db(search_item, limit=10)
-            # Filter out placeholder/default 10.0 scores — these are unmatched DB entries
-            valid_results = [r for r in search_results if r['vms_score'] != 10.0] if search_results else []
+            valid_results = search_results if search_results else []
             if valid_results:
                 st.markdown('<div class="results-scroll-container">', unsafe_allow_html=True)
                 cal_user_allergies = get_user_allergies(st.session_state.user_id)
