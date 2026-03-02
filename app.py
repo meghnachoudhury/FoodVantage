@@ -182,10 +182,21 @@ st.markdown('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs
 st.markdown(f"""
     <style>
     /* === HIDE STREAMLIT HEADER / SOURCE LINK === */
-    /* toolbarMode=minimal alone doesn't remove Community Cloud's
-       platform-injected "View app source" link — CSS is required. */
+    /* Hide the entire header (GitHub button, deploy, source link, etc.)
+       but re-surface the sidebar toggle that lives inside it.
+       CSS visibility is inherited — children can opt back in. */
     #MainMenu {{ visibility: hidden !important; }}
-    header {{ visibility: hidden !important; }}
+    header[data-testid="stHeader"] {{
+        visibility: hidden !important;
+        background: transparent !important;
+        height: 0 !important;
+        min-height: 0 !important;
+        overflow: visible !important;
+    }}
+    /* Re-show ONLY the sidebar toggle button */
+    header[data-testid="stHeader"] button[kind="header"] {{
+        visibility: visible !important;
+    }}
     footer {{ visibility: hidden !important; }}
 
     /* === GLOBAL === */
@@ -1268,10 +1279,19 @@ body{{background:{C['bg_card']};font-family:'Inter',sans-serif;overflow:hidden;}
 <div class="vf">
   <div class="corner tl"></div><div class="corner tr"></div>
   <div class="corner bl"></div><div class="corner br"></div>
-  <div class="icon-btn"><i class="fa-solid fa-camera"></i></div>
+  <div class="icon-btn" id="camBtn"><i class="fa-solid fa-camera"></i></div>
   <div class="rt">Scanner ready</div>
   <div class="ht">Tap the camera or Scan button to start scanning</div>
 </div>
+<script>
+document.getElementById('camBtn').addEventListener('click',function(){{
+  var P;try{{P=window.parent.document;}}catch(e){{return;}}
+  var btns=P.querySelectorAll('button');
+  for(var i=0;i<btns.length;i++){{
+    if(btns[i].innerText.trim().indexOf('Start Live Scan')!==-1){{btns[i].click();return;}}
+  }}
+}});
+</script>
 </body></html>""", height=200, scrolling=False)
         st.markdown('<div class="olive-btn">', unsafe_allow_html=True)
         if st.button("Start Live Scan", type="primary", use_container_width=True):
