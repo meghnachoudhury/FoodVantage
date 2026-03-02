@@ -182,15 +182,21 @@ st.markdown('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs
 st.markdown(f"""
     <style>
     /* === HIDE STREAMLIT HEADER / SOURCE LINK === */
-    /* toolbarMode=minimal alone doesn't remove Community Cloud's
-       platform-injected "View app source" link — CSS is required. */
-    /* NOTE: Do NOT use `header {{ visibility: hidden }}` — the sidebar
-       toggle button lives inside the header in Streamlit ≥1.50.
-       Instead, make the header bar transparent and hide only the
-       toolbar action buttons (deploy, menu, source-link). */
+    /* Hide the entire header (GitHub button, deploy, source link, etc.)
+       but re-surface the sidebar toggle that lives inside it.
+       CSS visibility is inherited — children can opt back in. */
     #MainMenu {{ visibility: hidden !important; }}
-    header[data-testid="stHeader"] {{ background: transparent !important; }}
-    [data-testid="stToolbarActions"] {{ visibility: hidden !important; }}
+    header[data-testid="stHeader"] {{
+        visibility: hidden !important;
+        background: transparent !important;
+        height: 0 !important;
+        min-height: 0 !important;
+        overflow: visible !important;
+    }}
+    /* Re-show ONLY the sidebar toggle button */
+    header[data-testid="stHeader"] button[kind="header"] {{
+        visibility: visible !important;
+    }}
     footer {{ visibility: hidden !important; }}
 
     /* === GLOBAL === */
