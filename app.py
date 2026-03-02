@@ -182,20 +182,23 @@ st.markdown('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs
 st.markdown(f"""
     <style>
     /* === HIDE STREAMLIT HEADER / SOURCE LINK === */
-    /* Hide the entire header (GitHub button, deploy, source link, etc.)
-       but re-surface the sidebar toggle that lives inside it.
-       CSS visibility is inherited — children can opt back in. */
+    /* Make the header bar invisible but keep layout so the sidebar
+       toggle (which lives inside the header) still works. */
     #MainMenu {{ visibility: hidden !important; }}
     header[data-testid="stHeader"] {{
-        visibility: hidden !important;
         background: transparent !important;
-        height: 0 !important;
-        min-height: 0 !important;
-        overflow: visible !important;
     }}
-    /* Re-show ONLY the sidebar toggle button */
-    header[data-testid="stHeader"] button[kind="header"] {{
+    /* Hide the toolbar buttons (deploy, share, GitHub source, menu) */
+    [data-testid="stToolbarActions"] {{
+        visibility: hidden !important;
+        pointer-events: none !important;
+    }}
+    /* Ensure the sidebar toggle stays visible & clickable */
+    [data-testid="collapsedControl"],
+    [data-testid="stSidebarCollapsedControl"],
+    button[data-testid="baseButton-header"] {{
         visibility: visible !important;
+        pointer-events: auto !important;
     }}
     footer {{ visibility: hidden !important; }}
 
